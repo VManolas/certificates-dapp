@@ -2,7 +2,7 @@
 import { ReactNode, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAccount } from 'wagmi';
-import { useAuthStore } from '../store/authStore';
+import { useUserRoles } from '../hooks/useUserRoles';
 import { UserRole } from '../types/auth';
 
 interface RouteGuardProps {
@@ -15,6 +15,9 @@ interface RouteGuardProps {
 
 /**
  * RouteGuard component to protect routes based on user roles
+ * 
+ * **SECURITY**: This component uses blockchain-verified roles from useUserRoles,
+ * NOT user-selected roles from authStore. This prevents unauthorized access.
  * 
  * @param children - The component to render if access is granted
  * @param requiredRole - Single required role (alternative to allowedRoles)
@@ -37,11 +40,13 @@ export function RouteGuard({
 }: RouteGuardProps) {
   const navigate = useNavigate();
   const { isConnected } = useAccount();
-  const { role, hasSelectedRole, isRoleDetectionComplete } = useAuthStore();
+  
+  // 🔒 SECURITY: Use blockchain-verified role, NOT user-selected role
+  const { primaryRole, isLoading: isRoleLoading } = useUserRoles();
 
   useEffect(() => {
     // Wait for role detection to complete
-    if (!isRoleDetectionComplete) {
+    if (isRoleLoading) {
       return;
     }
 
@@ -52,9 +57,9 @@ export function RouteGuard({
       return;
     }
 
-    // Redirect if no role selected yet
-    if (!hasSelectedRole || !role) {
-      console.warn('RouteGuard: No role selected, redirecting to', redirectTo);
+    // Redirect if no role detected on blockchain
+    if (!primaryRole) {
+      console.warn('RouteGuard: No blockchain-verified role detected, redirecting to', redirectTo);
       navigate(redirectTo, { replace: true });
       return;
     }
@@ -62,9 +67,9 @@ export function RouteGuard({
     // Determine allowed roles
     const rolesAllowed = requiredRole ? [requiredRole] : (allowedRoles || []);
     
-    // Check if user's role is allowed
-    if (rolesAllowed.length > 0 && !rolesAllowed.includes(role)) {
-      console.warn(`RouteGuard: Access denied. User role "${role}" not in allowed roles:`, rolesAllowed);
+    // 🔒 SECURITY CHECK: Verify blockchain-verified role matches required role
+    if (rolesAllowed.length > 0 && !rolesAllowed.includes(primaryRole)) {
+      console.warn(`🔒 RouteGuard: SECURITY BLOCK - User's blockchain role "${primaryRole}" not in allowed roles:`, rolesAllowed);
       
       // Navigate to access denied page or custom redirect
       if (showAccessDenied) {
@@ -74,29 +79,32 @@ export function RouteGuard({
       }
       return;
     }
-  }, [isConnected, role, hasSelectedRole, isRoleDetectionComplete, requiredRole, allowedRoles, navigate, redirectTo]);
+    
+    console.log(`✅ RouteGuard: Access granted for role "${primaryRole}"`);
+  }, [isConnected, primaryRole, isRoleLoading, requiredRole, allowedRoles, navigate, redirectTo, showAccessDenied]);
 
   // Show loading state while role detection is in progress
-  if (!isRoleDetectionComplete) {
+  if (isRoleLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
           <div className="inline-block h-12 w-12 animate-spin rounded-full border-4 border-solid border-blue-600 border-r-transparent" role="status">
             <span className="sr-only">Loading...</span>
           </div>
-          <p className="mt-4 text-gray-600">Verifying access...</p>
+          <p className="mt-4 text-gray-600">Verifying blockchain credentials...</p>
         </div>
       </div>
     );
   }
 
   // Don't render children until access is confirmed
-  if (!isConnected || !hasSelectedRole || !role) {
+  if (!isConnected || !primaryRole) {
     return null;
   }
 
+  // Final security check before rendering
   const rolesAllowed = requiredRole ? [requiredRole] : (allowedRoles || []);
-  if (rolesAllowed.length > 0 && !rolesAllowed.includes(role)) {
+  if (rolesAllowed.length > 0 && !rolesAllowed.includes(primaryRole)) {
     return null;
   }
 

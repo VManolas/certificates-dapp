@@ -1,14 +1,17 @@
 // src/pages/university/IssueCertificate.tsx
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAccount } from 'wagmi';
+import { useAccount, useReadContract } from 'wagmi';
 import { useAuthStore } from '@/store/authStore';
 import { generatePDFHash, formatFileSize, type HashResult } from '@/lib/pdfHash';
-import { useCertificateIssuanceWithCallback } from '@/hooks';
+import { useCertificateIssuanceWithCallback, useCanIssueCertificates } from '@/hooks';
 import { logger } from '@/lib/logger';
 import { sanitizeAddress, validatePdfFile, globalRateLimiter } from '@/lib/sanitization';
 import { parseError, withRetry } from '@/lib/errorHandling';
 import { decodeContractError } from '@/lib/errorDecoding';
+import CertificateRegistryABI from '@/contracts/abis/CertificateRegistry.json';
+
+const CERTIFICATE_REGISTRY_ADDRESS = import.meta.env.VITE_CERTIFICATE_REGISTRY_ADDRESS as `0x${string}`;
 
 type FormState = 'upload' | 'details' | 'confirm' | 'submitting' | 'success';
 
@@ -17,17 +20,35 @@ export function IssueCertificate() {
   const { isConnected } = useAccount();
   const { refetchInstitution } = useAuthStore();
   
+  // Real-time institution status check
+  const { canIssue, isLoading: isCheckingStatus, reason, refetch: refetchStatus } = useCanIssueCertificates();
+  
   const [formState, setFormState] = useState<FormState>('upload');
   const [hashResult, setHashResult] = useState<HashResult | null>(null);
   const [studentWallet, setStudentWallet] = useState('');
   const [walletError, setWalletError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [bypassDuplicateCheck, setBypassDuplicateCheck] = useState(false);
+
+  // Frontend duplicate check
+  const { data: isDuplicateOnChain, isLoading: isCheckingDuplicate } = useReadContract({
+    address: CERTIFICATE_REGISTRY_ADDRESS,
+    abi: CertificateRegistryABI.abi,
+    functionName: 'hashExists',
+    args: hashResult?.hash ? [hashResult.hash] : undefined,
+    query: {
+      enabled: !!hashResult?.hash && !!CERTIFICATE_REGISTRY_ADDRESS && formState === 'confirm',
+      refetchOnMount: 'always',
+      staleTime: 0,
+    },
+  });
 
   // Use the certificate issuance hook with callbacks
   const { 
     issueCertificate, 
     isPending, 
     isConfirming,
+    isSuccess,
     error: txError,
     certificateId,
     reset 
@@ -37,6 +58,7 @@ export function IssueCertificate() {
         certificateId: certId?.toString(),
       });
       setFormState('success');
+      setError(null);
       // Refetch institution data to update totalCertificatesIssued counter
       if (refetchInstitution) {
         setTimeout(() => refetchInstitution(), 1000);
@@ -44,11 +66,50 @@ export function IssueCertificate() {
     },
     (err) => {
       logger.error('Failed to issue certificate', err);
+      
+      // Enhanced debugging
+      if (import.meta.env.DEV) {
+        console.log('🔍 [IssueCertificate] Raw error object:', err);
+        console.log('🔍 [IssueCertificate] Error type:', err?.constructor?.name);
+        console.log('🔍 [IssueCertificate] Error message:', err?.message);
+        console.log('🔍 [IssueCertificate] Error keys:', Object.keys(err || {}));
+        if (err?.cause) {
+          console.log('🔍 [IssueCertificate] Error cause:', err.cause);
+        }
+        if (err?.data) {
+          console.log('🔍 [IssueCertificate] Error data:', err.data);
+        }
+      }
+      
+      // Decode the error with enhanced duplicate detection
       const userFriendlyError = decodeContractError(err);
+      
+      if (import.meta.env.DEV) {
+        console.log('🔍 [IssueCertificate] Decoded error:', userFriendlyError);
+      }
+      
       setError(userFriendlyError);
       setFormState('confirm');
     }
   );
+
+  // Monitor transaction state and auto-transition to success if needed
+  useEffect(() => {
+    if (isSuccess && formState === 'submitting') {
+      logger.info('Transaction succeeded, updating UI state');
+      setFormState('success');
+      setError(null);
+    }
+  }, [isSuccess, formState]);
+
+  // If transaction is no longer pending/confirming but we're stuck in submitting state without success or error, revert to confirm
+  useEffect(() => {
+    // Only revert if we're truly stuck: not pending, not confirming, not successful, and no error has been set
+    if (formState === 'submitting' && !isPending && !isConfirming && !isSuccess && !error) {
+      logger.warn('Transaction stopped unexpectedly without success or error, reverting to confirm');
+      setFormState('confirm');
+    }
+  }, [formState, isPending, isConfirming, isSuccess, error]);
 
   const handleFile = useCallback(async (file: File) => {
     setError(null);
@@ -115,6 +176,20 @@ export function IssueCertificate() {
   const handleSubmit = async () => {
     if (!hashResult || !validateWallet(studentWallet)) return;
 
+    // CRITICAL: Real-time authorization check before submission
+    if (!canIssue) {
+      setError(reason || 'Your institution cannot issue certificates at this time. Please contact an administrator.');
+      logger.warn('Certificate issuance blocked: institution cannot issue', { reason });
+      return;
+    }
+
+    // Frontend duplicate check (unless user has explicitly bypassed it)
+    if (!bypassDuplicateCheck && isDuplicateOnChain) {
+      logger.warn('Certificate duplicate detected on frontend', { documentHash: hashResult.hash });
+      setError('frontend-duplicate'); // Special error flag
+      return;
+    }
+
     // Rate limiting check
     if (!globalRateLimiter.isAllowed('certificate-issue')) {
       const remaining = globalRateLimiter.getRemainingAttempts('certificate-issue');
@@ -123,8 +198,11 @@ export function IssueCertificate() {
       return;
     }
 
+    // Reset any previous transaction state
+    reset();
     setFormState('submitting');
     setError(null);
+    setBypassDuplicateCheck(false); // Reset bypass flag
     
     try {
       const sanitizedWallet = sanitizeAddress(studentWallet);
@@ -135,7 +213,11 @@ export function IssueCertificate() {
       logger.userAction('Issuing certificate', {
         documentHash: hashResult.hash,
         studentWallet: sanitizedWallet,
+        bypassedDuplicateCheck: bypassDuplicateCheck,
       });
+
+      // Small delay to ensure reset is processed
+      await new Promise(resolve => setTimeout(resolve, 100));
 
       issueCertificate({
         documentHash: hashResult.hash,
@@ -153,6 +235,54 @@ export function IssueCertificate() {
       <div className="container mx-auto px-4 py-16 text-center">
         <h1 className="text-2xl font-bold text-white mb-4">Connect Your Wallet</h1>
         <p className="text-surface-400">Please connect your wallet to issue certificates.</p>
+      </div>
+    );
+  }
+
+  // Show loading state while checking institution status
+  if (isCheckingStatus) {
+    return (
+      <div className="container mx-auto px-4 py-16 text-center">
+        <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500 mb-4"></div>
+        <p className="text-surface-400">Verifying institution status...</p>
+      </div>
+    );
+  }
+
+  // CRITICAL: Block UI if institution cannot issue certificates
+  if (!canIssue) {
+    return (
+      <div className="container mx-auto px-4 py-16 max-w-2xl">
+        <div className="card border-red-500/30 bg-red-500/10">
+          <div className="flex items-start gap-4">
+            <div className="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center flex-shrink-0">
+              <svg className="w-6 h-6 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <div className="flex-1">
+              <h2 className="text-xl font-bold text-white mb-2">Certificate Issuance Unavailable</h2>
+              <p className="text-red-400 mb-4">{reason}</p>
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => navigate('/university/dashboard')} 
+                  className="btn-secondary"
+                >
+                  Back to Dashboard
+                </button>
+                <button 
+                  onClick={() => {
+                    refetchStatus();
+                    if (refetchInstitution) refetchInstitution();
+                  }}
+                  className="btn-primary"
+                >
+                  Refresh Status
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -300,26 +430,209 @@ export function IssueCertificate() {
             </div>
           </div>
 
-          {(error || txError) && (
+          {/* Frontend Duplicate Check Warning */}
+          {isCheckingDuplicate && (
+            <div className="card border-blue-500/30 bg-blue-500/10">
+              <div className="flex items-center gap-3">
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-400"></div>
+                <p className="text-blue-300 text-sm">Checking if certificate already exists on blockchain...</p>
+              </div>
+            </div>
+          )}
+
+          {error === 'frontend-duplicate' && isDuplicateOnChain && (
+            <div className="card border-yellow-500/30 bg-yellow-500/10">
+              <div className="flex items-start gap-3">
+                <svg className="w-6 h-6 text-yellow-400 flex-shrink-0 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <div className="flex-1">
+                  <h4 className="text-yellow-400 font-semibold mb-2">⚠️ Duplicate Certificate Detected (Frontend Check)</h4>
+                  <p className="text-yellow-300 text-sm mb-4">
+                    This PDF document appears to already exist in the blockchain. Issuing it again will cost gas fees but will fail on-chain.
+                  </p>
+                  
+                  <div className="space-y-3 mb-4">
+                    <div className="bg-yellow-500/5 border border-yellow-500/20 rounded-lg p-3">
+                      <p className="text-yellow-400 text-sm font-semibold mb-1">💡 Recommended Action:</p>
+                      <p className="text-yellow-300 text-sm">
+                        Upload a different PDF file for this student. Each certificate must use a unique document.
+                      </p>
+                    </div>
+                    
+                    <div className="bg-yellow-500/5 border border-yellow-500/20 rounded-lg p-3">
+                      <p className="text-yellow-400 text-sm font-semibold mb-1">🔍 Alternative Option:</p>
+                      <p className="text-yellow-300 text-sm mb-2">
+                        If you're certain this is a different certificate (perhaps frontend check is incorrect), you can proceed with blockchain verification.
+                      </p>
+                      <p className="text-yellow-200 text-xs">
+                        ⚠️ Note: If the certificate truly is a duplicate, the blockchain will reject it and you'll pay gas fees for the failed transaction.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => {
+                        setFormState('upload');
+                        setHashResult(null);
+                        setError(null);
+                        reset();
+                      }}
+                      className="btn-secondary flex-1"
+                    >
+                      <svg className="w-4 h-4 mr-2 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                      </svg>
+                      Upload Different PDF
+                    </button>
+                    <button
+                      onClick={() => {
+                        setBypassDuplicateCheck(true);
+                        setError(null);
+                        logger.info('User chose to bypass frontend duplicate check');
+                      }}
+                      className="btn-primary flex-1"
+                    >
+                      <svg className="w-4 h-4 mr-2 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      Verify on Blockchain Anyway
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {error && error !== 'frontend-duplicate' && (
             <div className="card border-red-500/30 bg-red-500/10">
-              <p className="text-red-400">{error || txError?.message}</p>
+              <div className="flex items-start gap-3">
+                <svg className="w-6 h-6 text-red-400 flex-shrink-0 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <h4 className="text-red-400 font-semibold">Certificate Issuance Failed</h4>
+                    
+                    {/* Technical Details Tooltip - visible on hover */}
+                    <div className="relative group">
+                      <button
+                        type="button"
+                        className="text-red-400/60 hover:text-red-400 transition-colors cursor-help"
+                        aria-label="View technical details"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </button>
+                      
+                      {/* Tooltip popup */}
+                      <div className="absolute left-0 top-6 z-50 hidden group-hover:block w-96 max-w-sm">
+                        <div className="bg-gray-900 border border-gray-700 rounded-lg shadow-xl p-4 text-xs">
+                          <div className="flex items-center gap-2 mb-2 pb-2 border-b border-gray-700">
+                            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                            </svg>
+                            <span className="text-gray-300 font-semibold">Technical Details</span>
+                          </div>
+                          <div className="space-y-2">
+                            <div>
+                              <span className="text-gray-400 font-medium">Error Type:</span>
+                              <pre className="mt-1 text-gray-300 whitespace-pre-wrap break-words font-mono bg-gray-800/50 p-2 rounded">
+                                {txError?.name || 'Contract Error'}
+                              </pre>
+                            </div>
+                            <div>
+                              <span className="text-gray-400 font-medium">Raw Message:</span>
+                              <pre className="mt-1 text-gray-300 whitespace-pre-wrap break-words font-mono bg-gray-800/50 p-2 rounded max-h-40 overflow-y-auto">
+                                {txError?.message || error}
+                              </pre>
+                            </div>
+                            <div className="text-gray-500 italic text-[10px] pt-2 border-t border-gray-700">
+                              💡 Hover to view technical error details for debugging
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <p className="text-red-300 text-sm mb-3">{error}</p>
+                  
+                  {/* Special handling for duplicate certificate error */}
+                  {(error.toLowerCase().includes('already been issued') || 
+                    error.toLowerCase().includes('already exists') || 
+                    error.toLowerCase().includes('unique pdf')) && (
+                    <div className="border border-yellow-500/30 rounded-lg p-4 mb-3" style={{ background: 'rgba(234, 179, 8, 0.1)' }}>
+                      <div className="space-y-3">
+                        <div>
+                          <p className="text-yellow-400 text-sm font-semibold mb-1">💡 What happened?</p>
+                          <p className="text-yellow-300 text-sm">
+                            This PDF document has already been issued as a certificate. Each certificate must use a unique PDF file.
+                          </p>
+                        </div>
+                        
+                        <div className="border-t border-yellow-500/20 pt-3">
+                          <p className="text-yellow-400 text-sm font-semibold mb-1">✅ Solution:</p>
+                          <p className="text-yellow-300 text-sm">
+                            Click "Upload Different PDF" below to select a different certificate document for this student.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  <button
+                    onClick={() => {
+                      setFormState('upload');
+                      setHashResult(null);
+                      setError(null);
+                      reset();
+                    }}
+                    className="btn-secondary text-sm w-full flex items-center justify-center"
+                  >
+                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    </svg>
+                    Upload Different PDF
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 
           <div className="flex gap-4">
             <button
-              onClick={() => setFormState('details')}
+              onClick={() => {
+                setFormState('details');
+                setError(null);
+                setBypassDuplicateCheck(false);
+              }}
               className="btn-secondary flex-1"
               disabled={formState === 'submitting'}
             >
-              Back
+              Back to Edit
             </button>
             <button
               onClick={handleSubmit}
-              disabled={isPending || isConfirming}
+              disabled={
+                isPending || 
+                isConfirming || 
+                isCheckingDuplicate || 
+                (error === 'frontend-duplicate' && !bypassDuplicateCheck)
+              }
               className="btn-primary flex-1"
             >
-              {isPending || isConfirming ? (
+              {isCheckingDuplicate ? (
+                <>
+                  <svg className="w-5 h-5 mr-2 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  Checking...
+                </>
+              ) : isPending || isConfirming ? (
                 <>
                   <svg className="w-5 h-5 mr-2 animate-spin" fill="none" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -327,6 +640,8 @@ export function IssueCertificate() {
                   </svg>
                   {isPending ? 'Confirming...' : 'Processing...'}
                 </>
+              ) : bypassDuplicateCheck ? (
+                'Verify on Blockchain'
               ) : (
                 'Issue Certificate'
               )}

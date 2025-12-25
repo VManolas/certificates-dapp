@@ -4,6 +4,7 @@ import { Routes, Route } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { RouteGuard } from './components/RouteGuard';
 import { ProtectedLayout } from './components/ProtectedLayout';
+import { useAccountChangeHandler } from './hooks';
 
 // Lazy load all route components for code splitting
 const Home = lazy(() => import('./pages/Home'));
@@ -34,6 +35,9 @@ const PageLoader = () => (
 );
 
 function App() {
+  // Handle wallet account changes - clears cache and reloads
+  useAccountChangeHandler();
+
   return (
     <Suspense fallback={<PageLoader />}>
       <Routes>

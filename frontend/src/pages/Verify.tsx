@@ -69,6 +69,15 @@ export function Verify() {
     verificationSession
   );
 
+  // Fetch full certificate details when we have a certificateId from PDF verification
+  const {
+    certificate: certFromPdfVerification,
+    isLoading: isLoadingCertFromPdf,
+  } = useCertificateDetails(
+    certificateId && certificateId > 0n ? certificateId : undefined,
+    state === 'complete' && !!certificateId && certificateId > 0n
+  );
+
   // Update state when verification completes
   if ((isValid !== undefined || verifyError) && state === 'verifying' && !isVerifying && !isCheckingHash) {
     setState('complete');
@@ -582,15 +591,39 @@ export function Verify() {
               {/* Actions */}
               <div className="flex gap-4">
                 {isValid && certificateId !== undefined && certificateId > 0n && (
-                  <VerificationReport
-                    certificateId={certificateId!}
-                    documentHash={hashResult.hash}
-                    studentWallet={certFromId?.studentWallet || '0x'}
-                    institutionAddress={certFromId?.issuingInstitution || '0x'}
-                    issueDate={certFromId?.issueDate || 0n}
-                    isValid={isValid}
-                    isRevoked={isRevoked}
-                  />
+                  <>
+                    <VerificationReport
+                      certificateId={certificateId!}
+                      documentHash={hashResult.hash}
+                      studentWallet={certFromPdfVerification?.studentWallet || '0x'}
+                      institutionAddress={certFromPdfVerification?.issuingInstitution || '0x'}
+                      issueDate={certFromPdfVerification?.issueDate || 0n}
+                      isValid={isValid}
+                      isRevoked={isRevoked}
+                    />
+                    <button
+                      onClick={() => setShowDetailModal(true)}
+                      disabled={isLoadingCertFromPdf || !certFromPdfVerification}
+                      className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isLoadingCertFromPdf ? (
+                        <>
+                          <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                          </svg>
+                          Loading...
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          View Details
+                        </>
+                      )}
+                    </button>
+                  </>
                 )}
                 <button onClick={resetVerification} className="btn-secondary flex-1">
                   Verify Another Certificate
@@ -603,6 +636,15 @@ export function Verify() {
 
       {/* QR Scanner Modal */}
       {showQRScanner && <QRScanner onClose={() => setShowQRScanner(false)} />}
+
+      {/* Certificate Detail Modal - for PDF upload verification */}
+      {showDetailModal && certificateId !== undefined && certificateId > 0n && certFromPdfVerification && (
+        <CertificateDetailModal
+          certificateId={certificateId}
+          certificate={certFromPdfVerification}
+          onClose={() => setShowDetailModal(false)}
+        />
+      )}
     </div>
   );
 }

@@ -127,32 +127,29 @@ export function Layout() {
                 Verify
               </Link>
             )}
-            {isConnected && role === 'university' && (
-              <>
-                {(institutionData?.isActive || institutionData?.isVerified) && !isAspirationalRole ? (
-                  <Link
-                    to="/university/dashboard"
-                    className={`text-sm font-medium transition-colors ${
-                      location.pathname.startsWith('/university')
-                        ? 'text-white'
-                        : 'text-surface-400 hover:text-white'
-                    }`}
-                  >
-                    Dashboard
-                  </Link>
-                ) : (
-                  <Link
-                    to="/university/register"
-                    className={`text-sm font-medium transition-colors ${
-                      location.pathname === '/university/register'
-                        ? 'text-white'
-                        : 'text-surface-400 hover:text-white'
-                    }`}
-                  >
-                    Register Institution
-                  </Link>
-                )}
-              </>
+            {isConnected && role === 'university' && !isAspirationalRole && (
+              <Link
+                to="/university/dashboard"
+                className={`text-sm font-medium transition-colors ${
+                  location.pathname.startsWith('/university')
+                    ? 'text-white'
+                    : 'text-surface-400 hover:text-white'
+                }`}
+              >
+                Dashboard
+              </Link>
+            )}
+            {isConnected && role === 'university' && isAspirationalRole && (
+              <Link
+                to="/university/register"
+                className={`text-sm font-medium transition-colors ${
+                  location.pathname === '/university/register'
+                    ? 'text-white'
+                    : 'text-surface-400 hover:text-white'
+                }`}
+              >
+                Register Institution
+              </Link>
             )}
             {isConnected && role === 'student' && (
               <Link

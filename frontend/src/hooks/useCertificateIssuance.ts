@@ -17,7 +17,7 @@ export interface IssueCertificateParams {
  * Return type for the certificate issuance hook
  */
 export interface UseCertificateIssuanceReturn {
-  issueCertificate: (params: IssueCertificateParams) => void;
+  issueCertificate: (params: IssueCertificateParams) => Promise<void>;
   isPending: boolean;
   isConfirming: boolean;
   isSuccess: boolean;
@@ -29,6 +29,8 @@ export interface UseCertificateIssuanceReturn {
 
 /**
  * Hook to issue certificates on the blockchain
+ * 
+ * Includes pre-issuance duplicate check for better UX.
  * 
  * @example
  * ```tsx
@@ -67,7 +69,7 @@ export function useCertificateIssuance(): UseCertificateIssuanceReturn {
    * Issue a certificate to a student
    * @param params - Certificate issuance parameters
    */
-  const issueCertificate = (params: IssueCertificateParams) => {
+  const issueCertificate = async (params: IssueCertificateParams) => {
     const { documentHash, studentWallet, metadataURI = '' } = params;
 
     // Validate inputs

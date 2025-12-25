@@ -3,10 +3,17 @@ import { Link } from 'react-router-dom';
 import { useAccount } from 'wagmi';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useAuthStore } from '@/store/authStore';
+import { useUserRoles } from '@/hooks/useUserRoles';
 
 export function Home() {
   const { isConnected } = useAccount();
   const { role } = useAuthStore();
+  const userRoles = useUserRoles();
+
+  // Debug logging
+  console.log('Home - isConnected:', isConnected);
+  console.log('Home - role:', role);
+  console.log('Home - userRoles:', userRoles);
 
   return (
     <div className="relative overflow-hidden">
@@ -36,10 +43,35 @@ export function Home() {
           </h1>
 
           {/* Subheadline */}
-          <p className="text-lg md:text-xl text-surface-300 mb-10 max-w-2xl mx-auto">
+          <p className="text-lg md:text-xl text-surface-300 mb-4 max-w-2xl mx-auto">
             Tamper-proof certificate verification using zero-knowledge proofs. 
             Issue, verify, and manage academic credentials with blockchain security.
           </p>
+
+          {/* User-Specific Role Description */}
+          {isConnected && role && userRoles && role !== 'admin' && (
+            <p className="text-base md:text-lg font-medium mb-10 max-w-2xl mx-auto">
+              {role === 'university' && userRoles.isUniversity && (
+                <span className="text-accent-400">
+                  You are an <span className="font-bold">Educational Institution</span> — issue and manage academic certificates for your students on the blockchain.
+                </span>
+              )}
+              {role === 'student' && userRoles.isStudent && (
+                <span className="text-blue-400">
+                  You are a <span className="font-bold">Student</span> — view and manage your academic certificates issued by verified institutions.
+                </span>
+              )}
+              {role === 'employer' && userRoles.isEmployer && (
+                <span className="text-green-400">
+                  You are an <span className="font-bold">Employer</span> — verify the authenticity of candidate credentials instantly and securely.
+                </span>
+              )}
+            </p>
+          )}
+
+          {(!isConnected || role === 'admin') && (
+            <div className="mb-10"></div>
+          )}
 
           {/* CTA Buttons */}
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -65,6 +97,104 @@ export function Home() {
           </div>
         </div>
       </section>
+
+      {/* User-Specific Welcome Section */}
+      {isConnected && role && userRoles && (
+        <section className="relative container mx-auto px-4 pb-16">
+          <div className="max-w-2xl mx-auto">
+            <div className="card bg-gradient-to-r from-primary-900/50 to-accent-900/50 border-primary-500/20 text-center py-8">
+              {role === 'admin' && userRoles.isAdmin && (
+                <>
+                  <div className="mb-4">
+                    <div className="w-16 h-16 mx-auto rounded-full bg-primary-500/10 flex items-center justify-center mb-4">
+                      <svg className="w-8 h-8 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                    </div>
+                    <h3 className="text-2xl font-bold text-white mb-2">Administrator</h3>
+                    <p className="text-surface-300">
+                      You can manage educational institutions, enabling or suspending their access to this credential verification system.
+                    </p>
+                  </div>
+                  <Link to="/admin/dashboard" className="btn-primary inline-flex items-center gap-2 mt-4">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                    </svg>
+                    Admin
+                  </Link>
+                </>
+              )}
+
+              {role === 'university' && userRoles.isUniversity && (
+                <>
+                  <div className="mb-4">
+                    <div className="w-16 h-16 mx-auto rounded-full bg-accent-500/10 flex items-center justify-center mb-4">
+                      <svg className="w-8 h-8 text-accent-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                      </svg>
+                    </div>
+                    <h3 className="text-2xl font-bold text-white mb-2">Educational Institution</h3>
+                    <p className="text-surface-300">
+                      You can issue and manage academic certificates for your students on the blockchain.
+                    </p>
+                  </div>
+                  <Link to="/university/dashboard" className="btn-primary inline-flex items-center gap-2 mt-4">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                    </svg>
+                    Dashboard
+                  </Link>
+                </>
+              )}
+
+              {role === 'student' && userRoles.isStudent && (
+                <>
+                  <div className="mb-4">
+                    <div className="w-16 h-16 mx-auto rounded-full bg-blue-500/10 flex items-center justify-center mb-4">
+                      <svg className="w-8 h-8 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                      </svg>
+                    </div>
+                    <h3 className="text-2xl font-bold text-white mb-2">Student</h3>
+                    <p className="text-surface-300">
+                      You can view and manage your academic certificates issued by verified institutions.
+                    </p>
+                  </div>
+                  <Link to="/student/certificates" className="btn-primary inline-flex items-center gap-2 mt-4">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    My Certificates
+                  </Link>
+                </>
+              )}
+
+              {role === 'employer' && userRoles.isEmployer && (
+                <>
+                  <div className="mb-4">
+                    <div className="w-16 h-16 mx-auto rounded-full bg-green-500/10 flex items-center justify-center mb-4">
+                      <svg className="w-8 h-8 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                      </svg>
+                    </div>
+                    <h3 className="text-2xl font-bold text-white mb-2">Employer</h3>
+                    <p className="text-surface-300">
+                      You can verify the authenticity of candidate credentials instantly and securely.
+                    </p>
+                  </div>
+                  <Link to="/verify" className="btn-primary inline-flex items-center gap-2 mt-4">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Verify Credentials
+                  </Link>
+                </>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* Features Section */}
       <section className="relative container mx-auto px-4 py-16">

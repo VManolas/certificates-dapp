@@ -19,6 +19,14 @@ export {
   type UseCertificateIssuanceReturn,
 } from './useCertificateIssuance';
 
+// Batch Certificate Issuance
+export {
+  useBatchCertificateIssuance,
+  useBatchCertificateIssuanceWithCallback,
+  type BatchCertificateData,
+  type UseBatchCertificateIssuanceReturn,
+} from './useBatchCertificateIssuance';
+
 // Certificate Verification
 export {
   useCertificateVerification,
@@ -62,3 +70,15 @@ export {
 export {
   useCertificateRevocation,
 } from './useCertificateRevocation';
+
+// Institution Status Checking
+export {
+  useInstitutionStatus,
+  useCanIssueCertificates,
+  type InstitutionStatus,
+} from './useInstitutionStatus';
+
+// Account Change Handler
+export {
+  useAccountChangeHandler,
+} from './useAccountChangeHandler';

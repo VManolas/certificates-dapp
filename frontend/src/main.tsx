@@ -36,6 +36,14 @@ const queryClient = new QueryClient({
   },
 });
 
+// Expose queryClient to window for account change handler
+declare global {
+  interface Window {
+    queryClient: QueryClient;
+  }
+}
+window.queryClient = queryClient;
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <ErrorBoundary>

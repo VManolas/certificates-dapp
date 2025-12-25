@@ -108,6 +108,11 @@ export function useUserRoles(): DetectedRoles {
     ],
     query: {
       enabled: isConnected && !!address,
+      // Force refetch when address changes
+      refetchOnWindowFocus: true,
+      refetchOnMount: 'always',
+      staleTime: 0, // Always consider data stale
+      gcTime: 0, // Don't cache query results
     },
   });
 

@@ -51,6 +51,8 @@ export const config = getDefaultConfig({
     }),
   },
   ssr: false,
+  // Enable automatic reconnection
+  multiInjectedProviderDiscovery: true,
 });
 
 // Contract addresses from environment

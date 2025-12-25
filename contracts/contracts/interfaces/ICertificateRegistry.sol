@@ -110,5 +110,16 @@ interface ICertificateRegistry {
         Certificate[] memory certificates_,
         bool[] memory foundFlags
     );
+
+    /// @notice Issue multiple certificates in a single transaction
+    /// @param documentHashes Array of SHA-256 hashes of the PDF documents
+    /// @param studentWallets Array of wallet addresses of the students
+    /// @param metadataURIs Array of optional IPFS/Arweave URIs for additional metadata
+    /// @return certificateIds Array of unique IDs of the issued certificates
+    function issueCertificatesBatch(
+        bytes32[] calldata documentHashes,
+        address[] calldata studentWallets,
+        string[] calldata metadataURIs
+    ) external returns (uint256[] memory certificateIds);
 }
 

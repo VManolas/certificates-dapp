@@ -1,4 +1,4 @@
-# zkCredentials
+# Web3 Credentials
 
 > Blockchain-verified educational credentials on zkSync Era
 

@@ -328,6 +328,85 @@ contract CertificateRegistry is
     }
 
     /**
+     * @notice Issue multiple certificates in a single transaction
+     * @param documentHashes Array of SHA-256 hashes of the PDF documents
+     * @param studentWallets Array of wallet addresses of the students
+     * @param metadataURIs Array of optional IPFS/Arweave URIs for additional metadata
+     * @return certificateIds Array of unique IDs of the issued certificates
+     * @dev Only callable by verified and active institutions
+     *      All arrays must have the same length
+     *      Gas-efficient batch issuance operation
+     *      If any certificate fails validation, the entire transaction reverts
+     */
+    function issueCertificatesBatch(
+        bytes32[] calldata documentHashes,
+        address[] calldata studentWallets,
+        string[] calldata metadataURIs
+    ) external nonReentrant returns (uint256[] memory) {
+        // Validate array lengths
+        uint256 length = documentHashes.length;
+        if (length == 0) revert InvalidDocumentHash();
+        if (length != studentWallets.length || length != metadataURIs.length) {
+            revert InvalidDocumentHash(); // Reusing error for invalid input
+        }
+
+        // Check institution authorization once for the entire batch
+        if (!institutionRegistry.canIssueCertificates(msg.sender))
+            revert UnauthorizedIssuer();
+
+        // Initialize result array
+        uint256[] memory certificateIds = new uint256[](length);
+
+        // Process each certificate
+        for (uint256 i = 0; i < length; i++) {
+            // Validate inputs
+            if (studentWallets[i] == address(0)) revert InvalidStudentAddress();
+            if (documentHashes[i] == bytes32(0)) revert InvalidDocumentHash();
+
+            // Check for duplicate hash
+            if (hashToCertificateId[documentHashes[i]] != 0)
+                revert CertificateAlreadyExists();
+
+            // Generate unique certificate ID
+            uint256 certificateId = _certificateIdCounter++;
+
+            // Store certificate
+            certificates[certificateId] = Certificate({
+                documentHash: documentHashes[i],
+                studentWallet: studentWallets[i],
+                issuingInstitution: msg.sender,
+                issueDate: block.timestamp,
+                certificateId: certificateId,
+                metadataURI: metadataURIs[i],
+                isRevoked: false,
+                revokedAt: 0,
+                revocationReason: ""
+            });
+
+            // Update mappings
+            studentCertificates[studentWallets[i]].push(certificateId);
+            hashToCertificateId[documentHashes[i]] = certificateId;
+
+            // Update institution stats
+            institutionRegistry.incrementCertificateCount(msg.sender);
+
+            // Emit event
+            emit CertificateIssued(
+                certificateId,
+                documentHashes[i],
+                studentWallets[i],
+                msg.sender,
+                block.timestamp
+            );
+
+            // Store ID in result array
+            certificateIds[i] = certificateId;
+        }
+
+        return certificateIds;
+    }
+
+    /**
      * @notice Get certificates issued by a specific institution
      * @param institution The wallet address of the institution
      * @param offset Starting index for pagination

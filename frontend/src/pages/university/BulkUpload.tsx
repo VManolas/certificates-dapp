@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { useAccount, useWriteContract } from 'wagmi';
 import { readContract } from '@wagmi/core';
 import { useAuthStore } from '@/store/authStore';
+import { useCanIssueCertificates } from '@/hooks';
 import {
   downloadCSVTemplate,
   parseCSV,
@@ -17,6 +18,9 @@ import CertificateRegistryABI from '@/contracts/abis/CertificateRegistry.json';
 export function BulkUpload() {
   const { isConnected } = useAccount();
   const { institutionData, refetchInstitution } = useAuthStore();
+  
+  // Real-time institution status check
+  const { canIssue, isLoading: isCheckingStatus, reason, refetch: refetchStatus } = useCanIssueCertificates();
   
   const [csvFile, setCSVFile] = useState<File | null>(null);
   const [pdfFiles, setPdfFiles] = useState<File[]>([]);
@@ -42,7 +46,16 @@ export function BulkUpload() {
 
   const handlePDFUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
-    setPdfFiles(files);
+    setPdfFiles(prev => [...prev, ...files]); // Append new files to existing ones
+  };
+
+  const handlePDFReplace = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    setPdfFiles(files); // Replace all files
+  };
+
+  const removePDFFile = (index: number) => {
+    setPdfFiles(prev => prev.filter((_, i) => i !== index));
   };
 
   const processCSVAndMatch = async () => {
@@ -105,7 +118,14 @@ export function BulkUpload() {
       return;
     }
 
-    // Check institution status before proceeding
+    // CRITICAL: Real-time authorization check before bulk issuance
+    if (!canIssue) {
+      alert(reason || 'Your institution cannot issue certificates. Please contact an administrator.');
+      console.error('Bulk issuance blocked:', reason);
+      return;
+    }
+
+    // Legacy check (kept for backward compatibility with cached data)
     if (!institutionData?.isVerified) {
       alert('Your institution must be verified before issuing certificates. Please contact an administrator.');
       return;
@@ -232,6 +252,52 @@ export function BulkUpload() {
     );
   }
 
+  // Show loading state while checking institution status
+  if (isCheckingStatus) {
+    return (
+      <div className="container mx-auto px-4 py-16 text-center">
+        <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500 mb-4"></div>
+        <p className="text-surface-400">Verifying institution status...</p>
+      </div>
+    );
+  }
+
+  // CRITICAL: Block bulk upload UI if institution cannot issue certificates
+  if (!canIssue) {
+    return (
+      <div className="container mx-auto px-4 py-16 max-w-2xl">
+        <div className="card border-red-500/30 bg-red-500/10">
+          <div className="flex items-start gap-4">
+            <div className="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center flex-shrink-0">
+              <svg className="w-6 h-6 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <div className="flex-1">
+              <h2 className="text-xl font-bold text-white mb-2">Bulk Certificate Upload Unavailable</h2>
+              <p className="text-red-400 mb-4">{reason}</p>
+              <div className="flex gap-3">
+                <Link to="/university/dashboard" className="btn-secondary">
+                  Back to Dashboard
+                </Link>
+                <button 
+                  onClick={() => {
+                    refetchStatus();
+                    if (refetchInstitution) refetchInstitution();
+                  }}
+                  className="btn-primary"
+                >
+                  Refresh Status
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Legacy check (kept for backward compatibility) - but real-time check above takes precedence
   if (!institutionData?.isActive) {
     return (
       <div className="container mx-auto px-4 py-16 text-center">
@@ -319,23 +385,119 @@ export function BulkUpload() {
 
           {/* PDF Upload */}
           <div className="card">
-            <h2 className="text-xl font-semibold text-white mb-4">3. Upload ALL Certificate PDFs</h2>
+            <h2 className="text-xl font-semibold text-white mb-4">3. Upload Certificate PDFs</h2>
             <p className="text-surface-400 text-sm mb-4">
-              Upload all PDF files at once. Filenames must match those listed in the CSV.
+              Upload PDF files. Filenames must match those listed in the CSV. You can add more files at any time.
             </p>
-            <input
-              type="file"
-              accept=".pdf"
-              multiple
-              onChange={handlePDFUpload}
-              className="input w-full mb-2"
-            />
-            {pdfFiles.length > 0 && (
-              <div className="text-sm text-accent-400 flex items-center gap-2">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                {pdfFiles.length} PDF file(s) uploaded
+            
+            {pdfFiles.length === 0 ? (
+              // Initial upload - no files yet
+              <>
+                <input
+                  type="file"
+                  accept=".pdf"
+                  multiple
+                  onChange={handlePDFReplace}
+                  className="input w-full mb-2"
+                  id="pdf-initial-upload"
+                />
+                <label htmlFor="pdf-initial-upload" className="cursor-pointer">
+                  <div className="border-2 border-dashed border-surface-600 hover:border-primary-500 rounded-lg p-8 text-center transition-colors">
+                    <svg className="w-12 h-12 mx-auto text-surface-500 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                    </svg>
+                    <p className="text-surface-300 font-medium mb-1">Click to upload PDF files</p>
+                    <p className="text-surface-500 text-sm">or drag and drop</p>
+                    <p className="text-surface-600 text-xs mt-2">PDF files only • Multiple files supported</p>
+                  </div>
+                </label>
+              </>
+            ) : (
+              // Files uploaded - show list and "Choose More Files" button
+              <div className="space-y-4">
+                {/* Uploaded files list */}
+                <div className="bg-surface-800/50 rounded-lg p-4 max-h-64 overflow-y-auto">
+                  <div className="flex items-center justify-between mb-3 pb-2 border-b border-surface-700">
+                    <span className="text-sm font-semibold text-surface-300">Uploaded Files ({pdfFiles.length})</span>
+                    <button
+                      onClick={() => setPdfFiles([])}
+                      className="text-xs text-red-400 hover:text-red-300 transition-colors"
+                    >
+                      Clear All
+                    </button>
+                  </div>
+                  <div className="space-y-2">
+                    {pdfFiles.map((file, index) => (
+                      <div key={index} className="flex items-center justify-between py-2 px-3 bg-surface-900/50 rounded group hover:bg-surface-900 transition-colors">
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          <svg className="w-5 h-5 text-red-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                          </svg>
+                          <span className="text-sm text-surface-200 truncate" title={file.name}>
+                            {file.name}
+                          </span>
+                          <span className="text-xs text-surface-500 flex-shrink-0">
+                            ({(file.size / 1024).toFixed(1)} KB)
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => removePDFFile(index)}
+                          className="ml-3 text-surface-500 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
+                          title="Remove file"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Add more files button */}
+                <div className="flex gap-3">
+                  <label htmlFor="pdf-add-more" className="flex-1">
+                    <input
+                      type="file"
+                      accept=".pdf"
+                      multiple
+                      onChange={handlePDFUpload}
+                      className="hidden"
+                      id="pdf-add-more"
+                    />
+                    <div className="btn-secondary w-full cursor-pointer flex items-center justify-center">
+                      <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                      </svg>
+                      Choose More Files
+                    </div>
+                  </label>
+                  
+                  <label htmlFor="pdf-replace-all" className="flex-1">
+                    <input
+                      type="file"
+                      accept=".pdf"
+                      multiple
+                      onChange={handlePDFReplace}
+                      className="hidden"
+                      id="pdf-replace-all"
+                    />
+                    <div className="btn-secondary w-full cursor-pointer flex items-center justify-center border-surface-600">
+                      <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      Replace All
+                    </div>
+                  </label>
+                </div>
+
+                {/* Summary */}
+                <div className="flex items-center gap-2 text-sm text-accent-400">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  {pdfFiles.length} PDF file(s) ready to process
+                </div>
               </div>
             )}
           </div>

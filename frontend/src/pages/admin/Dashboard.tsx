@@ -20,6 +20,7 @@ export function AdminDashboard() {
   const { isConnected } = useAccount();
   const [selectedInstitution, setSelectedInstitution] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'suspended'>('all');
 
   // Read institution stats from contract
   const { data: stats, isLoading: statsLoading, refetch: refetchStats } = useReadContract({
@@ -53,13 +54,8 @@ export function AdminDashboard() {
 
   const institutionAddresses = (allInstitutionAddresses as `0x${string}`[]) || [];
   
-  const filteredInstitutions = institutionAddresses.filter((address) => {
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase();
-      return address.toLowerCase().includes(term);
-    }
-    return true;
-  });
+  // We'll need to filter after fetching institution details, so we pass all addresses for now
+  const filteredInstitutions = institutionAddresses;
   
   const isLoading = statsLoading || addressesLoading;
   
@@ -123,23 +119,47 @@ export function AdminDashboard() {
 
       {/* Stats */}
       <div className="grid md:grid-cols-3 gap-6 mb-8">
-        <div className="card">
+        <div 
+          className={`card cursor-pointer transition-all hover:border-primary-400 ${
+            statusFilter === 'all' ? 'border-primary-400 bg-primary-400/5' : ''
+          }`}
+          onClick={() => setStatusFilter('all')}
+        >
           <div className="text-sm text-surface-400 mb-1">Total Institutions</div>
           <div className="text-3xl font-bold text-white">
             {statsLoading ? '...' : totalRegistered.toString()}
           </div>
+          {statusFilter === 'all' && (
+            <div className="text-xs text-primary-400 mt-2">Showing All</div>
+          )}
         </div>
-        <div className="card">
+        <div 
+          className={`card cursor-pointer transition-all hover:border-accent-400 ${
+            statusFilter === 'active' ? 'border-accent-400 bg-accent-400/5' : ''
+          }`}
+          onClick={() => setStatusFilter(statusFilter === 'active' ? 'all' : 'active')}
+        >
           <div className="text-sm text-surface-400 mb-1">Active</div>
           <div className="text-3xl font-bold text-accent-400">
             {statsLoading ? '...' : totalActive.toString()}
           </div>
+          {statusFilter === 'active' && (
+            <div className="text-xs text-accent-400 mt-2">Filtered</div>
+          )}
         </div>
-        <div className="card">
+        <div 
+          className={`card cursor-pointer transition-all hover:border-red-400 ${
+            statusFilter === 'suspended' ? 'border-red-400 bg-red-400/5' : ''
+          }`}
+          onClick={() => setStatusFilter(statusFilter === 'suspended' ? 'all' : 'suspended')}
+        >
           <div className="text-sm text-surface-400 mb-1">Suspended</div>
           <div className="text-3xl font-bold text-red-400">
             {statsLoading ? '...' : totalSuspended.toString()}
           </div>
+          {statusFilter === 'suspended' && (
+            <div className="text-xs text-red-400 mt-2">Filtered</div>
+          )}
         </div>
       </div>
 
@@ -152,7 +172,7 @@ export function AdminDashboard() {
           <div className="relative flex-1 sm:w-64">
             <input
               type="text"
-              placeholder="Search by address..."
+              placeholder="Search by name or address..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full px-4 py-2 pl-10 bg-surface-800 border border-surface-700 rounded-lg text-white placeholder-surface-500 focus:outline-none focus:border-primary-500"
@@ -179,10 +199,21 @@ export function AdminDashboard() {
         ) : filteredInstitutions.length === 0 ? (
           <div className="text-center py-8 text-surface-400">
             <p>
-              {searchTerm 
-                ? 'No institutions match your search criteria' 
+              {searchTerm || statusFilter !== 'all'
+                ? 'No institutions match your filter criteria' 
                 : 'No institutions registered yet'}
             </p>
+            {(searchTerm || statusFilter !== 'all') && (
+              <button
+                onClick={() => {
+                  setSearchTerm('');
+                  setStatusFilter('all');
+                }}
+                className="mt-4 text-primary-400 hover:text-primary-300 text-sm"
+              >
+                Clear filters
+              </button>
+            )}
           </div>
         ) : (
           <div className="space-y-4">
@@ -195,6 +226,8 @@ export function AdminDashboard() {
                   selectedInstitution === address ? null : address
                 )}
                 onActionComplete={() => refetch()}
+                searchTerm={searchTerm}
+                statusFilter={statusFilter}
               />
             ))}
           </div>
@@ -209,11 +242,15 @@ function InstitutionRow({
   isSelected,
   onSelect,
   onActionComplete,
+  searchTerm,
+  statusFilter,
 }: {
   address: `0x${string}`;
   isSelected: boolean;
   onSelect: () => void;
   onActionComplete: () => void;
+  searchTerm: string;
+  statusFilter: 'all' | 'active' | 'suspended';
 }) {
   const queryClient = useQueryClient();
   
@@ -292,6 +329,38 @@ function InstitutionRow({
   };
 
   const isLoading = isApproving || isApproveConfirming || isDeactivating || isDeactivateConfirming || isReactivating || isReactivateConfirming;
+
+  // Filter logic - check if institution matches search term
+  const matchesSearch = () => {
+    if (!searchTerm) return true;
+    if (!institution) return false;
+    
+    const term = searchTerm.toLowerCase();
+    const nameMatches = institution.name.toLowerCase().includes(term);
+    const addressMatches = address.toLowerCase().includes(term);
+    const domainMatches = institution.emailDomain.toLowerCase().includes(term);
+    
+    return nameMatches || addressMatches || domainMatches;
+  };
+
+  // Filter logic - check if institution matches status filter
+  const matchesStatusFilter = () => {
+    if (statusFilter === 'all') return true;
+    if (!institution) return false;
+    
+    if (statusFilter === 'active') {
+      return institution.isVerified && institution.isActive;
+    } else if (statusFilter === 'suspended') {
+      return institution.isVerified && !institution.isActive;
+    }
+    
+    return true;
+  };
+
+  // Don't render if doesn't match search or status filter (after all hooks are called)
+  if (!matchesSearch() || !matchesStatusFilter()) {
+    return null;
+  }
 
   if (dataLoading) {
     return (
