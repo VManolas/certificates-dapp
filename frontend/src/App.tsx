@@ -21,6 +21,7 @@ const BatchVerify = lazy(() => import('./pages/employer/BatchVerify'));
 const AdminDashboard = lazy(() => import('./pages/admin/Dashboard'));
 const ManageUniversities = lazy(() => import('./pages/admin/ManageUniversities'));
 const StudentCertificates = lazy(() => import('./pages/student/Certificates'));
+const ZKAuthPage = lazy(() => import('./pages/ZKAuth'));
 
 // Loading component for Suspense fallback
 const PageLoader = () => (
@@ -44,6 +45,7 @@ function App() {
         <Route path="/" element={<Layout />}>
           <Route index element={<Home />} />
           <Route path="verify" element={<Verify />} />
+          <Route path="zkauth" element={<ZKAuthPage />} />
           <Route path="access-denied" element={<AccessDenied />} />
           
           {/* University registration - PUBLIC (no protection) */}

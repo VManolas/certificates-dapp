@@ -82,3 +82,14 @@ export {
 export {
   useAccountChangeHandler,
 } from './useAccountChangeHandler';
+
+// ZK Authentication
+export {
+  useZKAuth,
+} from './useZKAuth';
+
+// Unified Authentication
+export {
+  useUnifiedAuth,
+  type UnifiedAuthState,
+} from './useUnifiedAuth';

@@ -8,6 +8,11 @@ import { persist } from 'zustand/middleware';
 export type UserRole = 'university' | 'student' | 'employer' | 'admin' | null;
 
 /**
+ * Authentication method
+ */
+export type AuthMethod = 'web3' | 'zk' | null;
+
+/**
  * Institution data for university users
  */
 export interface InstitutionData {
@@ -17,6 +22,22 @@ export interface InstitutionData {
   isActive: boolean;
   verificationDate: number;
   totalCertificatesIssued: number;
+}
+
+/**
+ * ZK Authentication state
+ */
+export interface ZKAuthState {
+  /** Whether user has enabled ZK authentication */
+  isZKAuthEnabled: boolean;
+  /** ZK authentication commitment (if registered) */
+  zkCommitment: string | null;
+  /** ZK session ID (if authenticated) */
+  zkSessionId: string | null;
+  /** Whether user is currently authenticated via ZK proof */
+  isZKAuthenticated: boolean;
+  /** ZK authentication role */
+  zkRole: UserRole;
 }
 
 /**
@@ -41,6 +62,14 @@ interface AuthState {
   showRoleSelector: boolean;
   /** Optional refetch callback for institution data */
   refetchInstitution: (() => void) | null;
+  /** ZK authentication state */
+  zkAuth: ZKAuthState;
+  /** Current authentication method (web3 or zk) */
+  authMethod: AuthMethod;
+  /** Whether authentication method selector should be shown */
+  showAuthMethodSelector: boolean;
+  /** User's preferred authentication method (saved preference) */
+  preferredAuthMethod: AuthMethod;
 
   // Actions
   setAddress: (address: string | null) => void;
@@ -51,6 +80,14 @@ interface AuthState {
   setIsRoleDetectionComplete: (complete: boolean) => void;
   setShowRoleSelector: (show: boolean) => void;
   setRefetchInstitution: (refetch: (() => void) | null) => void;
+  setZKAuthEnabled: (enabled: boolean) => void;
+  setZKCommitment: (commitment: string | null) => void;
+  setZKSessionId: (sessionId: string | null) => void;
+  setZKAuthenticated: (authenticated: boolean) => void;
+  setZKRole: (role: UserRole) => void;
+  setAuthMethod: (method: AuthMethod) => void;
+  setShowAuthMethodSelector: (show: boolean) => void;
+  setPreferredAuthMethod: (method: AuthMethod) => void;
   reset: () => void;
 }
 
@@ -72,6 +109,16 @@ export const useAuthStore = create<AuthState>()(
       isRoleDetectionComplete: false,
       showRoleSelector: false,
       refetchInstitution: null,
+      zkAuth: {
+        isZKAuthEnabled: false,
+        zkCommitment: null,
+        zkSessionId: null,
+        isZKAuthenticated: false,
+        zkRole: null,
+      },
+      authMethod: null,
+      showAuthMethodSelector: false,
+      preferredAuthMethod: null,
 
       setAddress: (address) =>
         set((state) => {
@@ -87,6 +134,16 @@ export const useAuthStore = create<AuthState>()(
               isRoleDetectionComplete: false,
               showRoleSelector: false,
               refetchInstitution: null,
+              zkAuth: {
+                isZKAuthEnabled: false,
+                zkCommitment: null,
+                zkSessionId: null,
+                isZKAuthenticated: false,
+                zkRole: null,
+              },
+              authMethod: null,
+              showAuthMethodSelector: false,
+              // Keep preferredAuthMethod - user's saved preference
             };
           }
           return { address };
@@ -107,6 +164,27 @@ export const useAuthStore = create<AuthState>()(
 
       setRefetchInstitution: (refetchInstitution) => set({ refetchInstitution }),
 
+      setZKAuthEnabled: (isZKAuthEnabled) => 
+        set((state) => ({ zkAuth: { ...state.zkAuth, isZKAuthEnabled } })),
+
+      setZKCommitment: (zkCommitment) =>
+        set((state) => ({ zkAuth: { ...state.zkAuth, zkCommitment } })),
+
+      setZKSessionId: (zkSessionId) =>
+        set((state) => ({ zkAuth: { ...state.zkAuth, zkSessionId } })),
+
+      setZKAuthenticated: (isZKAuthenticated) =>
+        set((state) => ({ zkAuth: { ...state.zkAuth, isZKAuthenticated } })),
+
+      setZKRole: (zkRole) =>
+        set((state) => ({ zkAuth: { ...state.zkAuth, zkRole } })),
+
+      setAuthMethod: (authMethod) => set({ authMethod }),
+
+      setShowAuthMethodSelector: (showAuthMethodSelector) => set({ showAuthMethodSelector }),
+
+      setPreferredAuthMethod: (preferredAuthMethod) => set({ preferredAuthMethod }),
+
       reset: () =>
         set({
           address: null,
@@ -118,6 +196,16 @@ export const useAuthStore = create<AuthState>()(
           isRoleDetectionComplete: false,
           showRoleSelector: false,
           refetchInstitution: null,
+          zkAuth: {
+            isZKAuthEnabled: false,
+            zkCommitment: null,
+            zkSessionId: null,
+            isZKAuthenticated: false,
+            zkRole: null,
+          },
+          authMethod: null,
+          showAuthMethodSelector: false,
+          // Keep preferredAuthMethod even on reset
         }),
     }),
     {
@@ -128,6 +216,9 @@ export const useAuthStore = create<AuthState>()(
         isAspirationalRole: state.isAspirationalRole,
         hasSelectedRole: state.hasSelectedRole,
         detectedRoles: state.detectedRoles,
+        zkAuth: state.zkAuth,
+        authMethod: state.authMethod,
+        preferredAuthMethod: state.preferredAuthMethod,
         // Don't persist modal state or detection state or institution data
       }),
     }
@@ -158,5 +249,39 @@ export function useHasMultipleRoles(): boolean {
   // Filter out null and employer (always available)
   const specialRoles = detectedRoles.filter(r => r && r !== 'employer');
   return specialRoles.length > 0;
+}
+
+/**
+ * Hook to check if user is authenticated (via any method)
+ */
+export function useIsAuthenticated(): boolean {
+  const { role, zkAuth, authMethod } = useAuthStore();
+  
+  // Check ZK authentication
+  if (authMethod === 'zk' && zkAuth.isZKAuthenticated) {
+    return true;
+  }
+  
+  // Check Web3 authentication (has role from on-chain detection)
+  if (authMethod === 'web3' && role !== null) {
+    return true;
+  }
+  
+  return false;
+}
+
+/**
+ * Hook to get the effective role (from either auth method)
+ */
+export function useEffectiveRole(): UserRole {
+  const { role, zkAuth, authMethod } = useAuthStore();
+  
+  // ZK auth takes precedence if active
+  if (authMethod === 'zk' && zkAuth.isZKAuthenticated) {
+    return zkAuth.zkRole;
+  }
+  
+  // Otherwise use Web3 role
+  return role;
 }
 

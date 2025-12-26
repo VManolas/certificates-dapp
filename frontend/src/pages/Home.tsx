@@ -3,20 +3,37 @@ import { Link } from 'react-router-dom';
 import { useAccount } from 'wagmi';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useAuthStore } from '@/store/authStore';
-import { useUserRoles } from '@/hooks/useUserRoles';
+import { useUnifiedAuth } from '@/hooks/useUnifiedAuth';
+import { AuthMethodSelector } from '@/components/AuthMethodSelector';
+import { ZKAuthUpgrade } from '@/components/zkauth/ZKAuthUpgrade';
 
 export function Home() {
   const { isConnected } = useAccount();
-  const { role } = useAuthStore();
-  const userRoles = useUserRoles();
+  const { role: storeRole } = useAuthStore();
+  
+  // Use unified auth for both ZK and Web3 login
+  const unifiedAuth = useUnifiedAuth();
 
   // Debug logging
   console.log('Home - isConnected:', isConnected);
-  console.log('Home - role:', role);
-  console.log('Home - userRoles:', userRoles);
+  console.log('Home - unifiedAuth:', unifiedAuth);
+
+  // Show role from unified auth (could be ZK or Web3)
+  const role = unifiedAuth.isAuthenticated ? unifiedAuth.role : storeRole;
+  const userRoles = unifiedAuth.web3Auth;
 
   return (
     <div className="relative overflow-hidden">
+      {/* Auth Method Selector Modal */}
+      <AuthMethodSelector
+        isOpen={unifiedAuth.showAuthMethodSelector}
+        onClose={() => {
+          // User can close without selecting, will be shown again on next connect
+        }}
+        onSelectMethod={unifiedAuth.selectAuthMethod}
+        required={!unifiedAuth.authMethod} // Required if no method selected yet
+      />
+
       {/* Background gradient */}
       <div className="absolute inset-0 bg-gradient-to-br from-primary-950/50 via-surface-950 to-accent-950/30" />
       
@@ -49,7 +66,7 @@ export function Home() {
           </p>
 
           {/* User-Specific Role Description */}
-          {isConnected && role && userRoles && role !== 'admin' && (
+          {isConnected && role && role !== 'admin' && (
             <p className="text-base md:text-lg font-medium mb-10 max-w-2xl mx-auto">
               {role === 'university' && userRoles.isUniversity && (
                 <span className="text-accent-400">
@@ -99,9 +116,43 @@ export function Home() {
       </section>
 
       {/* User-Specific Welcome Section */}
-      {isConnected && role && userRoles && (
+      {isConnected && role && (
         <section className="relative container mx-auto px-4 pb-16">
-          <div className="max-w-2xl mx-auto">
+          <div className="max-w-2xl mx-auto space-y-6">
+            {/* ZK Auth Upgrade Card - Only show for Web3 users */}
+            {unifiedAuth.authMethod === 'web3' && <ZKAuthUpgrade variant="card" />}
+            
+            {/* ZK Auth Status Card - Show for ZK users */}
+            {unifiedAuth.authMethod === 'zk' && (
+              <div className="card bg-gradient-to-r from-primary-900/50 to-primary-700/30 border-primary-500/20">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-primary-500/20 flex items-center justify-center">
+                    <svg className="w-6 h-6 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h4 className="font-semibold text-white">Private Login Active</h4>
+                      <span className="px-2 py-0.5 text-xs bg-green-500/20 text-green-400 rounded-full border border-green-500/30">
+                        ✓ Authenticated
+                      </span>
+                    </div>
+                    <p className="text-sm text-surface-300">
+                      Your wallet address is hidden. You're using privacy-preserving authentication.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => unifiedAuth.switchAuthMethod('web3')}
+                    className="btn-secondary text-sm"
+                  >
+                    Switch to Standard
+                  </button>
+                </div>
+              </div>
+            )}
+            
+            {/* Role-specific welcome card */}
             <div className="card bg-gradient-to-r from-primary-900/50 to-accent-900/50 border-primary-500/20 text-center py-8">
               {role === 'admin' && userRoles.isAdmin && (
                 <>

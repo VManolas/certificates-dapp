@@ -63,6 +63,30 @@ async function main() {
   console.log(`✅ EmployerRegistry deployed to: ${employerRegistryAddress}\n`);
 
   // ============================================
+  // 5. Deploy MockAuthVerifier (for ZK Auth)
+  // ============================================
+  console.log("📝 Deploying MockAuthVerifier...");
+  const MockAuthVerifier = await ethers.getContractFactory("MockAuthVerifier");
+  const mockAuthVerifier = await MockAuthVerifier.deploy();
+  await mockAuthVerifier.waitForDeployment();
+  const mockAuthVerifierAddress = await mockAuthVerifier.getAddress();
+  console.log(`✅ MockAuthVerifier deployed to: ${mockAuthVerifierAddress}\n`);
+
+  // ============================================
+  // 6. Deploy ZKAuthRegistry
+  // ============================================
+  console.log("📝 Deploying ZKAuthRegistry...");
+  const ZKAuthRegistry = await ethers.getContractFactory("ZKAuthRegistry");
+  const zkAuthRegistry = await upgrades.deployProxy(
+    ZKAuthRegistry,
+    [deployer.address, mockAuthVerifierAddress], // super admin, verifier address
+    { initializer: "initialize" }
+  );
+  await zkAuthRegistry.waitForDeployment();
+  const zkAuthRegistryAddress = await zkAuthRegistry.getAddress();
+  console.log(`✅ ZKAuthRegistry deployed to: ${zkAuthRegistryAddress}\n`);
+
+  // ============================================
   // Deployment Summary
   // ============================================
   console.log("═══════════════════════════════════════════════════════");
@@ -72,11 +96,14 @@ async function main() {
   console.log(`   InstitutionRegistry: ${institutionRegistryAddress}`);
   console.log(`   CertificateRegistry: ${certificateRegistryAddress}`);
   console.log(`   EmployerRegistry:    ${employerRegistryAddress}`);
+  console.log(`   MockAuthVerifier:    ${mockAuthVerifierAddress}`);
+  console.log(`   ZKAuthRegistry:      ${zkAuthRegistryAddress}`);
   console.log(`\n👤 Super Admin: ${deployer.address}`);
   console.log(`\n💾 Save these to frontend/.env.local:\n`);
   console.log(`VITE_CERTIFICATE_REGISTRY_ADDRESS=${certificateRegistryAddress}`);
   console.log(`VITE_INSTITUTION_REGISTRY_ADDRESS=${institutionRegistryAddress}`);
   console.log(`VITE_EMPLOYER_REGISTRY_ADDRESS=${employerRegistryAddress}`);
+  console.log(`VITE_ZK_AUTH_REGISTRY_ADDRESS=${zkAuthRegistryAddress}`);
   console.log(`VITE_CHAIN_ID=1337`);
   console.log(`\n═══════════════════════════════════════════════════════\n`);
 }

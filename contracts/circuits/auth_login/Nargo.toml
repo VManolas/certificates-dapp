@@ -1,0 +1,6 @@
+[package]
+name = "auth_login"
+type = "bin"
+authors = [""]
+
+[dependencies]

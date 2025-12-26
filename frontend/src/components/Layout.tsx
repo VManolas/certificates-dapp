@@ -4,10 +4,12 @@ import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useAccount } from 'wagmi';
 import { useAuthStore } from '@/store/authStore';
 import { useEffect } from 'react';
-import { useUserRoles } from '@/hooks/useUserRoles';
+import { useUnifiedAuth } from '@/hooks/useUnifiedAuth';
 import { RoleSwitcher } from './RoleSwitcher';
 import { RoleSelectorModal } from './RoleSelectorModal';
 import { SkipToContent } from './SkipToContent';
+import { ZKAuthStatus } from './zkauth/ZKAuthStatus';
+import { AuthMethodSelector } from './AuthMethodSelector';
 
 export function Layout() {
   const location = useLocation();
@@ -28,20 +30,23 @@ export function Layout() {
     setRefetchInstitution,
   } = useAuthStore();
 
-  // Detect user roles from on-chain data
-  const { 
-    availableRoles, 
-    isLoading: isDetectingRoles, 
-    universityData,
-    studentCertificateCount,
-    canRegisterAsEmployer,
-    refetch: refetchRoles,
-  } = useUserRoles();
+  // Use unified auth for both ZK and Web3
+  const unifiedAuth = useUnifiedAuth();
+
+  // Get user roles from unified auth
+  const userRoles = unifiedAuth.web3Auth;
+  const availableRoles = userRoles.availableRoles;
+  const isDetectingRoles = unifiedAuth.isLoading;
+  const universityData = userRoles.isUniversity ? institutionData : null;
+  const canRegisterAsEmployer = userRoles.canRegisterAsEmployer;
 
   // Set refetch function in auth store for other components
   useEffect(() => {
-    setRefetchInstitution(refetchRoles);
-  }, [refetchRoles, setRefetchInstitution]);
+    // Note: refetch is not exposed in unified auth, but it's called internally
+    setRefetchInstitution(() => {
+      // Placeholder - unified auth handles this internally
+    });
+  }, [setRefetchInstitution]);
 
   // Sync wallet connection with auth store
   useEffect(() => {
@@ -50,20 +55,12 @@ export function Layout() {
 
   // Sync institution data to auth store
   useEffect(() => {
-    if (universityData) {
-      setInstitutionData({
-        name: universityData.name,
-        emailDomain: universityData.emailDomain,
-        isVerified: universityData.isVerified,
-        isActive: universityData.isActive,
-        verificationDate: Number(universityData.verificationDate),
-        totalCertificatesIssued: Number(universityData.totalCertificatesIssued),
-      });
-    } else if (role === 'university' && !universityData) {
-      // Clear institution data if no longer detected
+    // Institution data is now managed by unified auth
+    // Only clear if role changes
+    if (role !== 'university' && institutionData) {
       setInstitutionData(null);
     }
-  }, [universityData, role, setInstitutionData]);
+  }, [role, institutionData, setInstitutionData]);
 
   // Handle role detection completion
   useEffect(() => {
@@ -90,6 +87,16 @@ export function Layout() {
     <div className="min-h-screen flex flex-col">
       <SkipToContent />
       
+      {/* Auth Method Selector Modal */}
+      <AuthMethodSelector
+        isOpen={unifiedAuth.showAuthMethodSelector}
+        onClose={() => {
+          // User can close without selecting
+        }}
+        onSelectMethod={unifiedAuth.selectAuthMethod}
+        required={!unifiedAuth.authMethod} // Required if no method selected yet
+      />
+      
       {/* Header */}
       <header className="sticky top-0 z-50 border-b border-surface-800 bg-surface-950/80 backdrop-blur-lg" role="banner">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
@@ -115,6 +122,15 @@ export function Layout() {
               aria-current={isActive('/') ? 'page' : undefined}
             >
               Home
+            </Link>
+            <Link
+              to="/zkauth"
+              className={`text-sm font-medium transition-colors ${
+                isActive('/zkauth') ? 'text-white' : 'text-surface-400 hover:text-white'
+              }`}
+              aria-current={isActive('/zkauth') ? 'page' : undefined}
+            >
+              🔐 ZK Auth
             </Link>
             {isConnected && role !== 'admin' && (
               <Link
@@ -191,6 +207,9 @@ export function Layout() {
 
           {/* Wallet Connection + Role Display */}
           <div className="flex items-center gap-3">
+            {isConnected && role && (
+              <ZKAuthStatus />
+            )}
             {isConnected && !isDetectingRoles && (
               <RoleSwitcher availableRoles={detectedRoles} />
             )}
@@ -217,7 +236,7 @@ export function Layout() {
         onClose={() => setShowRoleSelector(false)}
         availableRoles={detectedRoles}
         universityData={universityData}
-        studentCertificateCount={studentCertificateCount}
+        studentCertificateCount={0}
         canRegisterAsEmployer={canRegisterAsEmployer}
       />
 

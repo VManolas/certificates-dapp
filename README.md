@@ -11,10 +11,11 @@ zkCredentials is a decentralized platform for issuing, managing, and verifying e
 
 ### Key Features
 
-- 🔐 **Tamper-Proof** - Certificates stored as cryptographic hashes on-chain
+- 🔐 **Dual Authentication** - Choose between Private (ZK) or Standard (Web3) login
+- 🛡️ **Privacy-Preserving** - Hide your wallet address with zero-knowledge proofs
+- 🔒 **Tamper-Proof** - Certificates stored as cryptographic hashes on-chain
 - ⚡ **Instant Verification** - Verify any certificate in seconds
 - 🏛️ **Institution Management** - Verified institutions issue credentials
-- 🔒 **Privacy-First** - Only document hashes stored, not content
 - 💰 **Low Cost** - zkSync Era enables affordable transactions
 
 ## Architecture
@@ -163,9 +164,22 @@ zksync-zzlogin-dapp/
 
 ## User Flows
 
+### Authentication
+
+**First-Time Users:**
+1. Connect Web3 wallet
+2. Choose authentication method:
+   - **🔐 Private Login (ZK)** - Privacy-preserving, 30s setup
+   - **🔑 Standard Login (Web3)** - Instant, familiar experience
+3. Select role (if using ZK auth)
+4. Access your dashboard
+
+> 📖 **See [DUAL-AUTH-SYSTEM.md](docs/DUAL-AUTH-SYSTEM.md) for detailed authentication guide**
+
 ### For Educational Institutions
 
-1. Connect wallet
+1. Choose authentication method
+2. Connect wallet (if using Standard Login)
 2. Register institution with name and email domain
 3. Wait for admin approval
 4. Issue certificates by uploading PDF and entering student wallet
@@ -199,11 +213,15 @@ zksync-zzlogin-dapp/
 
 ## Security
 
+- **Dual Authentication** - Choose between ZK proofs or Web3 signatures
+- **Zero-Knowledge Privacy** - Wallet addresses can remain hidden with ZK auth
 - All contracts use OpenZeppelin's battle-tested libraries
 - UUPS upgradeable pattern for contract upgrades
 - AccessControl for role-based permissions
 - ReentrancyGuard on state-changing functions
 - Custom errors for gas-efficient reverts
+
+> 📖 **See [DUAL-AUTH-SYSTEM.md](docs/DUAL-AUTH-SYSTEM.md) for security details**
 
 ## License
 
@@ -215,6 +233,9 @@ Contributions are welcome! Please read our contributing guidelines before submit
 
 ## Links
 
+- [Dual Authentication Guide](docs/DUAL-AUTH-SYSTEM.md)
+- [ZK Auth Phase 1 Report](docs/PHASE-1-COMPLETE.md)
+- [Quick Start Guide](docs/QUICK-START.md)
 - [zkSync Era Documentation](https://docs.zksync.io/)
 - [OpenZeppelin Contracts](https://docs.openzeppelin.com/contracts/)
 - [wagmi Documentation](https://wagmi.sh/)
