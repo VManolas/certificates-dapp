@@ -7,22 +7,26 @@ import { useCertificatesBatch, useCanIssueCertificates } from '@/hooks';
 import { truncateHash } from '@/lib/pdfHash';
 import { CERTIFICATE_REGISTRY_ADDRESS } from '@/lib/wagmi';
 import CertificateRegistryABI from '@/contracts/abis/CertificateRegistry.json';
+import { logger } from '@/lib/logger';
 
 export function UniversityDashboard() {
   const navigate = useNavigate();
   const { isConnected, address } = useAccount();
   const { institutionData, refetchInstitution } = useAuthStore();
   const [showBlockedModal, setShowBlockedModal] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   
   // Real-time institution status check
   const { canIssue, reason, refetch: refetchStatus } = useCanIssueCertificates();
 
   // Get certificate IDs for this institution
+  // Fetch more certificates than we'll display (50) so we can sort by date
+  // and show the 5 most recent ones
   const { data: institutionCerts, refetch: refetchCertIds } = useReadContract({
     address: CERTIFICATE_REGISTRY_ADDRESS,
     abi: CertificateRegistryABI.abi,
     functionName: 'getCertificatesByInstitution',
-    args: address ? [address, 0n, 5n] : undefined,
+    args: address ? [address, 0n, 50n] : undefined,
     query: {
       enabled: !!address && isConnected,
       refetchOnMount: 'always',
@@ -41,10 +45,19 @@ export function UniversityDashboard() {
   );
 
   const handleRefreshCertificates = async () => {
-    await refetchCertIds();
-    await refetchCertDetails();
-    if (refetchInstitution) {
-      await refetchInstitution();
+    setIsRefreshing(true);
+    logger.info('Refreshing certificates for university dashboard');
+    try {
+      await refetchCertIds();
+      await refetchCertDetails();
+      if (refetchInstitution) {
+        await refetchInstitution();
+      }
+      logger.info('Successfully refreshed certificates');
+    } catch (error) {
+      logger.error('Failed to refresh certificates', error);
+    } finally {
+      setIsRefreshing(false);
     }
   };
 
@@ -62,6 +75,15 @@ export function UniversityDashboard() {
       return dateB - dateA;
     })
     .slice(0, 5);
+
+  // Log certificate data for debugging
+  logger.debug('Dashboard certificate data', {
+    totalCertIds: certificateIds?.length || 0,
+    certificateIds: certificateIds?.map(id => id.toString()),
+    allCertificatesCount: allCertificates?.length || 0,
+    recentCertificatesCount: recentCertificates.length,
+    recentCertIds: recentCertificates.map(({ id }) => id.toString()),
+  });
 
   if (!isConnected) {
     return (
@@ -276,19 +298,19 @@ export function UniversityDashboard() {
           <div className="flex items-center gap-3">
             <button
               onClick={handleRefreshCertificates}
-              disabled={isLoading}
+              disabled={isLoading || isRefreshing}
               className="text-sm text-surface-400 hover:text-white transition-colors flex items-center gap-1"
               title="Refresh certificates"
             >
               <svg 
-                className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} 
+                className={`w-4 h-4 ${isLoading || isRefreshing ? 'animate-spin' : ''}`} 
                 fill="none" 
                 stroke="currentColor" 
                 viewBox="0 0 24 24"
               >
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
-              {isLoading ? 'Loading...' : 'Refresh'}
+              {isLoading || isRefreshing ? 'Loading...' : 'Refresh'}
             </button>
             <Link to="/university/certificates" className="text-sm text-primary-400 hover:text-primary-300">
               View all →

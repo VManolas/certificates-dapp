@@ -475,6 +475,10 @@ export function useCertificatesBatch(
     args: certificateIds ? [certificateIds] : undefined,
     query: {
       enabled: !!certificateIds && certificateIds.length > 0 && !!CERTIFICATE_REGISTRY_ADDRESS && enabled,
+      refetchOnMount: 'always',
+      refetchOnWindowFocus: true,
+      staleTime: 0,
+      gcTime: 0,
     },
   });
 

@@ -1,10 +1,11 @@
 // src/pages/university/BulkUpload.tsx
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { useAccount, useWriteContract } from 'wagmi';
+import { useAccount } from 'wagmi';
 import { readContract } from '@wagmi/core';
 import { useAuthStore } from '@/store/authStore';
 import { useCanIssueCertificates } from '@/hooks';
+import { useBatchCertificateIssuance } from '@/hooks/useBatchCertificateIssuance';
 import {
   downloadCSVTemplate,
   parseCSV,
@@ -14,6 +15,7 @@ import {
 import { generatePDFHash } from '@/lib/pdfHash';
 import { CERTIFICATE_REGISTRY_ADDRESS, config } from '@/lib/wagmi';
 import CertificateRegistryABI from '@/contracts/abis/CertificateRegistry.json';
+import { logger } from '@/lib/logger';
 
 export function BulkUpload() {
   const { isConnected } = useAccount();
@@ -26,16 +28,18 @@ export function BulkUpload() {
   const [pdfFiles, setPdfFiles] = useState<File[]>([]);
   const [entries, setEntries] = useState<BulkCertificateEntry[]>([]);
   const [currentStep, setCurrentStep] = useState<'upload' | 'preview' | 'processing'>('upload');
-  const [processingIndex, setProcessingIndex] = useState(0);
-  const [completedCerts, setCompletedCerts] = useState(0);
   const [failedCerts, setFailedCerts] = useState<number[]>([]);
   const [errorMessages, setErrorMessages] = useState<string[]>([]);
 
-  const { writeContractAsync } = useWriteContract();
-
-  if (!writeContractAsync) {
-    console.error('writeContractAsync is not available');
-  }
+  const { 
+    issueCertificatesBatch, 
+    isPending, 
+    isConfirming, 
+    isSuccess,
+    error: batchError,
+    certificateIds,
+    reset: resetBatch
+  } = useBatchCertificateIssuance();
 
   const handleCSVUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -99,7 +103,7 @@ export function BulkUpload() {
   };
 
   const startBulkIssuance = async () => {
-    console.log('startBulkIssuance called');
+    logger.info('startBulkIssuance called');
     const validEntries = entries.filter(e => e.validationErrors.length === 0 && e.documentHash);
     
     if (validEntries.length === 0) {
@@ -112,16 +116,10 @@ export function BulkUpload() {
       return;
     }
 
-    if (!writeContractAsync) {
-      alert('Wallet connection error. Please reconnect your wallet.');
-      console.error('writeContractAsync is undefined');
-      return;
-    }
-
     // CRITICAL: Real-time authorization check before bulk issuance
     if (!canIssue) {
       alert(reason || 'Your institution cannot issue certificates. Please contact an administrator.');
-      console.error('Bulk issuance blocked:', reason);
+      logger.error('Bulk issuance blocked:', reason);
       return;
     }
 
@@ -136,109 +134,124 @@ export function BulkUpload() {
       return;
     }
 
-    console.log(`Starting bulk issuance of ${validEntries.length} certificates`);
-    console.log(`Institution verified: ${institutionData.isVerified}, active: ${institutionData.isActive}`);
+    logger.info(`Starting bulk issuance of ${validEntries.length} certificates`);
+    logger.info(`Institution verified: ${institutionData.isVerified}, active: ${institutionData.isActive}`);
 
     setCurrentStep('processing');
-    setCompletedCerts(0);
     setFailedCerts([]);
     setErrorMessages([]);
 
     try {
-      for (let i = 0; i < validEntries.length; i++) {
-        setProcessingIndex(i);
-        const entry = validEntries[i];
-        
-        try {
-          console.log(`Issuing certificate ${i + 1}/${validEntries.length} for ${entry.studentWallet}`);
-          console.log(`Document hash: ${entry.documentHash}`);
-          
-          // Check if this hash already exists on-chain
-          const existingCertId = await readContract(config, {
-            address: CERTIFICATE_REGISTRY_ADDRESS,
-            abi: CertificateRegistryABI.abi,
-            functionName: 'hashToCertificateId',
-            args: [entry.documentHash as `0x${string}`],
-          });
+      // Check for duplicate hashes before submitting
+      const duplicateChecks = await Promise.all(
+        validEntries.map(async (entry, index) => {
+          try {
+            const existingCertId = await readContract(config, {
+              address: CERTIFICATE_REGISTRY_ADDRESS,
+              abi: CertificateRegistryABI.abi,
+              functionName: 'hashToCertificateId',
+              args: [entry.documentHash as `0x${string}`],
+            });
 
-          console.log('Existing certificate ID:', existingCertId);
-
-          if (existingCertId && existingCertId.toString() !== '0') {
-            const errorMsg = `Certificate hash already exists (Certificate ID: ${existingCertId}). This PDF was already issued to a student. Please use a unique PDF for each certificate.`;
-            console.error('⚠️ DUPLICATE:', errorMsg);
-            setFailedCerts(prev => [...prev, i]);
-            setErrorMessages(prev => [...prev, `Row ${i + 1}: ${errorMsg}`]);
-            continue; // Skip this certificate
-          }
-          
-          // Call the contract and wait for the transaction
-          const hash = await writeContractAsync({
-            address: CERTIFICATE_REGISTRY_ADDRESS,
-            abi: CertificateRegistryABI.abi,
-            functionName: 'issueCertificate',
-            args: [
-              entry.documentHash as `0x${string}`,
-              entry.studentWallet as `0x${string}`,
-              '', // metadataURI
-            ],
-          });
-
-          console.log(`Transaction submitted: ${hash}`);
-          
-          // Wait for confirmation (using a simple delay for demo purposes)
-          // In production, you'd use useWaitForTransactionReceipt properly
-          await new Promise(resolve => setTimeout(resolve, 2000));
-          
-          setCompletedCerts(prev => prev + 1);
-          console.log(`Certificate ${i + 1} issued successfully`);
-        } catch (error) {
-          console.error(`Failed to issue certificate for ${entry.studentWallet}:`, error);
-          
-          // Parse the error to provide user-friendly messages
-          let errorMsg = 'Unknown error occurred';
-          if (error instanceof Error) {
-            const errStr = error.message.toLowerCase();
-            
-            if (errStr.includes('unauthorizedissuer') || errStr.includes('unauthorized')) {
-              errorMsg = 'Your institution is not authorized to issue certificates. Please ensure your institution is verified and active.';
-            } else if (errStr.includes('certificatealreadyexists') || errStr.includes('already exists')) {
-              errorMsg = 'This certificate PDF hash already exists in the system. Please use a unique PDF for each certificate.';
-            } else if (errStr.includes('invalidstudentaddress')) {
-              errorMsg = 'Invalid student wallet address provided.';
-            } else if (errStr.includes('invaliddocumenthash')) {
-              errorMsg = 'Invalid document hash generated from PDF.';
-            } else if (errStr.includes('user rejected') || errStr.includes('user denied')) {
-              errorMsg = 'Transaction was rejected by user.';
-            } else {
-              // Use the original error message if we can't categorize it
-              errorMsg = error.message;
+            if (existingCertId && existingCertId.toString() !== '0') {
+              return {
+                index,
+                isDuplicate: true,
+                message: `Certificate hash already exists (Certificate ID: ${existingCertId}). This PDF was already issued to a student.`
+              };
             }
+            return { index, isDuplicate: false };
+          } catch (error) {
+            logger.error(`Error checking duplicate for entry ${index}`, error);
+            return {
+              index,
+              isDuplicate: true,
+              message: `Error checking certificate: ${error instanceof Error ? error.message : 'Unknown error'}`
+            };
           }
-          
-          setFailedCerts(prev => [...prev, i]);
-          setErrorMessages(prev => [...prev, `Row ${i + 1}: ${errorMsg}`]);
-        }
+        })
+      );
+
+      // Filter out duplicates
+      const duplicates = duplicateChecks.filter(check => check.isDuplicate);
+      const validIndexes = duplicateChecks
+        .filter(check => !check.isDuplicate)
+        .map(check => check.index);
+
+      // Log duplicates as failures
+      if (duplicates.length > 0) {
+        setFailedCerts(duplicates.map(d => d.index));
+        setErrorMessages(duplicates.map(d => `Row ${d.index + 1}: ${d.message}`));
       }
 
-      // Refresh institution data after all certificates are issued
+      // If all entries are duplicates, stop here
+      if (validIndexes.length === 0) {
+        logger.warn('All entries are duplicates, no certificates to issue');
+        return;
+      }
+
+      // Prepare batch data for valid entries only
+      const batchData = validIndexes.map(index => {
+        const entry = validEntries[index];
+        return {
+          documentHash: entry.documentHash as `0x${string}`,
+          studentWallet: entry.studentWallet as `0x${string}`,
+          metadataURI: ''
+        };
+      });
+
+      logger.info(`Issuing ${batchData.length} certificates in a single transaction`);
+      
+      // Call the batch issuance function - this will trigger a SINGLE MetaMask confirmation
+      await issueCertificatesBatch(batchData);
+      
+    } catch (error) {
+      logger.error('Bulk issuance process error:', error);
+      
+      let errorMsg = 'Unknown error occurred during batch issuance';
+      if (error instanceof Error) {
+        const errStr = error.message.toLowerCase();
+        
+        if (errStr.includes('unauthorizedissuer') || errStr.includes('unauthorized')) {
+          errorMsg = 'Your institution is not authorized to issue certificates. Please ensure your institution is verified and active.';
+        } else if (errStr.includes('user rejected') || errStr.includes('user denied')) {
+          errorMsg = 'Transaction was rejected by user.';
+        } else {
+          errorMsg = error.message;
+        }
+      }
+      
+      alert(`Error during bulk issuance: ${errorMsg}`);
+      setCurrentStep('preview'); // Go back to preview on error
+    }
+  };
+
+  // Handle success - refresh institution data
+  useEffect(() => {
+    if (isSuccess && certificateIds.length > 0) {
+      logger.info(`Successfully issued ${certificateIds.length} certificates`, { certificateIds });
       if (refetchInstitution) {
         setTimeout(() => refetchInstitution(), 1000);
       }
-    } catch (error) {
-      console.error('Bulk issuance process error:', error);
-      alert(`Error during bulk issuance: ${error instanceof Error ? error.message : String(error)}`);
     }
-  };
+  }, [isSuccess, certificateIds, refetchInstitution]);
+
+  // Handle batch error
+  useEffect(() => {
+    if (batchError && currentStep === 'processing') {
+      logger.error('Batch issuance error:', batchError);
+      setErrorMessages(prev => [...prev, `Batch transaction error: ${batchError}`]);
+    }
+  }, [batchError, currentStep]);
 
   const resetForm = () => {
     setCSVFile(null);
     setPdfFiles([]);
     setEntries([]);
     setCurrentStep('upload');
-    setProcessingIndex(0);
-    setCompletedCerts(0);
     setFailedCerts([]);
     setErrorMessages([]);
+    resetBatch();
   };
 
   if (!isConnected) {
@@ -615,22 +628,45 @@ export function BulkUpload() {
           <div className="card text-center">
             <h2 className="text-xl font-semibold text-white mb-4">Processing Certificates</h2>
             
-            {completedCerts + failedCerts.length < entries.filter(e => e.validationErrors.length === 0).length ? (
+            {!isSuccess && !batchError ? (
               <>
                 <svg className="w-16 h-16 mx-auto mb-4 text-primary-400 animate-spin" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                 </svg>
-                <p className="text-surface-400 mb-6">
-                  Issuing certificate {processingIndex + 1} of {entries.filter(e => e.validationErrors.length === 0).length}...
-                </p>
+                {isPending && (
+                  <p className="text-surface-400 mb-6">
+                    Waiting for wallet confirmation...
+                  </p>
+                )}
+                {isConfirming && (
+                  <p className="text-surface-400 mb-6">
+                    Transaction submitted! Confirming on blockchain...
+                    <br />
+                    <span className="text-sm text-surface-500 mt-2 block">
+                      Issuing {entries.filter(e => e.validationErrors.length === 0 && !failedCerts.includes(entries.indexOf(e))).length} certificates in a single transaction
+                    </span>
+                  </p>
+                )}
               </>
-            ) : (
+            ) : isSuccess ? (
               <>
                 <svg className="w-16 h-16 mx-auto mb-4 text-accent-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
-                <p className="text-accent-400 font-semibold mb-6">Processing Complete!</p>
+                <p className="text-accent-400 font-semibold mb-6">
+                  Batch Processing Complete!
+                </p>
+                <p className="text-surface-400 text-sm mb-4">
+                  Successfully issued {certificateIds.length} certificates in a single transaction
+                </p>
+              </>
+            ) : (
+              <>
+                <svg className="w-16 h-16 mx-auto mb-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                <p className="text-red-400 font-semibold mb-6">Transaction Failed</p>
               </>
             )}
 
@@ -643,8 +679,12 @@ export function BulkUpload() {
                 </div>
               </div>
               <div className="bg-accent-500/10 rounded-lg p-4">
-                <div className="text-sm text-surface-400">Completed</div>
-                <div className="text-2xl font-bold text-accent-400">{completedCerts}</div>
+                <div className="text-sm text-surface-400">
+                  {isSuccess ? 'Completed' : 'To Issue'}
+                </div>
+                <div className="text-2xl font-bold text-accent-400">
+                  {isSuccess ? certificateIds.length : entries.filter(e => e.validationErrors.length === 0 && !failedCerts.includes(entries.indexOf(e))).length}
+                </div>
               </div>
               <div className="bg-red-500/10 rounded-lg p-4">
                 <div className="text-sm text-surface-400">Failed</div>
@@ -653,20 +693,24 @@ export function BulkUpload() {
             </div>
 
             {/* Progress Bar */}
-            <div className="w-full bg-surface-700 rounded-full h-3 overflow-hidden mb-6">
-              <div
-                className="h-full bg-gradient-to-r from-primary-500 to-accent-500 transition-all duration-300"
-                style={{
-                  width: `${((completedCerts + failedCerts.length) / entries.filter(e => e.validationErrors.length === 0).length) * 100}%`,
-                }}
-              />
-            </div>
+            {!isSuccess && !batchError && (
+              <div className="w-full bg-surface-700 rounded-full h-3 overflow-hidden mb-6">
+                <div
+                  className={`h-full bg-gradient-to-r from-primary-500 to-accent-500 transition-all duration-300 ${
+                    isConfirming ? 'animate-pulse' : ''
+                  }`}
+                  style={{
+                    width: isPending ? '50%' : isConfirming ? '75%' : '0%',
+                  }}
+                />
+              </div>
+            )}
 
-            {/* Error Messages */}
+            {/* Duplicate/Failed Messages */}
             {failedCerts.length > 0 && errorMessages.length > 0 && (
-              <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 mb-6 text-left">
-                <h3 className="text-red-400 font-semibold mb-2">Errors:</h3>
-                <div className="space-y-1 text-sm text-red-300 max-h-40 overflow-y-auto">
+              <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4 mb-6 text-left">
+                <h3 className="text-yellow-400 font-semibold mb-2">Skipped Entries (Pre-check):</h3>
+                <div className="space-y-1 text-sm text-yellow-300 max-h-40 overflow-y-auto">
                   {errorMessages.map((msg, i) => (
                     <div key={i}>{msg}</div>
                   ))}
@@ -674,14 +718,43 @@ export function BulkUpload() {
               </div>
             )}
 
-            {completedCerts + failedCerts.length >= entries.filter(e => e.validationErrors.length === 0).length && (
+            {/* Batch Error Message */}
+            {batchError && (
+              <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 mb-6 text-left">
+                <h3 className="text-red-400 font-semibold mb-2">Transaction Error:</h3>
+                <div className="text-sm text-red-300">{batchError}</div>
+              </div>
+            )}
+
+            {/* Success: Show issued certificate IDs */}
+            {isSuccess && certificateIds.length > 0 && (
+              <div className="bg-accent-500/10 border border-accent-500/30 rounded-lg p-4 mb-6 text-left">
+                <h3 className="text-accent-400 font-semibold mb-2">Issued Certificate IDs:</h3>
+                <div className="text-sm text-surface-300 max-h-40 overflow-y-auto space-y-1">
+                  {certificateIds.map((certId, i) => (
+                    <div key={i} className="font-mono">
+                      Certificate #{certId.toString()}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {(isSuccess || batchError) && (
               <div className="flex gap-4">
                 <button onClick={resetForm} className="btn-secondary flex-1">
                   Upload More
                 </button>
-                <Link to="/university/certificates" className="btn-primary flex-1">
-                  View Certificate Registry
-                </Link>
+                {isSuccess && (
+                  <Link to="/university/certificates" className="btn-primary flex-1">
+                    View Certificate Registry
+                  </Link>
+                )}
+                {batchError && (
+                  <button onClick={() => setCurrentStep('preview')} className="btn-primary flex-1">
+                    Back to Preview
+                  </button>
+                )}
               </div>
             )}
           </div>

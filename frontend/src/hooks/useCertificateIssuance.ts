@@ -63,6 +63,17 @@ export function useCertificateIssuance(): UseCertificateIssuanceReturn {
     error: confirmError
   } = useWaitForTransactionReceipt({
     hash,
+    // Add explicit configuration for better localhost performance
+    query: {
+      // Poll more frequently on localhost for instant feedback
+      refetchInterval: (data) => {
+        // If we have the receipt, stop polling
+        if (data) return false;
+        // On localhost (chainId 1337), poll every 100ms
+        // On testnets/mainnet, poll every 1000ms
+        return 100;
+      },
+    },
   });
 
   /**
@@ -202,18 +213,40 @@ export function useCertificateIssuanceWithCallback(
   const hook = useCertificateIssuance();
   const successCalledRef = useRef(false);
   const errorCalledRef = useRef(false);
+  const lastTransactionHashRef = useRef<`0x${string}` | undefined>();
 
-  // Reset refs when transaction resets
+  // Reset refs when transaction hash changes (indicates new transaction)
   useEffect(() => {
-    if (!hook.isPending && !hook.isConfirming && !hook.isSuccess && !hook.error) {
+    // If we have a new transaction hash, reset the success flag
+    if (hook.transactionHash && hook.transactionHash !== lastTransactionHashRef.current) {
+      lastTransactionHashRef.current = hook.transactionHash;
       successCalledRef.current = false;
       errorCalledRef.current = false;
     }
-  }, [hook.isPending, hook.isConfirming, hook.isSuccess, hook.error]);
+    
+    // If everything is reset (no pending, no hash, etc.), reset refs
+    if (!hook.isPending && !hook.isConfirming && !hook.isSuccess && !hook.error && !hook.transactionHash) {
+      successCalledRef.current = false;
+      errorCalledRef.current = false;
+      lastTransactionHashRef.current = undefined;
+    }
+  }, [hook.isPending, hook.isConfirming, hook.isSuccess, hook.error, hook.transactionHash]);
 
-  // Handle success callback - only call once per transaction
+  // Handle success callback - only call once per unique transaction
   useEffect(() => {
-    if (hook.isSuccess && hook.transactionHash && onSuccess && !successCalledRef.current) {
+    // Only trigger success if:
+    // 1. Transaction is successful
+    // 2. We have a transaction hash
+    // 3. Callback is provided
+    // 4. We haven't called it for this transaction yet
+    // 5. The hash matches the last recorded transaction (ensures it's the current one)
+    if (
+      hook.isSuccess && 
+      hook.transactionHash && 
+      onSuccess && 
+      !successCalledRef.current &&
+      hook.transactionHash === lastTransactionHashRef.current
+    ) {
       successCalledRef.current = true;
       onSuccess(hook.transactionHash, hook.certificateId);
     }
@@ -299,3 +332,4 @@ export function useCertificateIssuanceWithDuplicateCheck(
     duplicateCheckError: normalizedDuplicateError,
   };
 }
+

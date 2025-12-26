@@ -45,9 +45,14 @@ export const config = getDefaultConfig({
       timeout: 30_000,
     }),
     [localhost.id]: http('http://127.0.0.1:8545', {
-      retryCount: 2,
-      retryDelay: 500,
+      // Localhost-specific configuration for instant mining
+      retryCount: 3,
+      retryDelay: 100,
       timeout: 10_000,
+      // Enable polling for localhost
+      batch: {
+        wait: 0, // No batching delay for instant feedback
+      },
     }),
   },
   ssr: false,

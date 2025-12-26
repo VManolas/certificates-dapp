@@ -8,6 +8,7 @@ import { useCertificateRevocation } from '@/hooks/useCertificateRevocation';
 import { truncateHash } from '@/lib/pdfHash';
 import { CERTIFICATE_REGISTRY_ADDRESS } from '@/lib/wagmi';
 import CertificateRegistryABI from '@/contracts/abis/CertificateRegistry.json';
+import { logger } from '@/lib/logger';
 
 export function UniversityCertificates() {
   const navigate = useNavigate();
@@ -16,6 +17,7 @@ export function UniversityCertificates() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'revoked'>('all');
   const [yearFilter, setYearFilter] = useState<string>('all');
+  const [isRefreshing, setIsRefreshing] = useState(false);
   
   // Real-time institution status check
   const { canIssue, isLoading: isCheckingStatus, reason, refetch: refetchStatus } = useCanIssueCertificates();
@@ -44,8 +46,20 @@ export function UniversityCertificates() {
   const isLoading = isLoadingIds || isLoadingCerts;
 
   const handleRefresh = async () => {
-    await refetchIds();
-    await refetchCerts();
+    setIsRefreshing(true);
+    logger.info('Refreshing certificates for university certificates page');
+    try {
+      await refetchIds();
+      await refetchCerts();
+      if (refetchInstitution) {
+        await refetchInstitution();
+      }
+      logger.info('Successfully refreshed certificates');
+    } catch (error) {
+      logger.error('Failed to refresh certificates', error);
+    } finally {
+      setIsRefreshing(false);
+    }
   };
 
   // Map certificates with their IDs
@@ -180,13 +194,13 @@ export function UniversityCertificates() {
           </div>
           <button
             onClick={handleRefresh}
-            disabled={isLoading}
+            disabled={isLoading || isRefreshing}
             className="btn-secondary flex items-center gap-2"
           >
-            <svg className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className={`w-5 h-5 ${isLoading || isRefreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
-            {isLoading ? 'Loading...' : 'Refresh'}
+            {isLoading || isRefreshing ? 'Loading...' : 'Refresh'}
           </button>
         </div>
       </div>

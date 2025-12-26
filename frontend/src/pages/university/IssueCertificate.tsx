@@ -51,6 +51,7 @@ export function IssueCertificate() {
     isSuccess,
     error: txError,
     certificateId,
+    transactionHash,
     reset 
   } = useCertificateIssuanceWithCallback(
     (hash, certId) => {
@@ -95,12 +96,23 @@ export function IssueCertificate() {
 
   // Monitor transaction state and auto-transition to success if needed
   useEffect(() => {
+    if (import.meta.env.DEV) {
+      console.log('📊 [IssueCertificate] Transaction State:', {
+        formState,
+        isSuccess,
+        isPending,
+        isConfirming,
+        hasHash: !!transactionHash,
+        hasCertId: certificateId !== undefined,
+      });
+    }
+    
     if (isSuccess && formState === 'submitting') {
       logger.info('Transaction succeeded, updating UI state');
       setFormState('success');
       setError(null);
     }
-  }, [isSuccess, formState]);
+  }, [isSuccess, formState, isPending, isConfirming, transactionHash, certificateId]);
 
   // If transaction is no longer pending/confirming but we're stuck in submitting state without success or error, revert to confirm
   useEffect(() => {
@@ -176,6 +188,12 @@ export function IssueCertificate() {
   const handleSubmit = async () => {
     if (!hashResult || !validateWallet(studentWallet)) return;
 
+    // Prevent double submissions
+    if (isPending || isConfirming) {
+      logger.warn('Transaction already in progress, ignoring duplicate submit');
+      return;
+    }
+
     // CRITICAL: Real-time authorization check before submission
     if (!canIssue) {
       setError(reason || 'Your institution cannot issue certificates at this time. Please contact an administrator.');
@@ -198,8 +216,13 @@ export function IssueCertificate() {
       return;
     }
 
-    // Reset any previous transaction state
+    // IMPORTANT: Reset transaction state BEFORE starting new one
+    // This clears any lingering success/error states from previous transactions
     reset();
+    
+    // Wait a tick to ensure reset propagates through React state
+    await new Promise(resolve => setTimeout(resolve, 50));
+    
     setFormState('submitting');
     setError(null);
     setBypassDuplicateCheck(false); // Reset bypass flag
@@ -216,10 +239,8 @@ export function IssueCertificate() {
         bypassedDuplicateCheck: bypassDuplicateCheck,
       });
 
-      // Small delay to ensure reset is processed
-      await new Promise(resolve => setTimeout(resolve, 100));
-
-      issueCertificate({
+      // Issue the certificate
+      await issueCertificate({
         documentHash: hashResult.hash,
         studentWallet: sanitizedWallet,
         metadataURI: '',

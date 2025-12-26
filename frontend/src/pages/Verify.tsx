@@ -1,6 +1,6 @@
 // src/pages/Verify.tsx
 import { useState, useCallback, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { generatePDFHash, formatFileSize, truncateHash, type HashResult } from '@/lib/pdfHash';
 import { useCertificateVerification, useHashExists, useCertificateDetails } from '@/hooks';
@@ -18,6 +18,7 @@ type VerificationState = 'idle' | 'hashing' | 'verifying' | 'complete' | 'verify
 
 export function Verify() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const certIdParam = searchParams.get('cert');
   const { role } = useAuthStore();
   const { addEntry } = useVerificationHistory();
@@ -32,6 +33,8 @@ export function Verify() {
   const [showQRScanner, setShowQRScanner] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [verificationSession, setVerificationSession] = useState(0);
+  const [showLinkInput, setShowLinkInput] = useState(false);
+  const [linkInput, setLinkInput] = useState('');
 
   // Certificate ID verification (from URL parameter)
   const certificateIdFromUrl = certIdParam ? BigInt(certIdParam) : undefined;
@@ -197,6 +200,51 @@ export function Verify() {
   const resetVerification = () => {
     // Force a full page refresh to clear all state and cache
     window.location.href = '/verify';
+  };
+
+  const handleLinkSubmit = () => {
+    const trimmedLink = linkInput.trim();
+    if (!trimmedLink) {
+      setError('Please enter a verification link');
+      return;
+    }
+
+    try {
+      // Extract certificate ID from various link formats
+      let certId: string | null = null;
+
+      // Try to parse as URL
+      try {
+        const url = new URL(trimmedLink);
+        certId = url.searchParams.get('cert');
+      } catch {
+        // Not a valid URL, try to extract just the number
+        const match = trimmedLink.match(/cert[=:](\d+)/i);
+        if (match) {
+          certId = match[1];
+        } else {
+          // Check if it's just a number
+          if (/^\d+$/.test(trimmedLink)) {
+            certId = trimmedLink;
+          }
+        }
+      }
+
+      if (!certId || !/^\d+$/.test(certId)) {
+        setError('Invalid verification link format. Please paste a valid link containing cert=ID or just the certificate ID.');
+        return;
+      }
+
+      logger.info('Navigating to certificate verification', { certId });
+      // Navigate to the verify page with the cert parameter
+      navigate(`/verify?cert=${certId}`);
+      setShowLinkInput(false);
+      setLinkInput('');
+      setError(null);
+    } catch (err) {
+      logger.error('Error parsing verification link', err);
+      setError('Failed to parse verification link. Please check the format.');
+    }
   };
 
   // Render certificate ID verification result
@@ -400,16 +448,103 @@ export function Verify() {
             Upload a PDF certificate to verify its authenticity. The document is processed 
             locally - only the hash is checked against the blockchain.
           </p>
-          <button
-            onClick={() => setShowQRScanner(true)}
-            className="btn-secondary inline-flex items-center gap-2"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
-            </svg>
-            Scan QR Code
-          </button>
+          <div className="flex items-center justify-center gap-3">
+            <button
+              onClick={() => setShowQRScanner(true)}
+              className="btn-secondary inline-flex items-center gap-2"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+              </svg>
+              Scan QR Code
+            </button>
+            <button
+              onClick={() => setShowLinkInput(true)}
+              className="btn-secondary inline-flex items-center gap-2"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+              </svg>
+              Paste Verification Link
+            </button>
+          </div>
         </div>
+
+        {/* Link Input Modal */}
+        {showLinkInput && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <div className="bg-surface-900 rounded-2xl shadow-2xl max-w-lg w-full border border-surface-700">
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-2xl font-bold text-white">Paste Verification Link</h2>
+                  <button
+                    onClick={() => {
+                      setShowLinkInput(false);
+                      setLinkInput('');
+                      setError(null);
+                    }}
+                    className="text-surface-400 hover:text-white transition-colors"
+                  >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+                
+                <div className="space-y-4">
+                  <div>
+                    <label htmlFor="link-input" className="block text-sm font-medium text-surface-300 mb-2">
+                      Verification Link or Certificate ID
+                    </label>
+                    <input
+                      id="link-input"
+                      type="text"
+                      value={linkInput}
+                      onChange={(e) => setLinkInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          handleLinkSubmit();
+                        }
+                      }}
+                      placeholder="https://example.com/verify?cert=123 or just 123"
+                      className="input w-full"
+                      autoFocus
+                    />
+                    <p className="text-xs text-surface-500 mt-2">
+                      Paste the full verification link or just the certificate ID number
+                    </p>
+                  </div>
+
+                  {error && (
+                    <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3">
+                      <p className="text-sm text-red-400">{error}</p>
+                    </div>
+                  )}
+
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => {
+                        setShowLinkInput(false);
+                        setLinkInput('');
+                        setError(null);
+                      }}
+                      className="btn-secondary flex-1"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleLinkSubmit}
+                      disabled={!linkInput.trim()}
+                      className="btn-primary flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Verify
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Upload Area */}
         <div className="max-w-2xl mx-auto">

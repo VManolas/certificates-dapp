@@ -438,3 +438,4 @@ describe("CertificateRegistry - Enhanced Error Cases", function () {
   });
 });
 
+
