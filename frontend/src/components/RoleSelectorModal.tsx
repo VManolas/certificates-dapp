@@ -7,7 +7,7 @@ import { useAuthStore, UserRole } from '@/store/authStore';
 const ALL_ROLES: NonNullable<UserRole>[] = ['admin', 'university', 'student', 'employer'];
 
 // Roles that support aspirational selection
-const ASPIRATIONAL_ROLES: Set<NonNullable<UserRole>> = new Set(['university', 'student']);
+const ASPIRATIONAL_ROLES: Set<NonNullable<UserRole>> = new Set(['university', 'student', 'employer']);
 
 interface RoleSelectorModalProps {
   isOpen: boolean;
@@ -79,16 +79,24 @@ export const RoleSelectorModal = memo(function RoleSelectorModal({
   const availableRolesSet = new Set(availableRoles.filter(Boolean));
 
   const handleSelectRole = (role: NonNullable<UserRole>, isAspirational: boolean = false) => {
+    console.log('🎯 handleSelectRole called', { role, isAspirational, canRegisterAsEmployer });
+    
     // For non-aspirational, must be in available roles
     if (!isAspirational && !availableRolesSet.has(role)) return;
     // For aspirational, must be in ASPIRATIONAL_ROLES
-    if (isAspirational && !ASPIRATIONAL_ROLES.has(role)) return;
+    if (isAspirational && !ASPIRATIONAL_ROLES.has(role) && role !== 'employer') return;
     
     // Special handling for employer aspirational mode
-    if (isAspirational && role === 'employer' && canRegisterAsEmployer) {
-      navigate('/employer/register');
-      onClose();
-      return;
+    if (isAspirational && role === 'employer') {
+      console.log('🚀 Navigating to /employer/register', { canRegisterAsEmployer });
+      if (canRegisterAsEmployer) {
+        navigate('/employer/register');
+        onClose();
+        return;
+      } else {
+        console.warn('❌ Cannot register as employer - canRegisterAsEmployer is false');
+        return;
+      }
     }
     
     setRole(role, isAspirational);
@@ -126,6 +134,17 @@ export const RoleSelectorModal = memo(function RoleSelectorModal({
             const isAvailable = availableRolesSet.has(role);
             const canAspire = (ASPIRATIONAL_ROLES.has(role) && !isAvailable) || 
                               (role === 'employer' && canRegisterAsEmployer && !isAvailable);
+            
+            // Debug logging for employer role
+            if (role === 'employer') {
+              console.log('👔 Employer role debug:', { 
+                isAvailable, 
+                canRegisterAsEmployer, 
+                canAspire,
+                showAspirational,
+                willShowButton: canAspire && showAspirational && info.aspirationalAction
+              });
+            }
             
             // Add extra context for certain roles
             let extraInfo = '';

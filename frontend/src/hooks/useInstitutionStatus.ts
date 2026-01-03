@@ -65,14 +65,15 @@ export function useInstitutionStatus(
     args: targetAddress ? [targetAddress] : undefined,
     query: {
       enabled: !!targetAddress && !!INSTITUTION_REGISTRY_ADDRESS && enabled,
-      // Refetch on window focus to catch status changes
-      refetchOnWindowFocus: true,
-      // Always refetch on mount
-      refetchOnMount: 'always',
-      // Consider data stale immediately to ensure fresh checks
-      staleTime: 0,
-      // Auto-refetch interval (default 10 seconds if not specified)
-      refetchInterval: refetchInterval !== undefined ? refetchInterval : 10000,
+      // Refetch on window focus to catch status changes (but not too aggressively)
+      refetchOnWindowFocus: false,
+      // Don't always refetch on mount - use cached data if available
+      refetchOnMount: false,
+      // Cache institution data for 5 minutes (suspension is rare, no need for constant checks)
+      staleTime: 1000 * 60 * 5, // 5 minutes
+      // Longer refetch interval (default 60 seconds if not specified)
+      // Suspension is a rare admin action, doesn't need real-time polling
+      refetchInterval: refetchInterval !== undefined ? refetchInterval : 60000,
     },
   });
 

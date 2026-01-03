@@ -29,7 +29,7 @@ interface ZKAuthUpgradeProps {
 export function ZKAuthUpgrade({ variant = 'card', onUpgradeComplete }: ZKAuthUpgradeProps) {
   const { address, isConnected } = useAccount();
   const { role, zkAuth } = useAuthStore();
-  const { register, login, isLoading, hasCredentials, error } = useZKAuth();
+  const { register, login, isLoading, error } = useZKAuth();
   const [isUpgrading, setIsUpgrading] = useState(false);
   const [upgradeStep, setUpgradeStep] = useState<'idle' | 'registering' | 'authenticating' | 'complete'>('idle');
 
@@ -43,8 +43,8 @@ export function ZKAuthUpgrade({ variant = 'card', onUpgradeComplete }: ZKAuthUpg
     setUpgradeStep('registering');
 
     try {
-      // Use the actual role - admin is now supported in ZK auth
-      if (role === 'admin' || role === 'student' || role === 'university' || role === 'employer') {
+      // Filter valid roles for ZK auth (admin cannot use ZK auth)
+      if (role === 'student' || role === 'university' || role === 'employer') {
         logger.info('Starting ZK auth registration', { role });
         
         // Step 1: Register with ZK auth
@@ -72,6 +72,8 @@ export function ZKAuthUpgrade({ variant = 'card', onUpgradeComplete }: ZKAuthUpg
           setIsUpgrading(false);
           setUpgradeStep('idle');
         }, 2000);
+      } else {
+        throw new Error('Admin role cannot use ZK authentication');
       }
     } catch (error: any) {
       logger.error('ZK auth upgrade failed', error);
@@ -80,8 +82,8 @@ export function ZKAuthUpgrade({ variant = 'card', onUpgradeComplete }: ZKAuthUpg
     }
   };
 
-  // Don't show if no role or already upgraded
-  if (!role || zkAuth.isZKAuthEnabled) {
+  // Don't show if no role, already upgraded, or admin/university (Web3-only roles)
+  if (!role || zkAuth.isZKAuthEnabled || role === 'admin' || role === 'university') {
     return null;
   }
 

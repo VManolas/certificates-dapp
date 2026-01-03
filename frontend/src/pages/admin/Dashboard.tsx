@@ -79,20 +79,19 @@ export function AdminDashboard() {
   const statsData = stats as InstitutionStats | readonly [bigint, bigint, bigint, bigint] | undefined;
   
   let totalRegistered = 0n;
-  let totalVerified = 0n;
   let totalActive = 0n;
   let totalSuspended = 0n;
 
   if (statsData) {
     if (Array.isArray(statsData)) {
       // Handle array format
-      [totalRegistered, totalVerified, totalActive, totalSuspended] = statsData;
+      [totalRegistered, , totalActive, totalSuspended] = statsData;
     } else {
-      // Handle object format
-      totalRegistered = statsData.totalRegistered || 0n;
-      totalVerified = statsData.totalVerified || 0n;
-      totalActive = statsData.totalActive || 0n;
-      totalSuspended = statsData.totalSuspended || 0n;
+      // Handle object format - with proper type narrowing
+      const statsObj = statsData as InstitutionStats;
+      totalRegistered = statsObj.totalRegistered || 0n;
+      totalActive = statsObj.totalActive || 0n;
+      totalSuspended = statsObj.totalSuspended || 0n;
     }
   }
 

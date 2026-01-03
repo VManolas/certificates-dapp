@@ -26,7 +26,7 @@ import { logger } from '@/lib/logger';
 type UserRole = 'student' | 'university' | 'employer';
 
 export function ZKAuthButton() {
-  const { address, isConnected } = useAccount();
+  const { isConnected } = useAccount();
   const { 
     register, 
     login, 

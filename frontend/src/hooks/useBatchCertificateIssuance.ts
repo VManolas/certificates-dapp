@@ -69,6 +69,10 @@ export function useBatchCertificateIssuance(): UseBatchCertificateIssuanceReturn
       throw new Error('Cannot issue empty batch of certificates');
     }
 
+    if (!CERTIFICATE_REGISTRY_ADDRESS) {
+      throw new Error('Certificate Registry address not configured');
+    }
+
     logger.info('useBatchCertificateIssuance: Issuing batch', {
       count: certificates.length,
     });
@@ -78,7 +82,7 @@ export function useBatchCertificateIssuance(): UseBatchCertificateIssuanceReturn
     const metadataURIs = certificates.map(c => c.metadataURI || '');
 
     writeContract({
-      address: CERTIFICATE_REGISTRY_ADDRESS,
+      address: CERTIFICATE_REGISTRY_ADDRESS as `0x${string}`,
       abi: CertificateRegistryABI.abi,
       functionName: 'issueCertificatesBatch',
       args: [documentHashes, studentWallets, metadataURIs],
@@ -99,7 +103,7 @@ export function useBatchCertificateIssuance(): UseBatchCertificateIssuanceReturn
       receipt.logs.forEach((log) => {
         try {
           // The first indexed parameter is certificateId
-          if (log.topics && log.topics.length > 0) {
+          if (log.topics && log.topics.length > 1 && log.topics[1]) {
             const certId = BigInt(log.topics[1]);
             certIds.push(certId);
           }

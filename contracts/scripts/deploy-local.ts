@@ -63,14 +63,26 @@ async function main() {
   console.log(`✅ EmployerRegistry deployed to: ${employerRegistryAddress}\n`);
 
   // ============================================
-  // 5. Deploy MockAuthVerifier (for ZK Auth)
+  // 5. Deploy NoirAuthVerifier (for ZK Auth)
   // ============================================
-  console.log("📝 Deploying MockAuthVerifier...");
-  const MockAuthVerifier = await ethers.getContractFactory("MockAuthVerifier");
-  const mockAuthVerifier = await MockAuthVerifier.deploy();
-  await mockAuthVerifier.waitForDeployment();
-  const mockAuthVerifierAddress = await mockAuthVerifier.getAddress();
-  console.log(`✅ MockAuthVerifier deployed to: ${mockAuthVerifierAddress}\n`);
+  console.log("📝 Deploying NoirAuthVerifier...");
+  const NoirAuthVerifier = await ethers.getContractFactory("NoirAuthVerifier");
+  const noirAuthVerifier = await NoirAuthVerifier.deploy();
+  await noirAuthVerifier.waitForDeployment();
+  const noirAuthVerifierAddress = await noirAuthVerifier.getAddress();
+  console.log(`✅ NoirAuthVerifier deployed to: ${noirAuthVerifierAddress}`);
+  
+  // Verify the verifier deployment
+  const circuitName = await noirAuthVerifier.getCircuitName();
+  const proofFormat = await noirAuthVerifier.getProofFormat();
+  const productionReady = await noirAuthVerifier.isProductionReady();
+  console.log(`   Circuit: ${circuitName}`);
+  console.log(`   Format: ${proofFormat}`);
+  if (!productionReady) {
+    console.log(`   ⚠️  Development verifier (format check only)\n`);
+  } else {
+    console.log(`   ✅ Production-ready verifier\n`);
+  }
 
   // ============================================
   // 6. Deploy ZKAuthRegistry
@@ -79,7 +91,7 @@ async function main() {
   const ZKAuthRegistry = await ethers.getContractFactory("ZKAuthRegistry");
   const zkAuthRegistry = await upgrades.deployProxy(
     ZKAuthRegistry,
-    [deployer.address, mockAuthVerifierAddress], // super admin, verifier address
+    [deployer.address, noirAuthVerifierAddress], // super admin, verifier address
     { initializer: "initialize" }
   );
   await zkAuthRegistry.waitForDeployment();
@@ -96,7 +108,7 @@ async function main() {
   console.log(`   InstitutionRegistry: ${institutionRegistryAddress}`);
   console.log(`   CertificateRegistry: ${certificateRegistryAddress}`);
   console.log(`   EmployerRegistry:    ${employerRegistryAddress}`);
-  console.log(`   MockAuthVerifier:    ${mockAuthVerifierAddress}`);
+  console.log(`   NoirAuthVerifier:    ${noirAuthVerifierAddress}`);
   console.log(`   ZKAuthRegistry:      ${zkAuthRegistryAddress}`);
   console.log(`\n👤 Super Admin: ${deployer.address}`);
   console.log(`\n💾 Save these to frontend/.env.local:\n`);
@@ -105,6 +117,10 @@ async function main() {
   console.log(`VITE_EMPLOYER_REGISTRY_ADDRESS=${employerRegistryAddress}`);
   console.log(`VITE_ZK_AUTH_REGISTRY_ADDRESS=${zkAuthRegistryAddress}`);
   console.log(`VITE_CHAIN_ID=1337`);
+  console.log(`\n⚠️  Note: Using NoirAuthVerifier (Development Version)`);
+  console.log(`   - Validates proof format (length, structure)`);
+  console.log(`   - Does NOT verify cryptographic correctness`);
+  console.log(`   - Replace with Barretenberg-generated verifier for production`);
   console.log(`\n═══════════════════════════════════════════════════════\n`);
 }
 

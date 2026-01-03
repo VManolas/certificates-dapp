@@ -1,6 +1,6 @@
 // src/pages/university/Dashboard.tsx
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useAccount, useReadContract } from 'wagmi';
 import { useAuthStore } from '@/store/authStore';
 import { useCertificatesBatch, useCanIssueCertificates } from '@/hooks';
@@ -10,7 +10,6 @@ import CertificateRegistryABI from '@/contracts/abis/CertificateRegistry.json';
 import { logger } from '@/lib/logger';
 
 export function UniversityDashboard() {
-  const navigate = useNavigate();
   const { isConnected, address } = useAccount();
   const { institutionData, refetchInstitution } = useAuthStore();
   const [showBlockedModal, setShowBlockedModal] = useState(false);
@@ -36,7 +35,9 @@ export function UniversityDashboard() {
     },
   });
 
-  const certificateIds = institutionCerts ? (institutionCerts[0] as bigint[]) : undefined;
+  const certificateIds = institutionCerts && Array.isArray(institutionCerts) && institutionCerts.length > 0
+    ? (institutionCerts[0] as bigint[]) 
+    : undefined;
 
   // Fetch certificate details
   const { certificates: allCertificates, foundFlags, isLoading, refetch: refetchCertDetails } = useCertificatesBatch(

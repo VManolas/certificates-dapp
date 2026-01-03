@@ -143,11 +143,15 @@ export function BulkUpload() {
 
     try {
       // Check for duplicate hashes before submitting
+      if (!CERTIFICATE_REGISTRY_ADDRESS) {
+        throw new Error('Certificate Registry not configured');
+      }
+      
       const duplicateChecks = await Promise.all(
         validEntries.map(async (entry, index) => {
           try {
             const existingCertId = await readContract(config, {
-              address: CERTIFICATE_REGISTRY_ADDRESS,
+              address: CERTIFICATE_REGISTRY_ADDRESS as `0x${string}`,
               abi: CertificateRegistryABI.abi,
               functionName: 'hashToCertificateId',
               args: [entry.documentHash as `0x${string}`],

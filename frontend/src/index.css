@@ -31,6 +31,186 @@
   }
 }
 
+/* Phase 2 Animations */
+@layer utilities {
+  /* Fade in animation */
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Slide in from right */
+  @keyframes slide-in-right {
+    from {
+      opacity: 0;
+      transform: translateX(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  /* Slide in from left */
+  @keyframes slide-in-left {
+    from {
+      opacity: 0;
+      transform: translateX(-20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  /* Scale in animation */
+  @keyframes scale-in {
+    from {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  /* Pulse slow animation */
+  @keyframes pulse-slow {
+    0%, 100% {
+      opacity: 0.3;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.5;
+      transform: scale(1.05);
+    }
+  }
+
+  /* Animation utility classes */
+  .animate-fade-in {
+    animation: fade-in 0.3s ease-out;
+  }
+
+  .animate-slide-in-right {
+    animation: slide-in-right 0.4s ease-out;
+  }
+
+  .animate-slide-in-left {
+    animation: slide-in-left 0.4s ease-out;
+  }
+
+  .animate-scale-in {
+    animation: scale-in 0.3s ease-out;
+  }
+
+  .animate-pulse-slow {
+    animation: pulse-slow 4s ease-in-out infinite;
+  }
+
+  /* Smooth transitions for all interactive elements */
+  .transition-smooth {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+}
+
+
+/* RainbowKit Custom Styles - Disable "Coming Soon" Wallets */
+@layer components {
+  /* Target all wallet buttons except the first one (MetaMask) */
+  /* RainbowKit renders wallets in order: MetaMask first, then "Coming Soon" wallets */
+  button[data-testid="rk-wallet-option"]:nth-of-type(n+2) {
+    opacity: 0.4 !important;
+    cursor: not-allowed !important;
+    pointer-events: none !important;
+    filter: grayscale(80%) !important;
+    position: relative;
+    transition: none !important; /* Disable hover transitions */
+  }
+
+  /* Prevent any hover effects on disabled wallets */
+  button[data-testid="rk-wallet-option"]:nth-of-type(n+2):hover {
+    opacity: 0.4 !important;
+    cursor: not-allowed !important;
+    filter: grayscale(80%) !important;
+    transform: none !important;
+    background-color: inherit !important;
+  }
+
+  /* Add invisible overlay to completely block interactions */
+  button[data-testid="rk-wallet-option"]:nth-of-type(n+2)::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 9999;
+    cursor: not-allowed;
+    pointer-events: auto; /* Block all pointer events */
+  }
+
+  /* Add "Coming Soon" badge to disabled wallets */
+  button[data-testid="rk-wallet-option"]:nth-of-type(n+2)::after {
+    content: "Coming Soon";
+    position: absolute;
+    top: 50%;
+    right: 16px;
+    transform: translateY(-50%);
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    color: white;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    z-index: 10000;
+    pointer-events: none;
+    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+  }
+
+  /* Ensure MetaMask (first wallet) is always fully interactive */
+  button[data-testid="rk-wallet-option"]:first-of-type,
+  button[data-testid="rk-wallet-option"]:nth-of-type(1) {
+    opacity: 1 !important;
+    cursor: pointer !important;
+    pointer-events: auto !important;
+    filter: none !important;
+  }
+
+  /* Remove all pseudo-elements from MetaMask */
+  button[data-testid="rk-wallet-option"]:first-of-type::before,
+  button[data-testid="rk-wallet-option"]:first-of-type::after,
+  button[data-testid="rk-wallet-option"]:nth-of-type(1)::before,
+  button[data-testid="rk-wallet-option"]:nth-of-type(1)::after {
+    display: none !important;
+  }
+
+  /* Alternative selector for different RainbowKit structures */
+  /* Target wallet buttons in dialog that have images (wallet icons) */
+  [role="dialog"] div[role="group"] button:has(img):not(:first-child) {
+    opacity: 0.4 !important;
+    cursor: not-allowed !important;
+    pointer-events: none !important;
+    filter: grayscale(80%) !important;
+  }
+
+  /* Disable hover effects on alternative selector */
+  [role="dialog"] div[role="group"] button:has(img):not(:first-child):hover {
+    opacity: 0.4 !important;
+    cursor: not-allowed !important;
+    filter: grayscale(80%) !important;
+    transform: none !important;
+  }
+}
+
 @layer components {
   /* Primary button */
   .btn-primary {

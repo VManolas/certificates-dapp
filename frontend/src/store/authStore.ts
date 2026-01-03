@@ -20,8 +20,8 @@ export interface InstitutionData {
   emailDomain: string;
   isVerified: boolean;
   isActive: boolean;
-  verificationDate: number;
-  totalCertificatesIssued: number;
+  verificationDate: bigint;
+  totalCertificatesIssued: bigint;
 }
 
 /**
@@ -48,6 +48,8 @@ interface AuthState {
   address: string | null;
   /** User's selected role */
   role: UserRole;
+  /** Pre-selected role before wallet connection */
+  preSelectedRole: UserRole | null;
   /** Whether the role is aspirational (not yet on-chain verified) */
   isAspirationalRole: boolean;
   /** Institution data if user is a university */
@@ -74,6 +76,7 @@ interface AuthState {
   // Actions
   setAddress: (address: string | null) => void;
   setRole: (role: UserRole, isAspirational?: boolean) => void;
+  setPreSelectedRole: (role: UserRole | null) => void;
   setInstitutionData: (data: InstitutionData | null) => void;
   setHasSelectedRole: (selected: boolean) => void;
   setDetectedRoles: (roles: UserRole[]) => void;
@@ -102,6 +105,7 @@ export const useAuthStore = create<AuthState>()(
     (set) => ({
       address: null,
       role: null,
+      preSelectedRole: null,
       isAspirationalRole: false,
       institutionData: null,
       hasSelectedRole: false,
@@ -122,14 +126,20 @@ export const useAuthStore = create<AuthState>()(
 
       setAddress: (address) =>
         set((state) => {
-          // If address changes, reset role and institution data
+          // If address changes (including disconnect), reset ALL auth state
           if (address !== state.address) {
+            console.log('🔄 Address changed in store, resetting auth state', {
+              from: state.address,
+              to: address,
+              previousRole: state.role,
+            });
             return {
               address,
               role: null,
+              preSelectedRole: null, // Clear pre-selected role too
               isAspirationalRole: false,
               institutionData: null,
-              hasSelectedRole: false,
+              hasSelectedRole: false, // Reset this to allow re-detection
               detectedRoles: [],
               isRoleDetectionComplete: false,
               showRoleSelector: false,
@@ -150,6 +160,8 @@ export const useAuthStore = create<AuthState>()(
         }),
 
       setRole: (role, isAspirational = false) => set({ role, isAspirationalRole: isAspirational, hasSelectedRole: true }),
+
+      setPreSelectedRole: (preSelectedRole) => set({ preSelectedRole }),
 
       setInstitutionData: (institutionData) => set({ institutionData }),
 
@@ -189,6 +201,7 @@ export const useAuthStore = create<AuthState>()(
         set({
           address: null,
           role: null,
+          preSelectedRole: null,
           isAspirationalRole: false,
           institutionData: null,
           hasSelectedRole: false,

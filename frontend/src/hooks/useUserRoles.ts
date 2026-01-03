@@ -108,11 +108,14 @@ export function useUserRoles(): DetectedRoles {
     ],
     query: {
       enabled: isConnected && !!address,
-      // Force refetch when address changes
-      refetchOnWindowFocus: true,
-      refetchOnMount: 'always',
-      staleTime: 0, // Always consider data stale
-      gcTime: 0, // Don't cache query results
+      // Refetch on window focus (but not too aggressively)
+      refetchOnWindowFocus: false,
+      // Don't always refetch on mount - use cached data if available
+      refetchOnMount: false,
+      // Cache role data for 5 minutes (roles don't change frequently)
+      staleTime: 1000 * 60 * 5, // 5 minutes
+      // Keep in cache for 30 minutes
+      gcTime: 1000 * 60 * 30,
     },
   });
 

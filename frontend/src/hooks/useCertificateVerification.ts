@@ -49,8 +49,7 @@ export interface UseCertificateVerificationReturn {
  */
 export function useCertificateVerification(
   documentHash: `0x${string}` | undefined,
-  enabled: boolean = true,
-  sessionKey?: number
+  enabled: boolean = true
 ): UseCertificateVerificationReturn {
   const { 
     data, 
@@ -68,9 +67,6 @@ export function useCertificateVerification(
       gcTime: 0,
       refetchOnMount: 'always',
       refetchOnWindowFocus: true,
-      queryKey: sessionKey !== undefined 
-        ? ['isValidCertificate', documentHash, sessionKey] 
-        : ['isValidCertificate', documentHash],
     },
   });
 

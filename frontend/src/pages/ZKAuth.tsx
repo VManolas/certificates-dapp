@@ -12,286 +12,457 @@
  * - Session information display
  * - Credential management (clear/reset)
  * - Educational content about ZK auth
+ * - Progress tracking for user guidance
+ * - Estimated time indicators
+ * 
+ * Phase 1 Enhancements:
+ * - Added ProgressSteps component for visual progress tracking
+ * - Synced dark theme styling with home page
+ * - Added estimated time indicators for each step
+ * - Improved error messages with actionable suggestions
+ * 
+ * Phase 2 Enhancements:
+ * - Integrated UnifiedAuthFlow for complete guided experience
+ * - Added collapsible educational content
+ * - Implemented "What's Happening" technical details
+ * - Enhanced animations and transitions
  */
 
-import { useEffect } from 'react';
-import { useAccount } from 'wagmi';
-import { ConnectButton } from '@rainbow-me/rainbowkit';
-import { useZKAuth } from '@/hooks/useZKAuth';
-import { ZKAuthButton } from '@/components/zkauth/ZKAuthButton';
-import { logger } from '@/lib/logger';
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuthStore, type UserRole } from '@/store/authStore';
+import { useUnifiedAuth } from '@/hooks/useUnifiedAuth';
+import { UnifiedAuthFlow } from '@/components/UnifiedAuthFlow';
+import { DevModeBanner } from '@/components/DevModeBanner';
+
+// Role options for inline display
+interface RoleOption {
+  role: UserRole;
+  icon: string;
+  title: string;
+  description: string;
+  badge?: string;
+  features: string[];
+}
+
+const roleOptions: RoleOption[] = [
+  {
+    role: 'admin',
+    icon: '👔',
+    title: 'Admin',
+    description: 'System administrator with full access',
+    badge: 'Public Auth Only',
+    features: [
+      'Manage universities and employers',
+      'Oversee all certificates',
+      'System configuration',
+      'Must use standard Web3 login',
+    ],
+  },
+  {
+    role: 'university',
+    icon: '🏛️',
+    title: 'University',
+    description: 'Educational institution issuing certificates',
+    badge: 'Public Auth Only',
+    features: [
+      'Issue student certificates',
+      'Bulk certificate operations',
+      'Manage certificate templates',
+      'Must use standard Web3 login',
+    ],
+  },
+  {
+    role: 'student',
+    icon: '🎓',
+    title: 'Student',
+    description: 'Certificate holder with privacy options',
+    badge: 'Privacy Recommended',
+    features: [
+      'View your certificates',
+      'Share certificates privately',
+      'Generate verification links',
+      'Private or standard login available',
+    ],
+  },
+  {
+    role: 'employer',
+    icon: '💼',
+    title: 'Employer',
+    description: 'Organization verifying credentials',
+    badge: 'Flexible Auth',
+    features: [
+      'Verify student certificates',
+      'Access certificate data',
+      'Manage verification requests',
+      'Private or standard login available',
+    ],
+  },
+];
 
 export default function ZKAuthPage() {
-  const { address, isConnected } = useAccount();
-  const {
-    isAuthenticated,
-    role,
-    commitment,
-    sessionId,
-    isLoading,
-    error,
-    hasCredentials,
-    clearCredentials,
-  } = useZKAuth();
+  const navigate = useNavigate();
+  const { role: authenticatedRole } = useAuthStore();
+  const unifiedAuth = useUnifiedAuth();
+  
+  const [showAuthFlow, setShowAuthFlow] = useState(false);
+  const [preSelectedRole, setPreSelectedRole] = useState<UserRole | null>(null);
+  const [showEducationalContent, setShowEducationalContent] = useState(true);
 
-  useEffect(() => {
-    logger.info('ZKAuth page loaded', { 
-      address, 
-      isConnected, 
-      isAuthenticated,
-      hasCredentials 
-    });
-  }, [address, isConnected, isAuthenticated, hasCredentials]);
+  // Handle role selection
+  const handleRoleSelection = (selectedRole: UserRole) => {
+    setPreSelectedRole(selectedRole);
+    setShowAuthFlow(true);
+    setShowEducationalContent(false);
+  };
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 py-12 px-4">
-      <div className="max-w-4xl mx-auto">
-        {/* Header */}
-        <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold text-gray-900 mb-4">
-            🔐 Zero-Knowledge Authentication
-          </h1>
-          <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-            Privacy-preserving authentication powered by zero-knowledge proofs.
-            Authenticate without revealing your wallet address.
-          </p>
+  // Handle successful authentication
+  const handleAuthSuccess = () => {
+    console.log('Authentication successful!');
+    // Navigate to appropriate dashboard based on role
+    const role = unifiedAuth.role;
+    if (role === 'student') {
+      navigate('/student/certificates');
+    } else if (role === 'university') {
+      navigate('/university/dashboard');
+    } else if (role === 'employer') {
+      navigate('/employer/dashboard');
+    } else if (role === 'admin') {
+      navigate('/admin/dashboard');
+    }
+  };
+
+  // Handle cancellation
+  const handleCancel = () => {
+    setShowAuthFlow(false);
+    setPreSelectedRole(null);
+    setShowEducationalContent(true);
+  };
+
+  // If already authenticated, show welcome screen
+  if (unifiedAuth.isAuthenticated && authenticatedRole) {
+    return (
+      <div className="relative overflow-hidden min-h-screen">
+        {/* Background gradient */}
+        <div className="absolute inset-0 bg-gradient-to-br from-primary-950/50 via-surface-950 to-accent-950/30" />
+        
+        {/* Animated background elements */}
+        <div className="absolute inset-0 overflow-hidden">
+          <div className="absolute -top-40 -right-40 w-80 h-80 bg-primary-500/10 rounded-full blur-3xl animate-pulse-slow" />
+          <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-accent-500/10 rounded-full blur-3xl animate-pulse-slow" />
         </div>
 
-        {/* Main Content */}
-        <div className="grid gap-6 lg:grid-cols-2">
-          {/* Left Column: Authentication */}
-          <div className="bg-white rounded-xl shadow-lg p-8">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">
-              Authentication
-            </h2>
-
-            {/* Wallet Connection */}
-            <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Step 1: Connect Wallet
-              </label>
-              <ConnectButton />
-            </div>
-
-            {/* ZK Auth Button */}
-            {isConnected && (
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Step 2: {hasCredentials ? 'Login' : 'Register'}
-                </label>
-                <ZKAuthButton />
+        <div className="relative py-12 px-4">
+          <div className="max-w-3xl mx-auto text-center">
+            <div className="card bg-surface-900 p-12">
+              <div className="w-20 h-20 mx-auto rounded-full bg-green-500/20 flex items-center justify-center mb-6">
+                <svg className="w-10 h-10 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
               </div>
-            )}
-
-            {/* Status Display */}
-            <div className="border-t pt-6">
-              <h3 className="text-sm font-semibold text-gray-700 mb-3">
-                Current Status
-              </h3>
-              <dl className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <dt className="text-gray-500">Wallet Connected:</dt>
-                  <dd className="font-medium">
-                    {isConnected ? '✅ Yes' : '❌ No'}
-                  </dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt className="text-gray-500">Has Credentials:</dt>
-                  <dd className="font-medium">
-                    {hasCredentials ? '✅ Yes' : '❌ No'}
-                  </dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt className="text-gray-500">Authenticated:</dt>
-                  <dd className="font-medium">
-                    {isAuthenticated ? '✅ Yes' : '❌ No'}
-                  </dd>
-                </div>
-                {isAuthenticated && (
-                  <div className="flex justify-between">
-                    <dt className="text-gray-500">Role:</dt>
-                    <dd className="font-medium text-blue-600">
-                      {role}
-                    </dd>
-                  </div>
-                )}
-              </dl>
-            </div>
-
-            {/* Debug Info (Only in Development) */}
-            {isAuthenticated && commitment && (
-              <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-                <h3 className="text-xs font-semibold text-gray-700 mb-2">
-                  Session Details
-                </h3>
-                <dl className="space-y-1 text-xs font-mono">
-                  <div>
-                    <dt className="text-gray-500">Commitment:</dt>
-                    <dd className="text-gray-900 break-all">
-                      {commitment.slice(0, 20)}...{commitment.slice(-20)}
-                    </dd>
-                  </div>
-                  {sessionId && (
-                    <div>
-                      <dt className="text-gray-500">Session ID:</dt>
-                      <dd className="text-gray-900 break-all">
-                        {sessionId.slice(0, 20)}...{sessionId.slice(-20)}
-                      </dd>
-                    </div>
-                  )}
-                </dl>
-              </div>
-            )}
-
-            {/* Danger Zone */}
-            {hasCredentials && (
-              <div className="mt-6 pt-6 border-t border-red-100">
-                <h3 className="text-sm font-semibold text-red-700 mb-2">
-                  ⚠️ Danger Zone
-                </h3>
-                <p className="text-xs text-gray-600 mb-3">
-                  Clear stored credentials. You will need to register again.
-                </p>
+              
+              <h1 className="text-3xl font-bold text-white mb-4">
+                You're Already Authenticated!
+              </h1>
+              
+              <p className="text-surface-300 mb-2">
+                {unifiedAuth.authMethod === 'zk' 
+                  ? '🔐 Using privacy-preserving ZK authentication'
+                  : '🌐 Using standard Web3 authentication'
+                }
+              </p>
+              
+              <p className="text-lg text-surface-400 mb-8">
+                Role: <span className="text-primary-400 font-semibold capitalize">{authenticatedRole}</span>
+              </p>
+              
+              <div className="flex flex-col sm:flex-row gap-4 justify-center">
                 <button
-                  onClick={clearCredentials}
-                  className="w-full px-4 py-2 text-sm font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50"
+                  onClick={() => handleAuthSuccess()}
+                  className="btn-primary"
                 >
-                  🗑️ Clear Credentials
+                  Go to Dashboard
+                </button>
+                
+                <button
+                  onClick={() => {
+                    unifiedAuth.logout();
+                    setShowEducationalContent(true);
+                  }}
+                  className="btn-secondary"
+                >
+                  Logout & Try Again
                 </button>
               </div>
-            )}
-          </div>
-
-          {/* Right Column: Information */}
-          <div className="space-y-6">
-            {/* How It Works */}
-            <div className="bg-white rounded-xl shadow-lg p-8">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">
-                How It Works
-              </h2>
-              <ol className="space-y-4 text-sm text-gray-600">
-                <li className="flex gap-3">
-                  <span className="flex-shrink-0 w-6 h-6 flex items-center justify-center bg-blue-100 text-blue-600 rounded-full font-bold text-xs">
-                    1
-                  </span>
-                  <div>
-                    <strong className="text-gray-900">Generate Keypair</strong>
-                    <p>Your browser generates a random private key (never leaves your device)</p>
-                  </div>
-                </li>
-                <li className="flex gap-3">
-                  <span className="flex-shrink-0 w-6 h-6 flex items-center justify-center bg-blue-100 text-blue-600 rounded-full font-bold text-xs">
-                    2
-                  </span>
-                  <div>
-                    <strong className="text-gray-900">Compute Commitment</strong>
-                    <p>hash(hash(privateKey), walletAddress, salt) = commitment</p>
-                  </div>
-                </li>
-                <li className="flex gap-3">
-                  <span className="flex-shrink-0 w-6 h-6 flex items-center justify-center bg-blue-100 text-blue-600 rounded-full font-bold text-xs">
-                    3
-                  </span>
-                  <div>
-                    <strong className="text-gray-900">Register On-Chain</strong>
-                    <p>Only the commitment is stored (wallet address hidden!)</p>
-                  </div>
-                </li>
-                <li className="flex gap-3">
-                  <span className="flex-shrink-0 w-6 h-6 flex items-center justify-center bg-blue-100 text-blue-600 rounded-full font-bold text-xs">
-                    4
-                  </span>
-                  <div>
-                    <strong className="text-gray-900">Prove Ownership</strong>
-                    <p>Generate ZK proof that you know the private key without revealing it</p>
-                  </div>
-                </li>
-              </ol>
-            </div>
-
-            {/* Privacy Benefits */}
-            <div className="bg-white rounded-xl shadow-lg p-8">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">
-                Privacy Benefits
-              </h2>
-              <ul className="space-y-3 text-sm text-gray-600">
-                <li className="flex items-start gap-2">
-                  <span className="text-green-500 mt-0.5">✓</span>
-                  <span>
-                    <strong className="text-gray-900">Wallet Privacy:</strong>{' '}
-                    Your wallet address is not revealed during registration
-                  </span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-green-500 mt-0.5">✓</span>
-                  <span>
-                    <strong className="text-gray-900">Key Security:</strong>{' '}
-                    Private keys never touch the blockchain
-                  </span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-green-500 mt-0.5">✓</span>
-                  <span>
-                    <strong className="text-gray-900">Zero-Knowledge:</strong>{' '}
-                    Prove identity without revealing secrets
-                  </span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-green-500 mt-0.5">✓</span>
-                  <span>
-                    <strong className="text-gray-900">Local Encryption:</strong>{' '}
-                    Credentials encrypted with your wallet signature
-                  </span>
-                </li>
-              </ul>
-            </div>
-
-            {/* Security Notice */}
-            <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-6">
-              <div className="flex gap-3">
-                <span className="text-2xl">⚠️</span>
-                <div className="text-sm">
-                  <h3 className="font-semibold text-yellow-900 mb-2">
-                    Phase 1 - Testing Only
-                  </h3>
-                  <p className="text-yellow-800">
-                    Currently using a mock verifier that accepts all proofs.
-                    In Phase 2, this will be replaced with a real ZK-SNARK verifier
-                    for production-grade security.
-                  </p>
-                </div>
-              </div>
             </div>
           </div>
         </div>
+      </div>
+    );
+  }
 
-        {/* Error Display */}
-        {error && (
-          <div className="mt-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-            <div className="flex items-start gap-3">
-              <span className="text-xl">❌</span>
-              <div>
-                <h3 className="font-semibold text-red-900 mb-1">Error</h3>
-                <p className="text-sm text-red-700">{error.message}</p>
+  // Main page content - Role selection or Auth flow
+  return (
+    <div className="relative overflow-hidden min-h-screen">
+      {/* Background gradient */}
+      <div className="absolute inset-0 bg-gradient-to-br from-primary-950/50 via-surface-950 to-accent-950/30" />
+      
+      {/* Animated background elements */}
+      <div className="absolute inset-0 overflow-hidden">
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-primary-500/10 rounded-full blur-3xl animate-pulse-slow" />
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-accent-500/10 rounded-full blur-3xl animate-pulse-slow" />
+      </div>
+
+      <div className="relative py-12 px-4">
+        <div className="max-w-6xl mx-auto">
+          {/* Development Mode Banner */}
+          <div className="mb-8">
+            <DevModeBanner variant="card" />
+          </div>
+
+          {/* Header */}
+          <div className="text-center mb-12">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary-500/10 border border-primary-500/20 mb-6">
+              <span className="w-2 h-2 rounded-full bg-accent-500 animate-pulse" />
+              <span className="text-sm text-primary-300">Privacy-Preserving Authentication</span>
+            </div>
+            
+            <h1 className="text-4xl md:text-5xl font-bold mb-4 leading-tight">
+              <span className="gradient-text">Zero-Knowledge</span>
+              <br />
+              <span className="text-white">Authentication</span>
+            </h1>
+            <p className="text-lg text-surface-300 max-w-2xl mx-auto">
+              Privacy-preserving authentication powered by zero-knowledge proofs.
+              One-time setup, then login privately forever.
+            </p>
+          </div>
+
+          {/* Main Content Area */}
+          <div className="flex flex-col lg:flex-row gap-6">
+            {/* Left/Main Column - Auth Flow or Role Selection */}
+            <div className="flex-1 lg:max-w-3xl animate-fade-in">
+              {!showAuthFlow ? (
+                <div className="card bg-surface-900 animate-scale-in">
+                  <h2 className="text-2xl font-bold text-white mb-4">
+                    Get Started
+                  </h2>
+                  <p className="text-surface-300 mb-6">
+                    Select your role to begin the authentication process. You can choose between privacy-preserving ZK authentication or standard Web3 login.
+                  </p>
+                  
+                  {/* Inline Role Selection - Not a modal */}
+                  <div className="space-y-4">
+                    {roleOptions.map((option) => (
+                      <button
+                        key={option.role}
+                        onClick={() => handleRoleSelection(option.role)}
+                        className="group w-full text-left p-6 rounded-xl border-2 transition-all duration-300 hover:scale-[1.01] hover:shadow-xl border-surface-700 bg-surface-800/50 hover:border-primary-500/60"
+                      >
+                        {/* Icon and Badge */}
+                        <div className="flex items-start justify-between mb-4">
+                          <div className="w-12 h-12 rounded-xl bg-primary-500/10 flex items-center justify-center text-2xl group-hover:bg-primary-500/20 transition-colors">
+                            {option.icon}
+                          </div>
+                          {option.badge && (
+                            <span className={`px-2 py-1 text-xs rounded-full border ${
+                              option.role === 'student'
+                                ? 'bg-green-500/20 text-green-400 border-green-500/30'
+                                : option.role === 'employer'
+                                ? 'bg-blue-500/20 text-blue-400 border-blue-500/30'
+                                : 'bg-orange-500/20 text-orange-400 border-orange-500/30'
+                            }`}>
+                              {option.badge}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Title and Description */}
+                        <h3 className="text-lg font-bold text-white mb-2">
+                          {option.title}
+                        </h3>
+                        <p className="text-sm text-surface-400 mb-3">
+                          {option.description}
+                        </p>
+
+                        {/* Features Summary */}
+                        <div className="flex flex-wrap gap-2">
+                          {option.features.slice(0, 2).map((feature, index) => (
+                            <span key={index} className="text-xs text-surface-500 flex items-center gap-1">
+                              <svg className="w-3 h-3 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                              {feature}
+                            </span>
+                          ))}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="card bg-surface-900 animate-slide-in-left">
+                  <UnifiedAuthFlow
+                    preSelectedRole={preSelectedRole}
+                    onComplete={handleAuthSuccess}
+                    onCancel={handleCancel}
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Right Column - Educational Content */}
+            {showEducationalContent && (
+              <div className="w-full lg:w-80 lg:flex-shrink-0 space-y-6 animate-slide-in-right">
+                <EducationalContent />
               </div>
-            </div>
+            )}
           </div>
-        )}
-
-        {/* Loading Overlay */}
-        {isLoading && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-xl p-8 max-w-sm mx-4 text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-              <p className="text-gray-900 font-medium">Processing...</p>
-              <p className="text-sm text-gray-500 mt-2">
-                Please wait while we process your request
-              </p>
-            </div>
-          </div>
-        )}
+        </div>
       </div>
     </div>
   );
 }
 
+// Educational Content Component
+function EducationalContent() {
+  const [expandedSection, setExpandedSection] = useState<string | null>('how-it-works');
+
+  const toggleSection = (section: string) => {
+    setExpandedSection(expandedSection === section ? null : section);
+  };
+
+  return (
+    <>
+      {/* How It Works */}
+      <div className="card bg-surface-900 transition-smooth hover:border-primary-500/20">
+        <button
+          onClick={() => toggleSection('how-it-works')}
+          className="w-full flex items-center justify-between text-left transition-smooth hover:text-primary-400"
+        >
+          <h3 className="text-lg font-bold text-white">How It Works</h3>
+          <svg
+            className={`w-4 h-4 text-surface-400 transition-all duration-300 ${
+              expandedSection === 'how-it-works' ? 'rotate-180 text-primary-400' : ''
+            }`}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+
+        {expandedSection === 'how-it-works' && (
+          <ol className="space-y-3 text-sm text-surface-300 mt-4 animate-fade-in">
+            <li className="flex gap-2 transition-smooth hover:translate-x-1">
+              <span className="flex-shrink-0 w-5 h-5 flex items-center justify-center bg-primary-500/20 text-primary-400 rounded-full font-bold text-xs">
+                1
+              </span>
+              <div className="flex-1">
+                <strong className="text-white text-xs">One-Time Setup</strong>
+                <p className="text-xs leading-relaxed">Connect wallet to register a cryptographic commitment</p>
+              </div>
+            </li>
+            <li className="flex gap-2 transition-smooth hover:translate-x-1">
+              <span className="flex-shrink-0 w-5 h-5 flex items-center justify-center bg-primary-500/20 text-primary-400 rounded-full font-bold text-xs">
+                2
+              </span>
+              <div className="flex-1">
+                <strong className="text-white text-xs">Generate Keys</strong>
+                <p className="text-xs leading-relaxed">Browser generates encryption keys locally</p>
+              </div>
+            </li>
+            <li className="flex gap-2 transition-smooth hover:translate-x-1">
+              <span className="flex-shrink-0 w-5 h-5 flex items-center justify-center bg-primary-500/20 text-primary-400 rounded-full font-bold text-xs">
+                3
+              </span>
+              <div className="flex-1">
+                <strong className="text-white text-xs">Compute Hash</strong>
+                <p className="text-xs leading-relaxed font-mono">commitment = hash(...)</p>
+              </div>
+            </li>
+            <li className="flex gap-2 transition-smooth hover:translate-x-1">
+              <span className="flex-shrink-0 w-5 h-5 flex items-center justify-center bg-primary-500/20 text-primary-400 rounded-full font-bold text-xs">
+                4
+              </span>
+              <div className="flex-1">
+                <strong className="text-white text-xs">Private Login</strong>
+                <p className="text-xs leading-relaxed">Generate ZK proofs without revealing wallet</p>
+              </div>
+            </li>
+          </ol>
+        )}
+      </div>
+
+      {/* Privacy Model */}
+      <div className="card bg-surface-900 transition-smooth hover:border-primary-500/20">
+        <button
+          onClick={() => toggleSection('privacy-model')}
+          className="w-full flex items-center justify-between text-left transition-smooth hover:text-primary-400"
+        >
+          <h3 className="text-lg font-bold text-white">Privacy Model</h3>
+          <svg
+            className={`w-4 h-4 text-surface-400 transition-all duration-300 ${
+              expandedSection === 'privacy-model' ? 'rotate-180 text-primary-400' : ''
+            }`}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+
+        {expandedSection === 'privacy-model' && (
+          <div className="space-y-3 mt-4 animate-fade-in">
+            <div className="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg transition-smooth hover:border-yellow-500/40">
+              <h4 className="font-semibold text-yellow-400 mb-1 flex items-center gap-2 text-sm">
+                <span>⚠️</span>
+                <span>Setup Phase</span>
+              </h4>
+              <p className="text-xs text-yellow-300 leading-relaxed">
+                Wallet visible during registration. Use a dedicated wallet for maximum privacy.
+              </p>
+            </div>
+            
+            <div className="p-3 bg-green-500/10 border border-green-500/20 rounded-lg transition-smooth hover:border-green-500/40">
+              <h4 className="font-semibold text-green-400 mb-1 flex items-center gap-2 text-sm">
+                <span>✅</span>
+                <span>Auth Phase</span>
+              </h4>
+              <p className="text-xs text-green-300 leading-relaxed">
+                Login privately using ZK proofs. No wallet exposure.
+              </p>
+            </div>
+
+            <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg transition-smooth hover:border-blue-500/40">
+              <h4 className="font-semibold text-blue-400 mb-1 flex items-center gap-2 text-sm">
+                <span>🎯</span>
+                <span>Usage Phase</span>
+              </h4>
+              <p className="text-xs text-blue-300 leading-relaxed">
+                You control when to reveal wallet for transactions.
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Security Notice */}
+      <div className="card bg-yellow-500/10 border border-yellow-500/20 transition-smooth hover:border-yellow-500/40">
+        <div className="flex gap-2">
+          <span className="text-lg">⚠️</span>
+          <div className="text-sm flex-1">
+            <h4 className="font-semibold text-yellow-400 mb-1 text-xs">
+              Development Mode
+            </h4>
+            <p className="text-yellow-300 text-xs leading-relaxed">
+              Using development verifier. Full cryptographic verification in Phase 2.
+            </p>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}

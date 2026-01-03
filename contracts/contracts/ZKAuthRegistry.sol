@@ -13,8 +13,8 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 interface IAuthVerifier {
     function verify(
         bytes calldata proof,
-        bytes32 publicInputsHash
-    ) external view returns (bool);
+        bytes32[] calldata publicInputs
+    ) external returns (bool);
 }
 
 /**
@@ -169,8 +169,9 @@ contract ZKAuthRegistry is
         // Verify ZK proof
         // The proof proves: "I know privateKey and walletAddress such that
         // commitment = hash(hash(privateKey), walletAddress, salt)"
-        bytes32 publicInputsHash = commitment;
-        if (!authVerifier.verify(proof, publicInputsHash)) {
+        bytes32[] memory publicInputs = new bytes32[](1);
+        publicInputs[0] = commitment;
+        if (!authVerifier.verify(proof, publicInputs)) {
             revert InvalidProof();
         }
         
@@ -197,8 +198,9 @@ contract ZKAuthRegistry is
         if (!commitments[commitment]) revert CommitmentNotFound();
         
         // Verify ZK proof of ownership
-        bytes32 publicInputsHash = commitment;
-        if (!authVerifier.verify(proof, publicInputsHash)) {
+        bytes32[] memory publicInputs = new bytes32[](1);
+        publicInputs[0] = commitment;
+        if (!authVerifier.verify(proof, publicInputs)) {
             revert InvalidProof();
         }
         

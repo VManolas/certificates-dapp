@@ -21,9 +21,10 @@
 // Security:
 //   - Private inputs are never revealed
 //   - Only the validity of the commitment is proven
-//   - Pedersen hash used for ZK-friendly hashing
+//   - Poseidon hash used for ZK-friendly hashing (BN254 curve compatible)
 
-use dep::std;
+use dep::poseidon::poseidon::bn254::hash_1 as poseidon_hash_1;
+use dep::poseidon::poseidon::bn254::hash_3 as poseidon_hash_3;
 
 fn main(
     // Private inputs (kept secret by prover)
@@ -34,13 +35,13 @@ fn main(
     // Public inputs (visible to verifier)
     commitment: pub Field
 ) {
-    // Step 1: Derive public key from private key using Pedersen hash
+    // Step 1: Derive public key from private key using Poseidon hash
     // This is a one-way function - knowing public key doesn't reveal private key
-    let public_key = std::hash::pedersen_hash([private_key]);
+    let public_key = poseidon_hash_1([private_key]);
     
     // Step 2: Compute commitment = hash(publicKey, walletAddress, salt)
     // The salt prevents rainbow table attacks and allows multiple commitments per wallet
-    let computed_commitment = std::hash::pedersen_hash([
+    let computed_commitment = poseidon_hash_3([
         public_key,
         wallet_address,
         salt
@@ -58,9 +59,9 @@ fn test_auth_login_valid() {
     let wallet_address: Field = 0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb1;
     let salt: Field = 98765432109876543210;
     
-    // Compute expected commitment
-    let public_key = std::hash::pedersen_hash([private_key]);
-    let expected_commitment = std::hash::pedersen_hash([
+    // Compute expected commitment using Poseidon
+    let public_key = poseidon_hash_1([private_key]);
+    let expected_commitment = poseidon_hash_3([
         public_key,
         wallet_address,
         salt
@@ -78,16 +79,16 @@ fn test_auth_login_different_commitments() {
     let wallet_address: Field = 0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb1;
     let salt: Field = 11111111111111111111;
     
-    // Compute commitments for both keys
-    let public_key1 = std::hash::pedersen_hash([private_key1]);
-    let commitment1: Field = std::hash::pedersen_hash([
+    // Compute commitments for both keys using Poseidon
+    let public_key1 = poseidon_hash_1([private_key1]);
+    let commitment1: Field = poseidon_hash_3([
         public_key1,
         wallet_address,
         salt
     ]);
     
-    let public_key2 = std::hash::pedersen_hash([private_key2]);
-    let commitment2: Field = std::hash::pedersen_hash([
+    let public_key2 = poseidon_hash_1([private_key2]);
+    let commitment2: Field = poseidon_hash_3([
         public_key2,
         wallet_address,
         salt
@@ -95,4 +96,31 @@ fn test_auth_login_different_commitments() {
     
     // Verify they produce different commitments
     assert(commitment1 != commitment2);
+}
+
+// Test with specific values to compare with JavaScript poseidon-lite
+#[test]
+fn test_poseidon_compatibility() {
+    // Use simple test values
+    let private_key: Field = 12345678901234567890;
+    let wallet_address: Field = 0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb1;
+    let salt: Field = 98765432109876543210;
+    
+    // Compute public key
+    let public_key = poseidon_hash_1([private_key]);
+    
+    // Compute commitment
+    let computed_commitment = poseidon_hash_3([
+        public_key,
+        wallet_address,
+        salt
+    ]);
+    
+    // Print for comparison with JavaScript
+    std::println(public_key);
+    std::println(computed_commitment);
+    
+    // This test should pass - it just computes the values
+    assert(public_key != 0);
+    assert(computed_commitment != 0);
 }

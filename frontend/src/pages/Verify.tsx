@@ -32,7 +32,6 @@ export function Verify() {
   const [hasLoggedVerification, setHasLoggedVerification] = useState(false);
   const [showQRScanner, setShowQRScanner] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
-  const [verificationSession, setVerificationSession] = useState(0);
   const [showLinkInput, setShowLinkInput] = useState(false);
   const [linkInput, setLinkInput] = useState('');
 
@@ -68,8 +67,7 @@ export function Verify() {
     error: verifyError,
   } = useCertificateVerification(
     hashResult?.hash,
-    state === 'verifying',
-    verificationSession
+    state === 'verifying'
   );
 
   // Fetch full certificate details when we have a certificateId from PDF verification
@@ -118,9 +116,6 @@ export function Verify() {
   }, [role, state, certFromId, certificateIdFromUrl, isLoadingCertById, hasLoggedVerification, addEntry]);
 
   const handleFile = useCallback(async (selectedFile: File) => {
-    // Increment session to force new query with different key
-    setVerificationSession(prev => prev + 1);
-    
     // Clear any existing verification data first
     queryClient.removeQueries({ queryKey: ['readContract'] });
     

@@ -91,7 +91,12 @@ export function useAccountChangeHandler() {
     if (!isConnected && previousAddressRef.current) {
       console.log('👋 Wallet disconnected');
       
-      // Clear auth store
+      // Clear localStorage FIRST to prevent state restoration
+      const authStorageKey = 'zkcredentials-auth';
+      localStorage.removeItem(authStorageKey);
+      console.log('🧹 localStorage cleared on disconnect');
+      
+      // Clear auth store (after localStorage to prevent re-persist)
       resetAuthStore();
       
       // Clear React Query cache
@@ -99,11 +104,6 @@ export function useAccountChangeHandler() {
         window.queryClient.clear();
         console.log('🧹 React Query cache cleared on disconnect');
       }
-      
-      // Clear all localStorage
-      const authStorageKey = 'zkcredentials-auth';
-      localStorage.removeItem(authStorageKey);
-      console.log('🧹 localStorage cleared on disconnect');
       
       previousAddressRef.current = undefined;
       

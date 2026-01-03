@@ -1,6 +1,6 @@
 // src/pages/employer/Dashboard.tsx
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useAccount } from 'wagmi';
 import { useVerificationHistory } from '@/hooks/useVerificationHistory';
 import { useStudentCertificates } from '@/hooks';
@@ -16,6 +16,10 @@ export function EmployerDashboard() {
   const { isConnected } = useAccount();
   const { history, clearHistory, exportToCSV, getStats } = useVerificationHistory();
   const stats = getStats();
+  
+  // Read search parameter from URL
+  const [searchParams, setSearchParams] = useSearchParams();
+  const searchFromUrl = searchParams.get('search');
 
   const [walletAddress, setWalletAddress] = useState('');
   const [searchError, setSearchError] = useState<string | null>(null);
@@ -29,6 +33,18 @@ export function EmployerDashboard() {
     isSearching && isAddress(walletAddress) ? walletAddress as `0x${string}` : undefined,
     isSearching && isAddress(walletAddress)
   );
+
+  // Handle URL search parameter on mount/update
+  useEffect(() => {
+    if (searchFromUrl && isAddress(searchFromUrl)) {
+      console.log('🔍 Auto-searching from URL parameter:', searchFromUrl);
+      setWalletAddress(searchFromUrl);
+      setSearchError(null);
+      setIsSearching(true);
+      // Clear the search param from URL to avoid re-triggering
+      setSearchParams({});
+    }
+  }, [searchFromUrl, setSearchParams]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();

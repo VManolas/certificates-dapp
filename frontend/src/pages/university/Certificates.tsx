@@ -35,7 +35,9 @@ export function UniversityCertificates() {
     },
   });
 
-  const certificateIds = institutionCerts ? (institutionCerts[0] as bigint[]) : undefined;
+  const certificateIds = institutionCerts && Array.isArray(institutionCerts) && institutionCerts.length > 0
+    ? (institutionCerts[0] as bigint[]) 
+    : undefined;
 
   // Fetch certificate details
   const { certificates: allCertificates, foundFlags, isLoading: isLoadingCerts, refetch: refetchCerts } = useCertificatesBatch(

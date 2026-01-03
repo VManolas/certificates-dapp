@@ -1,4 +1,120 @@
-commitment = ""
-private_key = ""
-salt = ""
-wallet_address = ""
+# Prover.toml
+# ============
+#
+# Test inputs for the auth_login circuit
+# Used with: nargo prove
+#
+# This file contains example values that demonstrate a valid authentication proof.
+# In production, these values would come from:
+# - private_key: Generated randomly and encrypted locally
+# - wallet_address: User's connected Web3 wallet
+# - salt: Random 256-bit value generated during registration
+# - commitment: Stored on-chain during registration
+#
+# To test with these values:
+#   1. cd contracts/circuits/auth_login
+#   2. nargo prove
+#   3. nargo verify
+#
+# Expected: ✅ Proof generation succeeds, verification passes
+
+# Private inputs (never revealed in proof)
+# -----------------------------------------
+
+# User's secret authentication key (256-bit hex)
+# In production: Generated with crypto.getRandomValues(new Uint8Array(32))
+private_key = "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+
+# User's Ethereum wallet address (20 bytes = 160 bits)
+# In production: From Web3 wallet (e.g., MetaMask)
+# Example: 0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb1
+wallet_address = "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb1"
+
+# Random salt for commitment uniqueness (256-bit hex)
+# In production: Generated randomly during registration
+salt = "0xfedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321"
+
+# Public inputs (visible to verifier)
+# ------------------------------------
+
+# The commitment registered on-chain
+# This value is computed as: H(H(private_key), wallet_address, salt)
+# where H is Pedersen hash
+#
+# To compute the correct commitment value:
+#   1. public_key = pedersen_hash(private_key)
+#   2. commitment = pedersen_hash(public_key, wallet_address, salt)
+#
+# For the example values above, you need to:
+#   - Compile the circuit: nargo compile
+#   - Compute the hash: Use test to see expected value
+#   - Update this field with the computed commitment
+#
+# NOTE: This is a placeholder. After first compilation, run tests to get
+# the actual commitment value for these inputs.
+commitment = "0x0000000000000000000000000000000000000000000000000000000000000000"
+
+# ============================================================================
+# USAGE EXAMPLES
+# ============================================================================
+#
+# Example 1: Test with default values
+# ------------------------------------
+# nargo prove
+# nargo verify
+#
+# Example 2: Test with custom values
+# -----------------------------------
+# 1. Generate your test credentials:
+#    private_key = <random 256-bit hex>
+#    wallet_address = <any Ethereum address>
+#    salt = <random 256-bit hex>
+#
+# 2. Compute commitment (run test to get value):
+#    nargo test test_valid_authentication_proof --show-output
+#
+# 3. Update commitment field above
+#
+# 4. Generate proof:
+#    nargo prove
+#
+# 5. Verify proof:
+#    nargo verify
+#
+# Example 3: Generate multiple proofs
+# ------------------------------------
+# Create multiple Prover.toml files:
+#   - Prover.toml (default)
+#   - Prover_student.toml (student credentials)
+#   - Prover_employer.toml (employer credentials)
+#
+# Then prove with specific file:
+#   nargo prove --prover-name student
+#   nargo verify --verifier-name student
+#
+# ============================================================================
+# SECURITY NOTES
+# ============================================================================
+#
+# 1. NEVER commit real private keys to version control
+# 2. These are test values only - use random values in production
+# 3. The commitment MUST match the hash of the private inputs
+# 4. Salt provides unlinkability - different users can use same wallet
+# 5. Each registration should use a unique random salt
+#
+# ============================================================================
+# TROUBLESHOOTING
+# ============================================================================
+#
+# Issue: "Proof generation failed"
+# Solution: Ensure commitment matches H(H(private_key), wallet_address, salt)
+#
+# Issue: "Verification failed"
+# Solution: Check that public inputs (commitment) match proof inputs
+#
+# Issue: "Cannot parse hex value"
+# Solution: Ensure all hex values start with "0x" and have valid hex digits
+#
+# Issue: "Field value too large"
+# Solution: Values must be < BN254 curve order (~2^254)
+

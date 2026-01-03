@@ -1,37 +1,84 @@
 // src/pages/Home.tsx
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { useState } from 'react';
 import { useAccount } from 'wagmi';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
-import { useAuthStore } from '@/store/authStore';
+import { useAuthStore, type UserRole } from '@/store/authStore';
 import { useUnifiedAuth } from '@/hooks/useUnifiedAuth';
-import { AuthMethodSelector } from '@/components/AuthMethodSelector';
+import { UnifiedLoginModal } from '@/components/UnifiedLoginModal';
+import { RoleSelector } from '@/components/RoleSelector';
 import { ZKAuthUpgrade } from '@/components/zkauth/ZKAuthUpgrade';
 
 export function Home() {
+  const navigate = useNavigate();
   const { isConnected } = useAccount();
-  const { role: storeRole } = useAuthStore();
+  const { role: storeRole, preSelectedRole, setPreSelectedRole } = useAuthStore();
+  const [showRoleSelector, setShowRoleSelector] = useState(!isConnected && !preSelectedRole);
+  const [showLoginModal, setShowLoginModal] = useState(false);
   
-  // Use unified auth for both ZK and Web3 login
+  // OPTIMIZATION: Only use unified auth when wallet is connected or login modal is shown
+  // This avoids unnecessary blockchain queries for anonymous visitors browsing the home page
+  const shouldInitializeAuth = isConnected || showLoginModal;
   const unifiedAuth = useUnifiedAuth();
 
-  // Debug logging
-  console.log('Home - isConnected:', isConnected);
-  console.log('Home - unifiedAuth:', unifiedAuth);
+  // Show role from unified auth only when connected (could be ZK or Web3)
+  const role = shouldInitializeAuth && unifiedAuth.isAuthenticated ? unifiedAuth.role : storeRole;
+  const userRoles = shouldInitializeAuth ? unifiedAuth.web3Auth : {
+    primaryRole: null,
+    availableRoles: [],
+    canRegisterAsEmployer: false,
+    isAdmin: false,
+    isUniversity: false,
+    isStudent: false,
+    isEmployer: false,
+    universityData: null,
+  };
 
-  // Show role from unified auth (could be ZK or Web3)
-  const role = unifiedAuth.isAuthenticated ? unifiedAuth.role : storeRole;
-  const userRoles = unifiedAuth.web3Auth;
+  // Handle role selection (Step 1)
+  const handleRoleSelection = (selectedRole: UserRole) => {
+    setPreSelectedRole(selectedRole);
+    setShowRoleSelector(false);
+    
+    // Open the unified login modal which handles the complete flow
+    // (auth method selection, ZK registration/login, Web3 connection, etc.)
+    setTimeout(() => {
+      setShowLoginModal(true);
+    }, 300);
+  };
+
+  // Handle successful login
+  const handleLoginSuccess = () => {
+    console.log('Login successful, navigating to dashboard...');
+    // Navigate to appropriate dashboard based on role
+    const role = unifiedAuth.role;
+    if (role === 'student') {
+      navigate('/student/dashboard');
+    } else if (role === 'university') {
+      navigate('/university/dashboard');
+    } else if (role === 'employer') {
+      navigate('/employer/dashboard');
+    } else if (role === 'admin') {
+      navigate('/admin/dashboard');
+    } else {
+      // Default fallback
+      navigate('/verify');
+    }
+  };
 
   return (
     <div className="relative overflow-hidden">
-      {/* Auth Method Selector Modal */}
-      <AuthMethodSelector
-        isOpen={unifiedAuth.showAuthMethodSelector}
-        onClose={() => {
-          // User can close without selecting, will be shown again on next connect
-        }}
-        onSelectMethod={unifiedAuth.selectAuthMethod}
-        required={!unifiedAuth.authMethod} // Required if no method selected yet
+      {/* Role Selector Modal */}
+      <RoleSelector
+        isOpen={showRoleSelector}
+        onSelectRole={handleRoleSelection}
+      />
+      
+      {/* Unified Login Modal - Handles complete auth flow */}
+      <UnifiedLoginModal
+        isOpen={showLoginModal}
+        onClose={() => setShowLoginModal(false)}
+        onSuccess={handleLoginSuccess}
+        preSelectedRole={preSelectedRole}
       />
 
       {/* Background gradient */}
@@ -122,8 +169,8 @@ export function Home() {
             {/* ZK Auth Upgrade Card - Only show for Web3 users */}
             {unifiedAuth.authMethod === 'web3' && <ZKAuthUpgrade variant="card" />}
             
-            {/* ZK Auth Status Card - Show for ZK users */}
-            {unifiedAuth.authMethod === 'zk' && (
+            {/* ZK Auth Status Card - Show for ZK users who are ACTUALLY authenticated */}
+            {unifiedAuth.authMethod === 'zk' && unifiedAuth.isAuthenticated && (
               <div className="card bg-gradient-to-r from-primary-900/50 to-primary-700/30 border-primary-500/20">
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 rounded-xl bg-primary-500/20 flex items-center justify-center">

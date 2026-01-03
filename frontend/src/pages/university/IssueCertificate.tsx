@@ -74,11 +74,11 @@ export function IssueCertificate() {
         console.log('🔍 [IssueCertificate] Error type:', err?.constructor?.name);
         console.log('🔍 [IssueCertificate] Error message:', err?.message);
         console.log('🔍 [IssueCertificate] Error keys:', Object.keys(err || {}));
-        if (err?.cause) {
-          console.log('🔍 [IssueCertificate] Error cause:', err.cause);
+        if (err && typeof err === 'object' && 'cause' in err) {
+          console.log('🔍 [IssueCertificate] Error cause:', (err as any).cause);
         }
-        if (err?.data) {
-          console.log('🔍 [IssueCertificate] Error data:', err.data);
+        if (err && typeof err === 'object' && 'data' in err) {
+          console.log('🔍 [IssueCertificate] Error data:', (err as any).data);
         }
       }
       
@@ -452,16 +452,16 @@ export function IssueCertificate() {
           </div>
 
           {/* Frontend Duplicate Check Warning */}
-          {isCheckingDuplicate && (
-            <div className="card border-blue-500/30 bg-blue-500/10">
+          {isCheckingDuplicate ? (
+            <div className="card border-blue-500/30 bg-blue-500/10" key="duplicate-check">
               <div className="flex items-center gap-3">
                 <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-400"></div>
                 <p className="text-blue-300 text-sm">Checking if certificate already exists on blockchain...</p>
               </div>
             </div>
-          )}
+          ) : null}
 
-          {error === 'frontend-duplicate' && isDuplicateOnChain && (
+          {error === 'frontend-duplicate' && isDuplicateOnChain ? (
             <div className="card border-yellow-500/30 bg-yellow-500/10">
               <div className="flex items-start gap-3">
                 <svg className="w-6 h-6 text-yellow-400 flex-shrink-0 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -524,7 +524,7 @@ export function IssueCertificate() {
                 </div>
               </div>
             </div>
-          )}
+          ) : null}
 
           {error && error !== 'frontend-duplicate' && (
             <div className="card border-red-500/30 bg-red-500/10">
