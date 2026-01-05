@@ -53,9 +53,7 @@ contract ZKAuthRegistry is
     enum UserRole { 
         None,       // 0: No role assigned
         Student,    // 1: Student user
-        University, // 2: University/Institution
-        Employer,   // 3: Employer
-        Admin       // 4: System administrator
+        Employer    // 2: Employer
     }
     
     /// @notice Session data structure
@@ -136,21 +134,15 @@ contract ZKAuthRegistry is
         _grantRole(ADMIN_ROLE, admin);
         
         authVerifier = IAuthVerifier(_authVerifier);
-        
-        // Create admin commitment (can be updated later)
-        bytes32 adminCommitment = keccak256(abi.encodePacked(admin, "ADMIN"));
-        commitments[adminCommitment] = true;
-        roles[adminCommitment] = UserRole.Admin;
-        registrationTime[adminCommitment] = block.timestamp;
     }
     
     /**
      * @notice Register a new commitment with role
      * @param commitment Hash(publicKey, walletAddress, salt)
-     * @param role User role (Student, University, Employer, Admin)
+     * @param role User role (Student or Employer only)
      * @param proof ZK proof of commitment ownership
      * @dev Users prove they know the private key for the commitment
-     * @dev Admins can register for ZK auth while keeping their admin privileges
+     * @dev Only Student and Employer roles can use ZK authentication
      */
     function registerCommitment(
         bytes32 commitment,
@@ -161,8 +153,9 @@ contract ZKAuthRegistry is
         if (commitments[commitment]) revert CommitmentAlreadyExists();
         if (role == UserRole.None) revert InvalidRole();
         
-        // Security: If registering as Admin, must have ADMIN_ROLE
-        if (role == UserRole.Admin && !hasRole(ADMIN_ROLE, msg.sender)) {
+        // Security: Only Student and Employer roles allowed for ZK auth
+        // Admins and Universities use Web3 authentication only
+        if (role != UserRole.Student && role != UserRole.Employer) {
             revert InvalidRole();
         }
         

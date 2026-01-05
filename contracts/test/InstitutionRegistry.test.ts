@@ -29,8 +29,8 @@ describe("InstitutionRegistry", function () {
 
   describe("Initialization", function () {
     it("should initialize with correct super admin", async function () {
-      const SUPER_ADMIN_ROLE = await institutionRegistry.SUPER_ADMIN_ROLE();
-      expect(await institutionRegistry.hasRole(SUPER_ADMIN_ROLE, superAdmin.address)).to.be.true;
+      const ADMIN_ROLE = await institutionRegistry.ADMIN_ROLE();
+      expect(await institutionRegistry.hasRole(ADMIN_ROLE, superAdmin.address)).to.be.true;
     });
 
     it("should set correct version", async function () {
@@ -337,8 +337,8 @@ describe("InstitutionRegistry", function () {
 
   describe("Access Control", function () {
     it("should grant super admin role during initialization", async function () {
-      const SUPER_ADMIN_ROLE = await institutionRegistry.SUPER_ADMIN_ROLE();
-      expect(await institutionRegistry.hasRole(SUPER_ADMIN_ROLE, superAdmin.address)).to.be.true;
+      const ADMIN_ROLE = await institutionRegistry.ADMIN_ROLE();
+      expect(await institutionRegistry.hasRole(ADMIN_ROLE, superAdmin.address)).to.be.true;
     });
 
     it("should not allow non-admin to authorize upgrades", async function () {

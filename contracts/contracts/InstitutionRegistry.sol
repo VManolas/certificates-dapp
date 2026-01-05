@@ -13,7 +13,7 @@ import "./interfaces/IInstitutionRegistry.sol";
  * @dev Implements UUPS upgradeable pattern with role-based access control
  * 
  * Roles:
- * - SUPER_ADMIN_ROLE: Can approve/suspend/reactivate institutions and upgrade contract
+ * - ADMIN_ROLE: Can approve/suspend/reactivate institutions and upgrade contract
  * - DEFAULT_ADMIN_ROLE: Can manage other roles
  * 
  * Flow:
@@ -31,8 +31,8 @@ contract InstitutionRegistry is
     /// @notice Contract version for tracking upgrades
     string public constant VERSION = "1.0.0";
 
-    /// @notice Role identifier for super admin
-    bytes32 public constant SUPER_ADMIN_ROLE = keccak256("SUPER_ADMIN_ROLE");
+    /// @notice Role identifier for admin
+    bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
 
     /// @notice Role identifier for certificate registry contract
     bytes32 public constant CERTIFICATE_REGISTRY_ROLE = keccak256("CERTIFICATE_REGISTRY_ROLE");
@@ -87,7 +87,7 @@ contract InstitutionRegistry is
         __ReentrancyGuard_init();
 
         _grantRole(DEFAULT_ADMIN_ROLE, superAdmin);
-        _grantRole(SUPER_ADMIN_ROLE, superAdmin);
+        _grantRole(ADMIN_ROLE, superAdmin);
 
         // Record initial version
         upgradeHistory.push(UpgradeInfo({
@@ -136,13 +136,13 @@ contract InstitutionRegistry is
      * @param wallet Address of the institution to register
      * @param name Official name of the institution
      * @param emailDomain Verified email domain (e.g., "mit.edu")
-     * @dev Only callable by super admin. Registers and auto-approves the institution.
+     * @dev Only callable by admin. Registers and auto-approves the institution.
      */
     function registerInstitutionByAdmin(
         address wallet,
         string calldata name,
         string calldata emailDomain
-    ) external onlyRole(SUPER_ADMIN_ROLE) nonReentrant {
+    ) external onlyRole(ADMIN_ROLE) nonReentrant {
         if (wallet == address(0)) revert InvalidAddress();
         if (wallet == msg.sender) revert AdminCannotRegisterAsInstitution();
         if (bytes(name).length == 0) revert InvalidName();
@@ -172,11 +172,11 @@ contract InstitutionRegistry is
     /**
      * @notice Approve a registered institution
      * @param wallet Address of the institution to approve
-     * @dev Only callable by super admin
+     * @dev Only callable by admin
      */
     function approveInstitution(
         address wallet
-    ) external onlyRole(SUPER_ADMIN_ROLE) {
+    ) external onlyRole(ADMIN_ROLE) {
         Institution storage inst = institutions[wallet];
         if (inst.walletAddress == address(0)) revert InstitutionNotFound();
         if (inst.isVerified) revert InstitutionAlreadyVerified();
@@ -191,11 +191,11 @@ contract InstitutionRegistry is
     /**
      * @notice Suspend an active institution
      * @param wallet Address of the institution to suspend
-     * @dev Only callable by super admin. Institution can be reactivated later.
+     * @dev Only callable by admin. Institution can be reactivated later.
      */
     function suspendInstitution(
         address wallet
-    ) external onlyRole(SUPER_ADMIN_ROLE) {
+    ) external onlyRole(ADMIN_ROLE) {
         Institution storage inst = institutions[wallet];
         if (inst.walletAddress == address(0)) revert InstitutionNotFound();
         if (!inst.isActive) revert InstitutionNotActive();
@@ -208,11 +208,11 @@ contract InstitutionRegistry is
     /**
      * @notice Reactivate a suspended institution
      * @param wallet Address of the institution to reactivate
-     * @dev Only callable by super admin. Institution must have been verified before.
+     * @dev Only callable by admin. Institution must have been verified before.
      */
     function reactivateInstitution(
         address wallet
-    ) external onlyRole(SUPER_ADMIN_ROLE) {
+    ) external onlyRole(ADMIN_ROLE) {
         Institution storage inst = institutions[wallet];
         if (inst.walletAddress == address(0)) revert InstitutionNotFound();
         if (!inst.isVerified) revert InstitutionNotVerified();
@@ -381,12 +381,12 @@ contract InstitutionRegistry is
      * @notice Record a contract upgrade
      * @param newVersion Version string for the upgrade (e.g., "2.0.0")
      * @param notes Description of changes in this upgrade
-     * @dev Only callable by super admin. Should be called after upgrading the contract.
+     * @dev Only callable by admin. Should be called after upgrading the contract.
      */
     function recordUpgrade(
         string calldata newVersion,
         string calldata notes
-    ) external onlyRole(SUPER_ADMIN_ROLE) {
+    ) external onlyRole(ADMIN_ROLE) {
         upgradeHistory.push(UpgradeInfo({
             version: newVersion,
             timestamp: block.timestamp,
@@ -405,20 +405,20 @@ contract InstitutionRegistry is
     /**
      * @notice Authorize contract upgrade
      * @param newImplementation Address of the new implementation
-     * @dev Only callable by super admin
+     * @dev Only callable by admin
      */
     function _authorizeUpgrade(
         address newImplementation
-    ) internal override onlyRole(SUPER_ADMIN_ROLE) {}
+    ) internal override onlyRole(ADMIN_ROLE) {}
 
     /**
      * @notice Grant CERTIFICATE_REGISTRY_ROLE to an address
      * @param certificateRegistry Address of the CertificateRegistry contract
-     * @dev Only callable by super admin
+     * @dev Only callable by admin
      */
     function setCertificateRegistry(
         address certificateRegistry
-    ) external onlyRole(SUPER_ADMIN_ROLE) {
+    ) external onlyRole(ADMIN_ROLE) {
         if (certificateRegistry == address(0)) revert InvalidAddress();
         _grantRole(CERTIFICATE_REGISTRY_ROLE, certificateRegistry);
     }

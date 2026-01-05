@@ -54,11 +54,8 @@ describe("CertificateRegistry - Enhanced Error Cases", function () {
   describe("UnauthorizedIssuer Error", function () {
     it("Should revert when non-registered account tries to issue", async function () {
       await expect(
-        certificateRegistry.connect(randomUser).issueCertificate(
-          sampleHash1,
-          student1.address,
-          metadataURI
-        )
+        certificateRegistry.connect(randomUser).issueCertificate(sampleHash1, student1.address, metadataURI
+        , 2024)
       ).to.be.revertedWithCustomError(certificateRegistry, "UnauthorizedIssuer");
     });
 
@@ -67,11 +64,8 @@ describe("CertificateRegistry - Enhanced Error Cases", function () {
       await institutionRegistry.connect(university2).registerInstitution("Stanford", "stanford.edu");
       
       await expect(
-        certificateRegistry.connect(university2).issueCertificate(
-          sampleHash1,
-          student1.address,
-          metadataURI
-        )
+        certificateRegistry.connect(university2).issueCertificate(sampleHash1, student1.address, metadataURI
+        , 2024)
       ).to.be.revertedWithCustomError(certificateRegistry, "UnauthorizedIssuer");
     });
 
@@ -80,11 +74,8 @@ describe("CertificateRegistry - Enhanced Error Cases", function () {
       await institutionRegistry.connect(superAdmin).suspendInstitution(university1.address);
       
       await expect(
-        certificateRegistry.connect(university1).issueCertificate(
-          sampleHash1,
-          student1.address,
-          metadataURI
-        )
+        certificateRegistry.connect(university1).issueCertificate(sampleHash1, student1.address, metadataURI
+        , 2024)
       ).to.be.revertedWithCustomError(certificateRegistry, "UnauthorizedIssuer");
     });
 
@@ -97,11 +88,8 @@ describe("CertificateRegistry - Enhanced Error Cases", function () {
       
       // Should now succeed
       await expect(
-        certificateRegistry.connect(university1).issueCertificate(
-          sampleHash1,
-          student1.address,
-          metadataURI
-        )
+        certificateRegistry.connect(university1).issueCertificate(sampleHash1, student1.address, metadataURI
+        , 2024)
       ).to.emit(certificateRegistry, "CertificateIssued");
     });
   });
@@ -109,31 +97,22 @@ describe("CertificateRegistry - Enhanced Error Cases", function () {
   describe("Invalid Input Errors", function () {
     it("Should revert with InvalidStudentAddress when zero address provided", async function () {
       await expect(
-        certificateRegistry.connect(university1).issueCertificate(
-          sampleHash1,
-          ethers.ZeroAddress,
-          metadataURI
-        )
+        certificateRegistry.connect(university1).issueCertificate(sampleHash1, ethers.ZeroAddress, metadataURI
+        , 2024)
       ).to.be.revertedWithCustomError(certificateRegistry, "InvalidStudentAddress");
     });
 
     it("Should revert with InvalidDocumentHash when zero hash provided", async function () {
       await expect(
-        certificateRegistry.connect(university1).issueCertificate(
-          ethers.ZeroHash,
-          student1.address,
-          metadataURI
-        )
+        certificateRegistry.connect(university1).issueCertificate(ethers.ZeroHash, student1.address, metadataURI
+        , 2024)
       ).to.be.revertedWithCustomError(certificateRegistry, "InvalidDocumentHash");
     });
 
     it("Should accept empty metadataURI", async function () {
       await expect(
-        certificateRegistry.connect(university1).issueCertificate(
-          sampleHash1,
-          student1.address,
-          ""  // Empty metadataURI
-        )
+        certificateRegistry.connect(university1).issueCertificate(sampleHash1, student1.address, ""  // Empty metadataURI
+        , 2024)
       ).to.emit(certificateRegistry, "CertificateIssued");
     });
   });
@@ -141,37 +120,25 @@ describe("CertificateRegistry - Enhanced Error Cases", function () {
   describe("Duplicate Certificate Errors", function () {
     it("Should revert with CertificateAlreadyExists when issuing duplicate hash", async function () {
       // Issue first certificate
-      await certificateRegistry.connect(university1).issueCertificate(
-        sampleHash1,
-        student1.address,
-        metadataURI
-      );
+      await certificateRegistry.connect(university1).issueCertificate(sampleHash1, student1.address, metadataURI
+      , 2024);
 
       // Try to issue again with same hash (even to different student)
       await expect(
-        certificateRegistry.connect(university1).issueCertificate(
-          sampleHash1,
-          student2.address,
-          metadataURI
-        )
+        certificateRegistry.connect(university1).issueCertificate(sampleHash1, student2.address, metadataURI
+        , 2024)
       ).to.be.revertedWithCustomError(certificateRegistry, "CertificateAlreadyExists");
     });
 
     it("Should allow same institution to issue multiple different certificates to same student", async function () {
       // Issue first certificate
-      await certificateRegistry.connect(university1).issueCertificate(
-        sampleHash1,
-        student1.address,
-        metadataURI
-      );
+      await certificateRegistry.connect(university1).issueCertificate(sampleHash1, student1.address, metadataURI
+      , 2024);
 
       // Issue second certificate with different hash
       await expect(
-        certificateRegistry.connect(university1).issueCertificate(
-          sampleHash2,
-          student1.address,
-          metadataURI
-        )
+        certificateRegistry.connect(university1).issueCertificate(sampleHash2, student1.address, metadataURI
+        , 2024)
       ).to.emit(certificateRegistry, "CertificateIssued");
 
       // Verify student has 2 certificates
@@ -185,17 +152,11 @@ describe("CertificateRegistry - Enhanced Error Cases", function () {
       await institutionRegistry.connect(superAdmin).approveInstitution(university2.address);
 
       // Both universities issue to same student (different hashes)
-      await certificateRegistry.connect(university1).issueCertificate(
-        sampleHash1,
-        student1.address,
-        metadataURI
-      );
+      await certificateRegistry.connect(university1).issueCertificate(sampleHash1, student1.address, metadataURI
+      , 2024);
 
-      await certificateRegistry.connect(university2).issueCertificate(
-        sampleHash2,
-        student1.address,
-        metadataURI
-      );
+      await certificateRegistry.connect(university2).issueCertificate(sampleHash2, student1.address, metadataURI
+      , 2024);
 
       // Student should have 2 certificates
       const studentCerts = await certificateRegistry.getCertificatesByStudent(student1.address);
@@ -233,11 +194,8 @@ describe("CertificateRegistry - Enhanced Error Cases", function () {
 
     it("Should revert with CertificateAlreadyRevoked when revoking twice", async function () {
       // Issue certificate
-      const tx = await certificateRegistry.connect(university1).issueCertificate(
-        sampleHash1,
-        student1.address,
-        metadataURI
-      );
+      const tx = await certificateRegistry.connect(university1).issueCertificate(sampleHash1, student1.address, metadataURI
+      , 2024);
       const receipt = await tx.wait();
       const event = receipt?.logs.find(log => 
         'eventName' in log && log.eventName === 'CertificateIssued'
@@ -259,11 +217,8 @@ describe("CertificateRegistry - Enhanced Error Cases", function () {
       await institutionRegistry.connect(superAdmin).approveInstitution(university2.address);
 
       // University1 issues certificate
-      const tx = await certificateRegistry.connect(university1).issueCertificate(
-        sampleHash1,
-        student1.address,
-        metadataURI
-      );
+      const tx = await certificateRegistry.connect(university1).issueCertificate(sampleHash1, student1.address, metadataURI
+      , 2024);
       const receipt = await tx.wait();
       const event = receipt?.logs.find(log => 
         'eventName' in log && log.eventName === 'CertificateIssued'
@@ -278,11 +233,8 @@ describe("CertificateRegistry - Enhanced Error Cases", function () {
 
     it("Should allow super admin to revoke any certificate", async function () {
       // Issue certificate
-      const tx = await certificateRegistry.connect(university1).issueCertificate(
-        sampleHash1,
-        student1.address,
-        metadataURI
-      );
+      const tx = await certificateRegistry.connect(university1).issueCertificate(sampleHash1, student1.address, metadataURI
+      , 2024);
       const receipt = await tx.wait();
       const event = receipt?.logs.find(log => 
         'eventName' in log && log.eventName === 'CertificateIssued'
@@ -298,11 +250,8 @@ describe("CertificateRegistry - Enhanced Error Cases", function () {
 
     it("Should update certificate state correctly after revocation", async function () {
       // Issue certificate
-      const tx = await certificateRegistry.connect(university1).issueCertificate(
-        sampleHash1,
-        student1.address,
-        metadataURI
-      );
+      const tx = await certificateRegistry.connect(university1).issueCertificate(sampleHash1, student1.address, metadataURI
+      , 2024);
       const receipt = await tx.wait();
       const event = receipt?.logs.find(log => 
         'eventName' in log && log.eventName === 'CertificateIssued'
@@ -329,11 +278,8 @@ describe("CertificateRegistry - Enhanced Error Cases", function () {
 
   describe("Event Emissions", function () {
     it("Should emit correct event data on issuance", async function () {
-      const tx = await certificateRegistry.connect(university1).issueCertificate(
-        sampleHash1,
-        student1.address,
-        metadataURI
-      );
+      const tx = await certificateRegistry.connect(university1).issueCertificate(sampleHash1, student1.address, metadataURI
+      , 2024);
 
       await expect(tx)
         .to.emit(certificateRegistry, "CertificateIssued");
@@ -341,11 +287,8 @@ describe("CertificateRegistry - Enhanced Error Cases", function () {
 
     it("Should emit correct event data on revocation", async function () {
       // Issue certificate
-      const tx = await certificateRegistry.connect(university1).issueCertificate(
-        sampleHash1,
-        student1.address,
-        metadataURI
-      );
+      const tx = await certificateRegistry.connect(university1).issueCertificate(sampleHash1, student1.address, metadataURI
+      , 2024);
       const receipt = await tx.wait();
       const event = receipt?.logs.find(log => 
         'eventName' in log && log.eventName === 'CertificateIssued'
@@ -365,11 +308,8 @@ describe("CertificateRegistry - Enhanced Error Cases", function () {
       const institutionBefore = await institutionRegistry.getInstitution(university1.address);
       const countBefore = institutionBefore.totalCertificatesIssued;
       
-      await certificateRegistry.connect(university1).issueCertificate(
-        sampleHash1,
-        student1.address,
-        metadataURI
-      );
+      await certificateRegistry.connect(university1).issueCertificate(sampleHash1, student1.address, metadataURI
+      , 2024);
 
       const institutionAfter = await institutionRegistry.getInstitution(university1.address);
       expect(institutionAfter.totalCertificatesIssued).to.equal(countBefore + 1n);
@@ -381,11 +321,8 @@ describe("CertificateRegistry - Enhanced Error Cases", function () {
       
       // Try to issue with invalid student address
       await expect(
-        certificateRegistry.connect(university1).issueCertificate(
-          sampleHash1,
-          ethers.ZeroAddress,
-          metadataURI
-        )
+        certificateRegistry.connect(university1).issueCertificate(sampleHash1, ethers.ZeroAddress, metadataURI
+        , 2024)
       ).to.be.revertedWithCustomError(certificateRegistry, "InvalidStudentAddress");
 
       const institutionAfter = await institutionRegistry.getInstitution(university1.address);
@@ -395,11 +332,8 @@ describe("CertificateRegistry - Enhanced Error Cases", function () {
 
   describe("Certificate Validation", function () {
     it("Should return correct validation status for valid certificate", async function () {
-      await certificateRegistry.connect(university1).issueCertificate(
-        sampleHash1,
-        student1.address,
-        metadataURI
-      );
+      await certificateRegistry.connect(university1).issueCertificate(sampleHash1, student1.address, metadataURI
+      , 2024);
 
       const [isValid, certId, isRevoked] = await certificateRegistry.isValidCertificate(sampleHash1);
       expect(isValid).to.be.true;
@@ -408,11 +342,8 @@ describe("CertificateRegistry - Enhanced Error Cases", function () {
     });
 
     it("Should return correct validation status for revoked certificate", async function () {
-      const tx = await certificateRegistry.connect(university1).issueCertificate(
-        sampleHash1,
-        student1.address,
-        metadataURI
-      );
+      const tx = await certificateRegistry.connect(university1).issueCertificate(sampleHash1, student1.address, metadataURI
+      , 2024);
       const receipt = await tx.wait();
       const event = receipt?.logs.find(log => 
         'eventName' in log && log.eventName === 'CertificateIssued'

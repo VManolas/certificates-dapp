@@ -55,8 +55,8 @@ describe("CertificateRegistry", function () {
 
   describe("Initialization", function () {
     it("should initialize with correct super admin", async function () {
-      const SUPER_ADMIN_ROLE = await certificateRegistry.SUPER_ADMIN_ROLE();
-      expect(await certificateRegistry.hasRole(SUPER_ADMIN_ROLE, superAdmin.address)).to.be.true;
+      const ADMIN_ROLE = await certificateRegistry.ADMIN_ROLE();
+      expect(await certificateRegistry.hasRole(ADMIN_ROLE, superAdmin.address)).to.be.true;
     });
 
     it("should set correct version", async function () {
@@ -110,7 +110,8 @@ describe("CertificateRegistry", function () {
         certificateRegistry.connect(university1).issueCertificate(
           sampleHash1,
           student1.address,
-          metadataURI
+          metadataURI,
+          2024
         )
       ).to.emit(certificateRegistry, "CertificateIssued")
         .withArgs(
@@ -131,43 +132,28 @@ describe("CertificateRegistry", function () {
     });
 
     it("should increment certificate ID sequentially", async function () {
-      await certificateRegistry.connect(university1).issueCertificate(
-        sampleHash1,
-        student1.address,
-        ""
-      );
-      await certificateRegistry.connect(university1).issueCertificate(
-        sampleHash2,
-        student2.address,
-        ""
-      );
+      await certificateRegistry.connect(university1).issueCertificate(sampleHash1, student1.address, ""
+      , 2024);
+      await certificateRegistry.connect(university1).issueCertificate(sampleHash2, student2.address, ""
+      , 2024);
 
       expect((await certificateRegistry.getCertificate(1)).certificateId).to.equal(1);
       expect((await certificateRegistry.getCertificate(2)).certificateId).to.equal(2);
     });
 
     it("should increment total certificates count", async function () {
-      await certificateRegistry.connect(university1).issueCertificate(
-        sampleHash1,
-        student1.address,
-        ""
-      );
+      await certificateRegistry.connect(university1).issueCertificate(sampleHash1, student1.address, ""
+      , 2024);
       expect(await certificateRegistry.getTotalCertificates()).to.equal(1);
 
-      await certificateRegistry.connect(university1).issueCertificate(
-        sampleHash2,
-        student2.address,
-        ""
-      );
+      await certificateRegistry.connect(university1).issueCertificate(sampleHash2, student2.address, ""
+      , 2024);
       expect(await certificateRegistry.getTotalCertificates()).to.equal(2);
     });
 
     it("should add certificate to student's certificate list", async function () {
-      await certificateRegistry.connect(university1).issueCertificate(
-        sampleHash1,
-        student1.address,
-        ""
-      );
+      await certificateRegistry.connect(university1).issueCertificate(sampleHash1, student1.address, ""
+      , 2024);
 
       const studentCerts = await certificateRegistry.getCertificatesByStudent(student1.address);
       expect(studentCerts.length).to.equal(1);
@@ -175,22 +161,16 @@ describe("CertificateRegistry", function () {
     });
 
     it("should map document hash to certificate ID", async function () {
-      await certificateRegistry.connect(university1).issueCertificate(
-        sampleHash1,
-        student1.address,
-        ""
-      );
+      await certificateRegistry.connect(university1).issueCertificate(sampleHash1, student1.address, ""
+      , 2024);
 
       const cert = await certificateRegistry.getCertificateByHash(sampleHash1);
       expect(cert.certificateId).to.equal(1);
     });
 
     it("should increment institution's certificate count", async function () {
-      await certificateRegistry.connect(university1).issueCertificate(
-        sampleHash1,
-        student1.address,
-        ""
-      );
+      await certificateRegistry.connect(university1).issueCertificate(sampleHash1, student1.address, ""
+      , 2024);
 
       const institution = await institutionRegistry.getInstitution(university1.address);
       expect(institution.totalCertificatesIssued).to.equal(1);
@@ -198,72 +178,48 @@ describe("CertificateRegistry", function () {
 
     it("should revert if institution not authorized", async function () {
       await expect(
-        certificateRegistry.connect(university2).issueCertificate(
-          sampleHash1,
-          student1.address,
-          ""
-        )
+        certificateRegistry.connect(university2).issueCertificate(sampleHash1, student1.address, ""
+        , 2024)
       ).to.be.revertedWithCustomError(certificateRegistry, "UnauthorizedIssuer");
     });
 
     it("should revert if student wallet is zero address", async function () {
       await expect(
-        certificateRegistry.connect(university1).issueCertificate(
-          sampleHash1,
-          ethers.ZeroAddress,
-          ""
-        )
+        certificateRegistry.connect(university1).issueCertificate(sampleHash1, ethers.ZeroAddress, ""
+        , 2024)
       ).to.be.revertedWithCustomError(certificateRegistry, "InvalidStudentAddress");
     });
 
     it("should revert if document hash is zero", async function () {
       await expect(
-        certificateRegistry.connect(university1).issueCertificate(
-          ethers.ZeroHash,
-          student1.address,
-          ""
-        )
+        certificateRegistry.connect(university1).issueCertificate(ethers.ZeroHash, student1.address, ""
+        , 2024)
       ).to.be.revertedWithCustomError(certificateRegistry, "InvalidDocumentHash");
     });
 
     it("should revert if duplicate hash", async function () {
-      await certificateRegistry.connect(university1).issueCertificate(
-        sampleHash1,
-        student1.address,
-        ""
-      );
+      await certificateRegistry.connect(university1).issueCertificate(sampleHash1, student1.address, ""
+      , 2024);
 
       await expect(
-        certificateRegistry.connect(university1).issueCertificate(
-          sampleHash1,
-          student2.address,
-          ""
-        )
+        certificateRegistry.connect(university1).issueCertificate(sampleHash1, student2.address, ""
+        , 2024)
       ).to.be.revertedWithCustomError(certificateRegistry, "CertificateAlreadyExists");
     });
 
     it("should allow issuing to same student multiple times with different hashes", async function () {
-      await certificateRegistry.connect(university1).issueCertificate(
-        sampleHash1,
-        student1.address,
-        ""
-      );
-      await certificateRegistry.connect(university1).issueCertificate(
-        sampleHash2,
-        student1.address,
-        ""
-      );
+      await certificateRegistry.connect(university1).issueCertificate(sampleHash1, student1.address, ""
+      , 2024);
+      await certificateRegistry.connect(university1).issueCertificate(sampleHash2, student1.address, ""
+      , 2024);
 
       const studentCerts = await certificateRegistry.getCertificatesByStudent(student1.address);
       expect(studentCerts.length).to.equal(2);
     });
 
     it("should handle empty metadata URI", async function () {
-      await certificateRegistry.connect(university1).issueCertificate(
-        sampleHash1,
-        student1.address,
-        ""
-      );
+      await certificateRegistry.connect(university1).issueCertificate(sampleHash1, student1.address, ""
+      , 2024);
 
       const cert = await certificateRegistry.getCertificate(1);
       expect(cert.metadataURI).to.equal("");
@@ -273,22 +229,16 @@ describe("CertificateRegistry", function () {
       await institutionRegistry.connect(superAdmin).suspendInstitution(university1.address);
 
       await expect(
-        certificateRegistry.connect(university1).issueCertificate(
-          sampleHash1,
-          student1.address,
-          ""
-        )
+        certificateRegistry.connect(university1).issueCertificate(sampleHash1, student1.address, ""
+        , 2024)
       ).to.be.revertedWithCustomError(certificateRegistry, "UnauthorizedIssuer");
     });
   });
 
   describe("Certificate Revocation Flow", function () {
     beforeEach(async function () {
-      await certificateRegistry.connect(university1).issueCertificate(
-        sampleHash1,
-        student1.address,
-        ""
-      );
+      await certificateRegistry.connect(university1).issueCertificate(sampleHash1, student1.address, ""
+      , 2024);
     });
 
     it("should allow issuing institution to revoke certificate", async function () {
@@ -371,11 +321,8 @@ describe("CertificateRegistry", function () {
 
   describe("Certificate Verification", function () {
     beforeEach(async function () {
-      await certificateRegistry.connect(university1).issueCertificate(
-        sampleHash1,
-        student1.address,
-        ""
-      );
+      await certificateRegistry.connect(university1).issueCertificate(sampleHash1, student1.address, ""
+      , 2024);
     });
 
     it("should verify valid certificate", async function () {
@@ -443,21 +390,12 @@ describe("CertificateRegistry", function () {
     });
 
     it("should return all certificates for a student", async function () {
-      await certificateRegistry.connect(university1).issueCertificate(
-        sampleHash1,
-        student1.address,
-        ""
-      );
-      await certificateRegistry.connect(university1).issueCertificate(
-        sampleHash2,
-        student1.address,
-        ""
-      );
-      await certificateRegistry.connect(university1).issueCertificate(
-        sampleHash3,
-        student1.address,
-        ""
-      );
+      await certificateRegistry.connect(university1).issueCertificate(sampleHash1, student1.address, ""
+      , 2024);
+      await certificateRegistry.connect(university1).issueCertificate(sampleHash2, student1.address, ""
+      , 2024);
+      await certificateRegistry.connect(university1).issueCertificate(sampleHash3, student1.address, ""
+      , 2024);
 
       const certs = await certificateRegistry.getCertificatesByStudent(student1.address);
       expect(certs.length).to.equal(3);
@@ -467,16 +405,10 @@ describe("CertificateRegistry", function () {
     });
 
     it("should return certificates only for queried student", async function () {
-      await certificateRegistry.connect(university1).issueCertificate(
-        sampleHash1,
-        student1.address,
-        ""
-      );
-      await certificateRegistry.connect(university1).issueCertificate(
-        sampleHash2,
-        student2.address,
-        ""
-      );
+      await certificateRegistry.connect(university1).issueCertificate(sampleHash1, student1.address, ""
+      , 2024);
+      await certificateRegistry.connect(university1).issueCertificate(sampleHash2, student2.address, ""
+      , 2024);
 
       const student1Certs = await certificateRegistry.getCertificatesByStudent(student1.address);
       const student2Certs = await certificateRegistry.getCertificatesByStudent(student2.address);
@@ -488,11 +420,8 @@ describe("CertificateRegistry", function () {
     });
 
     it("should include revoked certificates in student's list", async function () {
-      await certificateRegistry.connect(university1).issueCertificate(
-        sampleHash1,
-        student1.address,
-        ""
-      );
+      await certificateRegistry.connect(university1).issueCertificate(sampleHash1, student1.address, ""
+      , 2024);
       await certificateRegistry.connect(university1).revokeCertificate(1, "Test");
 
       const certs = await certificateRegistry.getCertificatesByStudent(student1.address);
@@ -518,16 +447,10 @@ describe("CertificateRegistry", function () {
     });
 
     it("should return all certificates for an institution", async function () {
-      await certificateRegistry.connect(university1).issueCertificate(
-        sampleHash1,
-        student1.address,
-        ""
-      );
-      await certificateRegistry.connect(university1).issueCertificate(
-        sampleHash2,
-        student2.address,
-        ""
-      );
+      await certificateRegistry.connect(university1).issueCertificate(sampleHash1, student1.address, ""
+      , 2024);
+      await certificateRegistry.connect(university1).issueCertificate(sampleHash2, student2.address, ""
+      , 2024);
 
       const [certIds, total] = await certificateRegistry.getCertificatesByInstitution(
         university1.address,
@@ -545,11 +468,8 @@ describe("CertificateRegistry", function () {
       // Issue 5 certificates
       for (let i = 0; i < 5; i++) {
         const hash = ethers.keccak256(ethers.toUtf8Bytes(`Certificate ${i}`));
-        await certificateRegistry.connect(university1).issueCertificate(
-          hash,
-          student1.address,
-          ""
-        );
+        await certificateRegistry.connect(university1).issueCertificate(hash, student1.address, ""
+        , 2024);
       }
 
       // Get first page (2 items)
@@ -582,16 +502,10 @@ describe("CertificateRegistry", function () {
     });
 
     it("should filter certificates by institution", async function () {
-      await certificateRegistry.connect(university1).issueCertificate(
-        sampleHash1,
-        student1.address,
-        ""
-      );
-      await certificateRegistry.connect(university2).issueCertificate(
-        sampleHash2,
-        student1.address,
-        ""
-      );
+      await certificateRegistry.connect(university1).issueCertificate(sampleHash1, student1.address, ""
+      , 2024);
+      await certificateRegistry.connect(university2).issueCertificate(sampleHash2, student1.address, ""
+      , 2024);
 
       const [uni1Certs] = await certificateRegistry.getCertificatesByInstitution(
         university1.address,
@@ -611,11 +525,8 @@ describe("CertificateRegistry", function () {
     });
 
     it("should return empty array if offset exceeds total", async function () {
-      await certificateRegistry.connect(university1).issueCertificate(
-        sampleHash1,
-        student1.address,
-        ""
-      );
+      await certificateRegistry.connect(university1).issueCertificate(sampleHash1, student1.address, ""
+      , 2024);
 
       const [certIds, total] = await certificateRegistry.getCertificatesByInstitution(
         university1.address,
@@ -631,11 +542,8 @@ describe("CertificateRegistry", function () {
   describe("Authorization Tests", function () {
     it("should only allow authorized institution to issue", async function () {
       await expect(
-        certificateRegistry.connect(randomUser).issueCertificate(
-          sampleHash1,
-          student1.address,
-          ""
-        )
+        certificateRegistry.connect(randomUser).issueCertificate(sampleHash1, student1.address, ""
+        , 2024)
       ).to.be.revertedWithCustomError(certificateRegistry, "UnauthorizedIssuer");
     });
 
@@ -644,11 +552,8 @@ describe("CertificateRegistry", function () {
       await institutionRegistry.connect(university2).registerInstitution("Stanford", "stanford.edu");
 
       await expect(
-        certificateRegistry.connect(university2).issueCertificate(
-          sampleHash1,
-          student1.address,
-          ""
-        )
+        certificateRegistry.connect(university2).issueCertificate(sampleHash1, student1.address, ""
+        , 2024)
       ).to.be.revertedWithCustomError(certificateRegistry, "UnauthorizedIssuer");
     });
 
@@ -694,22 +599,16 @@ describe("CertificateRegistry", function () {
     it("should handle certificate with very long metadata URI", async function () {
       const longURI = "ipfs://" + "a".repeat(500);
       
-      await certificateRegistry.connect(university1).issueCertificate(
-        sampleHash1,
-        student1.address,
-        longURI
-      );
+      await certificateRegistry.connect(university1).issueCertificate(sampleHash1, student1.address, longURI
+      , 2024);
 
       const cert = await certificateRegistry.getCertificate(1);
       expect(cert.metadataURI).to.equal(longURI);
     });
 
     it("should handle revocation with very long reason", async function () {
-      await certificateRegistry.connect(university1).issueCertificate(
-        sampleHash1,
-        student1.address,
-        ""
-      );
+      await certificateRegistry.connect(university1).issueCertificate(sampleHash1, student1.address, ""
+      , 2024);
 
       const longReason = "Reason: " + "x".repeat(500);
       await certificateRegistry.connect(university1).revokeCertificate(1, longReason);
@@ -720,11 +619,8 @@ describe("CertificateRegistry", function () {
 
     it("should handle multiple operations in sequence", async function () {
       // Issue certificate
-      await certificateRegistry.connect(university1).issueCertificate(
-        sampleHash1,
-        student1.address,
-        ""
-      );
+      await certificateRegistry.connect(university1).issueCertificate(sampleHash1, student1.address, ""
+      , 2024);
 
       // Verify it's valid
       let [isValid] = await certificateRegistry.isValidCertificate(sampleHash1);
@@ -738,11 +634,8 @@ describe("CertificateRegistry", function () {
       expect(isValid).to.be.false;
 
       // Issue new certificate to same student
-      await certificateRegistry.connect(university1).issueCertificate(
-        sampleHash2,
-        student1.address,
-        ""
-      );
+      await certificateRegistry.connect(university1).issueCertificate(sampleHash2, student1.address, ""
+      , 2024);
 
       // Verify student has 2 certificates
       const certs = await certificateRegistry.getCertificatesByStudent(student1.address);
@@ -755,16 +648,10 @@ describe("CertificateRegistry", function () {
       await institutionRegistry.connect(superAdmin).approveInstitution(university2.address);
 
       // Both issue certificates
-      await certificateRegistry.connect(university1).issueCertificate(
-        sampleHash1,
-        student1.address,
-        ""
-      );
-      await certificateRegistry.connect(university2).issueCertificate(
-        sampleHash2,
-        student1.address,
-        ""
-      );
+      await certificateRegistry.connect(university1).issueCertificate(sampleHash1, student1.address, ""
+      , 2024);
+      await certificateRegistry.connect(university2).issueCertificate(sampleHash2, student1.address, ""
+      , 2024);
 
       // Verify total count
       expect(await certificateRegistry.getTotalCertificates()).to.equal(2);
@@ -784,11 +671,8 @@ describe("CertificateRegistry", function () {
       // This tests ID generation logic
       expect(await certificateRegistry.getTotalCertificates()).to.equal(0);
       
-      await certificateRegistry.connect(university1).issueCertificate(
-        sampleHash1,
-        student1.address,
-        ""
-      );
+      await certificateRegistry.connect(university1).issueCertificate(sampleHash1, student1.address, ""
+      , 2024);
       
       const cert = await certificateRegistry.getCertificate(1);
       expect(cert.certificateId).to.equal(1);
@@ -837,13 +721,11 @@ describe("CertificateRegistry", function () {
       certId = await certificateRegistry.connect(university1).issueCertificate.staticCall(
         sampleHash1,
         student1.address,
-        metadataURI
+        metadataURI,
+        2024
       );
-      await certificateRegistry.connect(university1).issueCertificate(
-        sampleHash1,
-        student1.address,
-        metadataURI
-      );
+      await certificateRegistry.connect(university1).issueCertificate(sampleHash1, student1.address, metadataURI
+      , 2024);
     });
 
     it("should return true for existing certificate", async function () {
@@ -862,13 +744,11 @@ describe("CertificateRegistry", function () {
       const certId2 = await certificateRegistry.connect(university1).issueCertificate.staticCall(
         sampleHash2,
         student2.address,
-        metadataURI
+        metadataURI,
+        2024
       );
-      await certificateRegistry.connect(university1).issueCertificate(
-        sampleHash2,
-        student2.address,
-        metadataURI
-      );
+      await certificateRegistry.connect(university1).issueCertificate(sampleHash2, student2.address, metadataURI
+      , 2024);
 
       expect(await certificateRegistry.certificateExists(certId)).to.be.true;
       expect(await certificateRegistry.certificateExists(certId2)).to.be.true;
@@ -895,11 +775,8 @@ describe("CertificateRegistry", function () {
 
   describe("Helper Functions - hashExists", function () {
     beforeEach(async function () {
-      await certificateRegistry.connect(university1).issueCertificate(
-        sampleHash1,
-        student1.address,
-        metadataURI
-      );
+      await certificateRegistry.connect(university1).issueCertificate(sampleHash1, student1.address, metadataURI
+      , 2024);
     });
 
     it("should return true for existing hash", async function () {
@@ -915,11 +792,8 @@ describe("CertificateRegistry", function () {
     });
 
     it("should work for multiple hashes", async function () {
-      await certificateRegistry.connect(university1).issueCertificate(
-        sampleHash2,
-        student2.address,
-        metadataURI
-      );
+      await certificateRegistry.connect(university1).issueCertificate(sampleHash2, student2.address, metadataURI
+      , 2024);
 
       expect(await certificateRegistry.hashExists(sampleHash1)).to.be.true;
       expect(await certificateRegistry.hashExists(sampleHash2)).to.be.true;
@@ -931,22 +805,16 @@ describe("CertificateRegistry", function () {
       expect(await certificateRegistry.hashExists(sampleHash2)).to.be.false;
       
       // Issue certificate
-      await certificateRegistry.connect(university1).issueCertificate(
-        sampleHash2,
-        student1.address,
-        metadataURI
-      );
+      await certificateRegistry.connect(university1).issueCertificate(sampleHash2, student1.address, metadataURI
+      , 2024);
       
       // Check after issuing
       expect(await certificateRegistry.hashExists(sampleHash2)).to.be.true;
       
       // Attempting to issue duplicate should revert
       await expect(
-        certificateRegistry.connect(university1).issueCertificate(
-          sampleHash2,
-          student1.address,
-          metadataURI
-        )
+        certificateRegistry.connect(university1).issueCertificate(sampleHash2, student1.address, metadataURI
+        , 2024)
       ).to.be.revertedWithCustomError(certificateRegistry, "CertificateAlreadyExists");
     });
 
@@ -954,13 +822,11 @@ describe("CertificateRegistry", function () {
       const certId = await certificateRegistry.connect(university1).issueCertificate.staticCall(
         sampleHash2,
         student1.address,
-        metadataURI
+        metadataURI,
+        2024
       );
-      await certificateRegistry.connect(university1).issueCertificate(
-        sampleHash2,
-        student1.address,
-        metadataURI
-      );
+      await certificateRegistry.connect(university1).issueCertificate(sampleHash2, student1.address, metadataURI
+      , 2024);
 
       await certificateRegistry.connect(university1).revokeCertificate(certId, "Test revocation");
       
@@ -982,35 +848,29 @@ describe("CertificateRegistry", function () {
       certId1 = await certificateRegistry.connect(university1).issueCertificate.staticCall(
         sampleHash1,
         student1.address,
-        metadataURI
+        metadataURI,
+        2024
       );
-      await certificateRegistry.connect(university1).issueCertificate(
-        sampleHash1,
-        student1.address,
-        metadataURI
-      );
+      await certificateRegistry.connect(university1).issueCertificate(sampleHash1, student1.address, metadataURI
+      , 2024);
 
       certId2 = await certificateRegistry.connect(university1).issueCertificate.staticCall(
         sampleHash2,
         student2.address,
-        "ipfs://QmY..."
+        "ipfs://QmY...",
+        2023
       );
-      await certificateRegistry.connect(university1).issueCertificate(
-        sampleHash2,
-        student2.address,
-        "ipfs://QmY..."
-      );
+      await certificateRegistry.connect(university1).issueCertificate(sampleHash2, student2.address, "ipfs://QmY..."
+      , 2024);
 
       certId3 = await certificateRegistry.connect(university1).issueCertificate.staticCall(
         sampleHash3,
         student1.address,
-        "ipfs://QmZ..."
+        "ipfs://QmZ...",
+        2022
       );
-      await certificateRegistry.connect(university1).issueCertificate(
-        sampleHash3,
-        student1.address,
-        "ipfs://QmZ..."
-      );
+      await certificateRegistry.connect(university1).issueCertificate(sampleHash3, student1.address, "ipfs://QmZ..."
+      , 2024);
     });
 
     it("should return batch of existing certificates", async function () {
@@ -1098,13 +958,11 @@ describe("CertificateRegistry", function () {
         const id = await certificateRegistry.connect(university1).issueCertificate.staticCall(
           hash,
           student1.address,
-          metadataURI
+          metadataURI,
+          2024
         );
-        await certificateRegistry.connect(university1).issueCertificate(
-          hash,
-          student1.address,
-          metadataURI
-        );
+        await certificateRegistry.connect(university1).issueCertificate(hash, student1.address, metadataURI
+        , 2024);
         certIds.push(id);
       }
 

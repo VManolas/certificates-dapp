@@ -20,12 +20,15 @@ contract MockAuthVerifier {
     
     /**
      * @notice Verify a ZK proof (MOCK VERSION)
+     * @param publicInputs Array of public inputs to verify
      * @return True if proof is valid (always true in mock unless configured otherwise)
      */
     function verify(
         bytes calldata /* proof */,
-        bytes32 /* publicInputsHash */
+        bytes32[] calldata publicInputs
     ) external view returns (bool) {
+        // Silence unused parameter warning by accessing length
+        publicInputs;
         return alwaysPass;
     }
     

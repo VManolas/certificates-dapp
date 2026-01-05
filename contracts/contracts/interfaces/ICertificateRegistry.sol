@@ -18,6 +18,7 @@ interface ICertificateRegistry {
         bool isRevoked;
         uint256 revokedAt;
         string revocationReason;
+        uint16 graduationYear;  // Year of graduation (1900-2100)
     }
 
     /// @notice Emitted when a new certificate is issued
@@ -41,11 +42,13 @@ interface ICertificateRegistry {
     /// @param documentHash SHA-256 hash of the PDF document
     /// @param studentWallet Wallet address of the student
     /// @param metadataURI Optional IPFS/Arweave URI for additional metadata
+    /// @param graduationYear Year of graduation (1900-2100)
     /// @return certificateId The unique ID of the issued certificate
     function issueCertificate(
         bytes32 documentHash,
         address studentWallet,
-        string calldata metadataURI
+        string calldata metadataURI,
+        uint16 graduationYear
     ) external returns (uint256 certificateId);
 
     /// @notice Revoke a certificate
@@ -115,11 +118,13 @@ interface ICertificateRegistry {
     /// @param documentHashes Array of SHA-256 hashes of the PDF documents
     /// @param studentWallets Array of wallet addresses of the students
     /// @param metadataURIs Array of optional IPFS/Arweave URIs for additional metadata
+    /// @param graduationYears Array of graduation years (1900-2100)
     /// @return certificateIds Array of unique IDs of the issued certificates
     function issueCertificatesBatch(
         bytes32[] calldata documentHashes,
         address[] calldata studentWallets,
-        string[] calldata metadataURIs
+        string[] calldata metadataURIs,
+        uint16[] calldata graduationYears
     ) external returns (uint256[] memory certificateIds);
 }
 

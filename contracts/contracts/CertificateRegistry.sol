@@ -21,7 +21,7 @@ import "./interfaces/IInstitutionRegistry.sol";
  * 
  * Security:
  * - Only verified and active institutions can issue certificates
- * - Only issuing institution or super admin can revoke
+ * - Only issuing institution or admin can revoke
  * - Reentrancy protection on state-changing functions
  * - Duplicate hash prevention
  */
@@ -35,8 +35,8 @@ contract CertificateRegistry is
     /// @notice Contract version for tracking upgrades
     string public constant VERSION = "1.0.0";
 
-    /// @notice Role identifier for super admin
-    bytes32 public constant SUPER_ADMIN_ROLE = keccak256("SUPER_ADMIN_ROLE");
+    /// @notice Role identifier for admin
+    bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
 
     /// @notice Struct to track contract upgrades
     struct UpgradeInfo {
@@ -96,7 +96,7 @@ contract CertificateRegistry is
         __ReentrancyGuard_init();
 
         _grantRole(DEFAULT_ADMIN_ROLE, superAdmin);
-        _grantRole(SUPER_ADMIN_ROLE, superAdmin);
+        _grantRole(ADMIN_ROLE, superAdmin);
 
         institutionRegistry = IInstitutionRegistry(_institutionRegistry);
         _certificateIdCounter = 1; // Start from 1 so 0 means "not found"
@@ -115,17 +115,25 @@ contract CertificateRegistry is
      * @param documentHash SHA-256 hash of the PDF document
      * @param studentWallet Wallet address of the student receiving the certificate
      * @param metadataURI Optional IPFS/Arweave URI for additional metadata
+     * @param graduationYear Year of graduation (1900-2100)
      * @return certificateId The unique ID of the issued certificate
      * @dev Only callable by verified and active institutions
      */
     function issueCertificate(
         bytes32 documentHash,
         address studentWallet,
-        string calldata metadataURI
+        string calldata metadataURI,
+        uint16 graduationYear
     ) external nonReentrant returns (uint256) {
         // Validate inputs
         if (studentWallet == address(0)) revert InvalidStudentAddress();
         if (documentHash == bytes32(0)) revert InvalidDocumentHash();
+        
+        // Validate graduation year (1900-2100)
+        require(
+            graduationYear >= 1900 && graduationYear <= 2100,
+            "Invalid graduation year: must be between 1900 and 2100"
+        );
 
         // Check institution authorization
         if (!institutionRegistry.canIssueCertificates(msg.sender))
@@ -148,7 +156,8 @@ contract CertificateRegistry is
             metadataURI: metadataURI,
             isRevoked: false,
             revokedAt: 0,
-            revocationReason: ""
+            revocationReason: "",
+            graduationYear: graduationYear
         });
 
         // Update mappings
@@ -173,7 +182,7 @@ contract CertificateRegistry is
      * @notice Revoke a certificate
      * @param certificateId The ID of the certificate to revoke
      * @param reason The reason for revocation
-     * @dev Only callable by the issuing institution or super admin
+     * @dev Only callable by the issuing institution or admin
      */
     function revokeCertificate(
         uint256 certificateId,
@@ -187,10 +196,10 @@ contract CertificateRegistry is
         // Check if already revoked
         if (cert.isRevoked) revert CertificateAlreadyRevoked();
 
-        // Check authorization (issuer or super admin)
+        // Check authorization (issuer or admin)
         if (
             cert.issuingInstitution != msg.sender &&
-            !hasRole(SUPER_ADMIN_ROLE, msg.sender)
+            !hasRole(ADMIN_ROLE, msg.sender)
         ) revert NotCertificateIssuer();
 
         // Revoke certificate
@@ -332,6 +341,7 @@ contract CertificateRegistry is
      * @param documentHashes Array of SHA-256 hashes of the PDF documents
      * @param studentWallets Array of wallet addresses of the students
      * @param metadataURIs Array of optional IPFS/Arweave URIs for additional metadata
+     * @param graduationYears Array of graduation years (1900-2100)
      * @return certificateIds Array of unique IDs of the issued certificates
      * @dev Only callable by verified and active institutions
      *      All arrays must have the same length
@@ -341,12 +351,17 @@ contract CertificateRegistry is
     function issueCertificatesBatch(
         bytes32[] calldata documentHashes,
         address[] calldata studentWallets,
-        string[] calldata metadataURIs
+        string[] calldata metadataURIs,
+        uint16[] calldata graduationYears
     ) external nonReentrant returns (uint256[] memory) {
         // Validate array lengths
         uint256 length = documentHashes.length;
         if (length == 0) revert InvalidDocumentHash();
-        if (length != studentWallets.length || length != metadataURIs.length) {
+        
+        // Batch size limit validation (1-100 certificates per batch)
+        require(length <= 100, "Batch size must be between 1 and 100");
+        
+        if (length != studentWallets.length || length != metadataURIs.length || length != graduationYears.length) {
             revert InvalidDocumentHash(); // Reusing error for invalid input
         }
 
@@ -362,6 +377,12 @@ contract CertificateRegistry is
             // Validate inputs
             if (studentWallets[i] == address(0)) revert InvalidStudentAddress();
             if (documentHashes[i] == bytes32(0)) revert InvalidDocumentHash();
+            
+            // Validate graduation year (1900-2100)
+            require(
+                graduationYears[i] >= 1900 && graduationYears[i] <= 2100,
+                "Invalid graduation year: must be between 1900 and 2100"
+            );
 
             // Check for duplicate hash
             if (hashToCertificateId[documentHashes[i]] != 0)
@@ -380,7 +401,8 @@ contract CertificateRegistry is
                 metadataURI: metadataURIs[i],
                 isRevoked: false,
                 revokedAt: 0,
-                revocationReason: ""
+                revocationReason: "",
+                graduationYear: graduationYears[i]
             });
 
             // Update mappings
@@ -479,12 +501,12 @@ contract CertificateRegistry is
      * @notice Record a contract upgrade
      * @param newVersion Version string for the upgrade (e.g., "2.0.0")
      * @param notes Description of changes in this upgrade
-     * @dev Only callable by super admin. Should be called after upgrading the contract.
+     * @dev Only callable by admin. Should be called after upgrading the contract.
      */
     function recordUpgrade(
         string calldata newVersion,
         string calldata notes
-    ) external onlyRole(SUPER_ADMIN_ROLE) {
+    ) external onlyRole(ADMIN_ROLE) {
         upgradeHistory.push(UpgradeInfo({
             version: newVersion,
             timestamp: block.timestamp,
@@ -503,11 +525,11 @@ contract CertificateRegistry is
     /**
      * @notice Update the institution registry address
      * @param _institutionRegistry New InstitutionRegistry address
-     * @dev Only callable by super admin
+     * @dev Only callable by admin
      */
     function setInstitutionRegistry(
         address _institutionRegistry
-    ) external onlyRole(SUPER_ADMIN_ROLE) {
+    ) external onlyRole(ADMIN_ROLE) {
         if (_institutionRegistry == address(0)) revert InvalidAddress();
         institutionRegistry = IInstitutionRegistry(_institutionRegistry);
     }
@@ -515,10 +537,10 @@ contract CertificateRegistry is
     /**
      * @notice Authorize contract upgrade
      * @param newImplementation Address of the new implementation
-     * @dev Only callable by super admin
+     * @dev Only callable by admin
      */
     function _authorizeUpgrade(
         address newImplementation
-    ) internal override onlyRole(SUPER_ADMIN_ROLE) {}
+    ) internal override onlyRole(ADMIN_ROLE) {}
 }
 
