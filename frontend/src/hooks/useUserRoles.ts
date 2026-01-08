@@ -10,7 +10,7 @@ import EmployerRegistryABI from '@/contracts/abis/EmployerRegistry.json';
 export type UserRole = 'university' | 'student' | 'employer' | 'admin' | null;
 
 // Computed role constant for contract queries
-const SUPER_ADMIN_ROLE = keccak256(toBytes('SUPER_ADMIN_ROLE'));
+const ADMIN_ROLE = keccak256(toBytes('ADMIN_ROLE'));
 
 // Contract addresses - these should match your deployed contracts
 const INSTITUTION_REGISTRY_ADDRESS = import.meta.env.VITE_INSTITUTION_REGISTRY_ADDRESS as `0x${string}`;
@@ -50,7 +50,7 @@ export interface DetectedRoles {
  * 4. Employer - Must register with company details (if not admin/university/student)
  * 
  * Queries multiple contracts in parallel to determine:
- * - Admin status (SUPER_ADMIN_ROLE)
+ * - Admin status (ADMIN_ROLE)
  * - University registration and verification status
  * - Student certificate ownership
  * - Employer registration status
@@ -75,14 +75,14 @@ export function useUserRoles(): DetectedRoles {
         address: INSTITUTION_REGISTRY_ADDRESS,
         abi: InstitutionRegistryABI.abi,
         functionName: 'hasRole',
-        args: [SUPER_ADMIN_ROLE, address],
+        args: [ADMIN_ROLE, address],
       },
       // Check admin role in CertificateRegistry (backup check)
       {
         address: CERTIFICATE_REGISTRY_ADDRESS,
         abi: CertificateRegistryABI.abi,
         functionName: 'hasRole',
-        args: [SUPER_ADMIN_ROLE, address],
+        args: [ADMIN_ROLE, address],
       },
       // Get institution data
       {

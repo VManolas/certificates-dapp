@@ -46,7 +46,9 @@ import { useAuthStore } from '@/store/authStore';
 // Contract address (will be set after deployment)
 const ZK_AUTH_REGISTRY_ADDRESS = import.meta.env.VITE_ZK_AUTH_REGISTRY_ADDRESS as `0x${string}` | undefined;
 
+// UserRole type includes all roles, but ZK auth only supports student and employer
 export type UserRole = 'student' | 'university' | 'employer' | 'admin' | null;
+export type ZKAuthRole = 'student' | 'employer'; // Only these roles can use ZK authentication
 
 interface ZKAuthState {
   isAuthenticated: boolean;
@@ -93,10 +95,10 @@ export function useZKAuth() {
   /**
    * Register new user with commitment
    * 
-   * @param role User role (student, university, employer)
+   * @param role User role (student or employer only - universities and admins use Web3 auth)
    * @returns Commitment hash
    */
-  const register = useCallback(async (role: 'student' | 'university' | 'employer') => {
+  const register = useCallback(async (role: ZKAuthRole) => {
     if (!address || !isConnected) {
       throw new Error('Wallet not connected');
     }
@@ -119,11 +121,13 @@ export function useZKAuth() {
 
       logger.debug('Commitment computed', { commitment });
 
-      // Step 3: Generate ZK proof
-      // NOTE: Using simplified proof for Phase 1 development.
-      // Phase 2 will integrate full cryptographic verification.
+      // Step 3: Generate ZK proof using Noir circuit
       logger.info('🔐 Generating secure authentication proof...');
-      const proof = '0x' + '00'.repeat(768); // Simplified proof for Phase 1
+      const { generateAuthProof } = await import('@/lib/zkAuth');
+      const proof = await generateAuthProof(
+        { privateKey, salt, commitment, role },
+        address
+      );
 
       logger.debug('Authentication proof generated for registration');
 
@@ -144,12 +148,11 @@ export function useZKAuth() {
       logger.info('Credentials encrypted and stored');
 
       // Step 5: Register commitment on-chain
-      // Map role to enum: None=0, Student=1, University=2, Employer=3, Admin=4
+      // Map role to enum: None=0, Student=1, Employer=2
       const roleEnum = 
         role === 'student' ? 1 : 
-        role === 'university' ? 2 : 
-        role === 'employer' ? 3 : 
-        role === 'admin' ? 4 : 1; // Default to student if unknown
+        role === 'employer' ? 2 : 
+        1; // Default to student if unknown
 
       writeContract({
         address: ZK_AUTH_REGISTRY_ADDRESS,
@@ -243,11 +246,10 @@ export function useZKAuth() {
       setZKRole(credentials.role);
       logger.debug(`Role restored from credentials: ${credentials.role}`);
 
-      // Step 3: Generate login proof
-      // NOTE: Using simplified proof for Phase 1 development.
-      // Phase 2 will integrate full cryptographic verification.
+      // Step 3: Generate login proof using Noir circuit
       logger.info('🔐 Generating secure authentication proof...');
-      const proof = '0x' + '00'.repeat(768); // Simplified proof for Phase 1
+      const { generateAuthProof } = await import('@/lib/zkAuth');
+      const proof = await generateAuthProof(credentials, accounts[0]);
       logger.debug('Authentication proof generated for login');
 
       // Step 4: Start session on-chain

@@ -1,6 +1,7 @@
 // frontend/src/components/__tests__/RoleSelectorModal.test.tsx
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { MemoryRouter } from 'react-router-dom';
 import { RoleSelectorModal } from '../RoleSelectorModal';
 import { useAuthStore } from '@/store/authStore';
 
@@ -10,6 +11,15 @@ vi.mock('@/store/authStore', () => ({
 }));
 
 const mockUseAuthStore = useAuthStore as unknown as ReturnType<typeof vi.fn>;
+
+// Helper to render with Router context
+const renderWithRouter = (ui: React.ReactElement) => {
+  return render(
+    <MemoryRouter>
+      {ui}
+    </MemoryRouter>
+  );
+};
 
 describe('RoleSelectorModal', () => {
   const mockSetRole = vi.fn();
@@ -27,7 +37,7 @@ describe('RoleSelectorModal', () => {
   });
 
   it('renders nothing when isOpen is false', () => {
-    const { container } = render(
+    const { container } = renderWithRouter(
       <RoleSelectorModal
         isOpen={false}
         onClose={mockOnClose}
@@ -38,7 +48,7 @@ describe('RoleSelectorModal', () => {
   });
 
   it('renders modal when isOpen is true', () => {
-    render(
+    renderWithRouter(
       <RoleSelectorModal
         isOpen={true}
         onClose={mockOnClose}
@@ -49,7 +59,7 @@ describe('RoleSelectorModal', () => {
   });
 
   it('shows all 4 roles in modal', () => {
-    render(
+    renderWithRouter(
       <RoleSelectorModal
         isOpen={true}
         onClose={mockOnClose}
@@ -64,7 +74,7 @@ describe('RoleSelectorModal', () => {
   });
 
   it('shows description for available roles', () => {
-    render(
+    renderWithRouter(
       <RoleSelectorModal
         isOpen={true}
         onClose={mockOnClose}
@@ -77,7 +87,7 @@ describe('RoleSelectorModal', () => {
   });
 
   it('shows disabled reason for unavailable roles', () => {
-    render(
+    renderWithRouter(
       <RoleSelectorModal
         isOpen={true}
         onClose={mockOnClose}
@@ -85,12 +95,12 @@ describe('RoleSelectorModal', () => {
       />
     );
 
-    expect(screen.getByText('Restricted to platform administrators with SUPER_ADMIN_ROLE')).toBeInTheDocument();
+    expect(screen.getByText('Restricted to platform administrators with ADMIN_ROLE')).toBeInTheDocument();
     expect(screen.getByText('Register your institution first to access this role')).toBeInTheDocument();
   });
 
   it('shows lock icon for disabled roles', () => {
-    render(
+    renderWithRouter(
       <RoleSelectorModal
         isOpen={true}
         onClose={mockOnClose}
@@ -103,7 +113,7 @@ describe('RoleSelectorModal', () => {
   });
 
   it('calls handlers when selecting an available role', () => {
-    render(
+    renderWithRouter(
       <RoleSelectorModal
         isOpen={true}
         onClose={mockOnClose}
@@ -127,7 +137,7 @@ describe('RoleSelectorModal', () => {
   });
 
   it('does not call handlers when clicking disabled role', () => {
-    render(
+    renderWithRouter(
       <RoleSelectorModal
         isOpen={true}
         onClose={mockOnClose}
@@ -151,7 +161,7 @@ describe('RoleSelectorModal', () => {
   });
 
   it('shows university verification info when provided', () => {
-    render(
+    renderWithRouter(
       <RoleSelectorModal
         isOpen={true}
         onClose={mockOnClose}
@@ -164,7 +174,7 @@ describe('RoleSelectorModal', () => {
   });
 
   it('shows pending verification for unverified university', () => {
-    render(
+    renderWithRouter(
       <RoleSelectorModal
         isOpen={true}
         onClose={mockOnClose}
@@ -177,7 +187,7 @@ describe('RoleSelectorModal', () => {
   });
 
   it('shows student certificate count', () => {
-    render(
+    renderWithRouter(
       <RoleSelectorModal
         isOpen={true}
         onClose={mockOnClose}
@@ -190,7 +200,7 @@ describe('RoleSelectorModal', () => {
   });
 
   it('shows singular certificate for count of 1', () => {
-    render(
+    renderWithRouter(
       <RoleSelectorModal
         isOpen={true}
         onClose={mockOnClose}
@@ -203,7 +213,7 @@ describe('RoleSelectorModal', () => {
   });
 
   it('closes modal when clicking backdrop', () => {
-    const { container } = render(
+    const { container } = renderWithRouter(
       <RoleSelectorModal
         isOpen={true}
         onClose={mockOnClose}
@@ -221,7 +231,7 @@ describe('RoleSelectorModal', () => {
   });
 
   it('shows helper text about role switching', () => {
-    render(
+    renderWithRouter(
       <RoleSelectorModal
         isOpen={true}
         onClose={mockOnClose}
@@ -233,7 +243,7 @@ describe('RoleSelectorModal', () => {
   });
 
   it('applies correct styling to available roles', () => {
-    render(
+    renderWithRouter(
       <RoleSelectorModal
         isOpen={true}
         onClose={mockOnClose}
@@ -251,7 +261,7 @@ describe('RoleSelectorModal', () => {
   });
 
   it('applies correct styling to disabled roles', () => {
-    render(
+    renderWithRouter(
       <RoleSelectorModal
         isOpen={true}
         onClose={mockOnClose}

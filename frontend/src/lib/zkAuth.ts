@@ -263,11 +263,11 @@ export async function generateAuthProof(
     console.log('[ZK Auth] Wallet (normalized):', normalizedAddress);
     console.log('[ZK Auth] ==========================================');
     
-    // Initialize the Barretenberg backend
-    const backend = new BarretenbergBackend(authCircuit as any);
+    // Initialize the BarretenbergBackend
+    const backend = new BarretenbergBackend(authCircuit.bytecode);
     
     // Initialize Noir with the circuit
-    const noir = new Noir(authCircuit as any);
+    const noir = new Noir(authCircuit as any, backend);
     
     // Prepare inputs for the circuit
     // Convert all inputs to Field-compatible format (decimal strings)
@@ -294,12 +294,11 @@ export async function generateAuthProof(
     console.log('[ZK Auth] ==========================================');
     console.log('[ZK Auth] Generating proof (this may take a few seconds)...');
     
-    // Generate the witness
+    // Execute the circuit to get witness
     const { witness } = await noir.execute(inputs);
-    
     console.log('[ZK Auth] Witness generated, creating proof...');
     
-    // Generate the proof using the backend
+    // Generate proof from witness
     const proof = await backend.generateProof(witness);
     
     console.log('[ZK Auth] Proof generated successfully!');
@@ -308,7 +307,7 @@ export async function generateAuthProof(
     // Convert proof to hex string for contract submission
     const proofHex = ethers.utils.hexlify(proof.proof);
     
-    // Cleanup
+    // Cleanup backend
     await backend.destroy();
     
     return proofHex;

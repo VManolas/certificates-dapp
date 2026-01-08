@@ -63,7 +63,7 @@ export interface UnifiedAuthState {
   // ZK Auth specific (when authMethod === 'zk')
   zkAuth: {
     hasCredentials: boolean;
-    register: (role: 'student' | 'university' | 'employer') => Promise<string>;
+    register: (role: 'student' | 'employer') => Promise<string>;
     login: () => Promise<void>;
     clearCredentials: () => void;
   };

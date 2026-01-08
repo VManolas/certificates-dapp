@@ -135,14 +135,15 @@ describe('useUserRoles', () => {
 
       const { result } = renderHook(() => useUserRoles());
 
+      // Admin takes priority - can ONLY be admin
       expect(result.current.isAdmin).toBe(true);
       expect(result.current.isUniversity).toBe(true);
       expect(result.current.availableRoles).toContain('admin');
-      expect(result.current.availableRoles).toContain('university');
-      expect(result.current.availableRoles).toContain('employer');
+      expect(result.current.availableRoles).toEqual(['admin']); // Only admin in hierarchy
+      expect(result.current.canRegisterAsEmployer).toBe(false);
     });
 
-    it('should always include employer in available roles', async () => {
+    it('should allow new users to register as employer', async () => {
       mockUseReadContracts.mockReturnValue({
         data: [
           { result: false },
@@ -157,8 +158,10 @@ describe('useUserRoles', () => {
 
       const { result } = renderHook(() => useUserRoles());
 
-      expect(result.current.availableRoles).toContain('employer');
-      expect(result.current.availableRoles).toHaveLength(1);
+      // New user with no roles - can register as employer
+      expect(result.current.availableRoles).toEqual([]);
+      expect(result.current.canRegisterAsEmployer).toBe(true);
+      expect(result.current.primaryRole).toBeNull();
     });
 
     it('should return loading state while fetching', () => {

@@ -16,7 +16,7 @@
 import { useState } from 'react';
 import { useAccount } from 'wagmi';
 import { useAuthStore } from '@/store/authStore';
-import { useZKAuth } from '@/hooks/useZKAuth';
+import { useZKAuth, type ZKAuthRole } from '@/hooks/useZKAuth';
 import { logger } from '@/lib/logger';
 
 interface ZKAuthUpgradeProps {
@@ -43,12 +43,12 @@ export function ZKAuthUpgrade({ variant = 'card', onUpgradeComplete }: ZKAuthUpg
     setUpgradeStep('registering');
 
     try {
-      // Filter valid roles for ZK auth (admin cannot use ZK auth)
-      if (role === 'student' || role === 'university' || role === 'employer') {
+      // Only students and employers can use ZK auth (not admin or university)
+      if (role === 'student' || role === 'employer') {
         logger.info('Starting ZK auth registration', { role });
         
         // Step 1: Register with ZK auth
-        await register(role);
+        await register(role as ZKAuthRole);
         
         logger.info('ZK auth registration successful');
         

@@ -16,7 +16,7 @@ async function main() {
   const InstitutionRegistry = await ethers.getContractFactory("InstitutionRegistry");
   const institutionRegistry = await upgrades.deployProxy(
     InstitutionRegistry,
-    [deployer.address], // Initialize with deployer as super admin
+    [deployer.address], // Initialize with deployer as admin
     { initializer: "initialize" }
   );
   await institutionRegistry.waitForDeployment();
@@ -30,7 +30,7 @@ async function main() {
   const CertificateRegistry = await ethers.getContractFactory("CertificateRegistry");
   const certificateRegistry = await upgrades.deployProxy(
     CertificateRegistry,
-    [deployer.address, institutionRegistryAddress], // super admin, institution registry
+    [deployer.address, institutionRegistryAddress], // admin, institution registry
     { initializer: "initialize" }
   );
   await certificateRegistry.waitForDeployment();
@@ -91,7 +91,7 @@ async function main() {
   const ZKAuthRegistry = await ethers.getContractFactory("ZKAuthRegistry");
   const zkAuthRegistry = await upgrades.deployProxy(
     ZKAuthRegistry,
-    [deployer.address, noirAuthVerifierAddress], // super admin, verifier address
+    [deployer.address, noirAuthVerifierAddress], // admin, verifier address
     { initializer: "initialize" }
   );
   await zkAuthRegistry.waitForDeployment();
@@ -110,7 +110,7 @@ async function main() {
   console.log(`   EmployerRegistry:    ${employerRegistryAddress}`);
   console.log(`   NoirAuthVerifier:    ${noirAuthVerifierAddress}`);
   console.log(`   ZKAuthRegistry:      ${zkAuthRegistryAddress}`);
-  console.log(`\n👤 Super Admin: ${deployer.address}`);
+  console.log(`\n👤 Admin: ${deployer.address}`);
   console.log(`\n💾 Save these to frontend/.env.local:\n`);
   console.log(`VITE_CERTIFICATE_REGISTRY_ADDRESS=${certificateRegistryAddress}`);
   console.log(`VITE_INSTITUTION_REGISTRY_ADDRESS=${institutionRegistryAddress}`);

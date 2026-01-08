@@ -122,7 +122,12 @@ export function UnifiedAuthFlow({
       setError(null);
       setCurrentStep('zk-register-onchain');
       
-      await unifiedAuth.zkAuth.register(selectedRole as 'student' | 'university' | 'employer');
+      // Only students and employers can use ZK auth
+      if (selectedRole !== 'student' && selectedRole !== 'employer') {
+        throw new Error('Only students and employers can use ZK authentication');
+      }
+      
+      await unifiedAuth.zkAuth.register(selectedRole);
       
       // Auto-login after successful registration
       // This matches the behavior of the /zkauth page

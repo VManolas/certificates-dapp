@@ -19,11 +19,9 @@
  */
 
 import { useState } from 'react';
-import { useZKAuth } from '@/hooks/useZKAuth';
+import { useZKAuth, type ZKAuthRole } from '@/hooks/useZKAuth';
 import { useAccount } from 'wagmi';
 import { logger } from '@/lib/logger';
-
-type UserRole = 'student' | 'university' | 'employer';
 
 export function ZKAuthButton() {
   const { isConnected } = useAccount();
@@ -39,7 +37,7 @@ export function ZKAuthButton() {
   } = useZKAuth();
 
   const [showRoleSelector, setShowRoleSelector] = useState(false);
-  const [selectedRole, setSelectedRole] = useState<UserRole>('student');
+  const [selectedRole, setSelectedRole] = useState<ZKAuthRole>('student');
 
   const handleRegister = async () => {
     if (!selectedRole) {
@@ -149,7 +147,7 @@ export function ZKAuthButton() {
                 name="role"
                 value={option.value}
                 checked={selectedRole === option.value}
-                onChange={(e) => setSelectedRole(e.target.value as UserRole)}
+                onChange={(e) => setSelectedRole(e.target.value as ZKAuthRole)}
                 className="mt-1"
               />
               <div className="flex flex-col">

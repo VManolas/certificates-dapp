@@ -46,7 +46,7 @@ export default async function (hre: HardhatRuntimeEnvironment) {
   const institutionRegistry = await hre.zkUpgrades.deployProxy(
     wallet,
     institutionRegistryArtifact,
-    [wallet.address], // Initialize with deployer as super admin
+    [wallet.address], // Initialize with deployer as admin
     { initializer: "initialize" }
   );
   
@@ -66,7 +66,7 @@ export default async function (hre: HardhatRuntimeEnvironment) {
   const certificateRegistry = await hre.zkUpgrades.deployProxy(
     wallet,
     certificateRegistryArtifact,
-    [wallet.address, institutionRegistryAddress], // super admin, institution registry
+    [wallet.address, institutionRegistryAddress], // admin, institution registry
     { initializer: "initialize" }
   );
   
@@ -97,7 +97,7 @@ export default async function (hre: HardhatRuntimeEnvironment) {
   console.log(`\n📋 Contract Addresses:\n`);
   console.log(`   InstitutionRegistry: ${institutionRegistryAddress}`);
   console.log(`   CertificateRegistry: ${certificateRegistryAddress}`);
-  console.log(`\n👤 Super Admin: ${wallet.address}`);
+  console.log(`\n👤 Admin: ${wallet.address}`);
   console.log(`\n🌐 Network: ${hre.network.name}`);
   console.log("\n═══════════════════════════════════════════════════════");
   
@@ -105,7 +105,7 @@ export default async function (hre: HardhatRuntimeEnvironment) {
   return {
     institutionRegistry: institutionRegistryAddress,
     certificateRegistry: certificateRegistryAddress,
-    superAdmin: wallet.address,
+    admin: wallet.address,
   };
 }
 

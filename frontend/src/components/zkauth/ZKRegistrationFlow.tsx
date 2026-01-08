@@ -24,7 +24,7 @@ import { useState, useEffect } from 'react';
 import { useAccount } from 'wagmi';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { ProgressSteps } from '@/components/ProgressSteps';
-import { useZKAuth } from '@/hooks/useZKAuth';
+import { useZKAuth, type ZKAuthRole } from '@/hooks/useZKAuth';
 import { useAuthStore, type UserRole } from '@/store/authStore';
 import { logger } from '@/lib/logger';
 import { getFriendlyError } from '@/lib/errors/zkAuthErrors';
@@ -88,11 +88,17 @@ export function ZKRegistrationFlow({ onComplete, onCancel, mode }: ZKRegistratio
   const handleGenerateAndRegister = async () => {
     if (!selectedRole) return;
     
+    // Only students and employers can use ZK auth
+    if (selectedRole !== 'student' && selectedRole !== 'employer') {
+      setError('Only students and employers can use ZK authentication');
+      return;
+    }
+    
     try {
       setError(null);
       setCurrentStep('register-onchain');
       
-      await register(selectedRole as 'student' | 'university' | 'employer');
+      await register(selectedRole as ZKAuthRole);
       setRole(selectedRole);
       
       setCurrentStep('complete');

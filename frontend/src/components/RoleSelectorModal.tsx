@@ -32,7 +32,7 @@ const ROLE_INFO: Record<NonNullable<UserRole>, {
     description: 'Manage institutions, approve registrations, and oversee platform operations',
     icon: '🛡️',
     color: 'from-red-500 to-orange-500',
-    disabledReason: 'Restricted to platform administrators with SUPER_ADMIN_ROLE',
+    disabledReason: 'Restricted to platform administrators with ADMIN_ROLE',
   },
   university: {
     title: 'Educational Institution',

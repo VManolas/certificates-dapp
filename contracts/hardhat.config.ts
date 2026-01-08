@@ -13,13 +13,30 @@ const DEPLOYER_PRIVATE_KEY = process.env.DEPLOYER_PRIVATE_KEY || "";
 
 const config: HardhatUserConfig = {
   solidity: {
-    version: "0.8.24",
-    settings: {
-      optimizer: {
-        enabled: true,
-        runs: 200,
+    compilers: [
+      {
+        version: "0.8.24",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 200,
+          },
+          viaIR: true,
+        },
       },
-      viaIR: true,
+    ],
+    overrides: {
+      // Special settings for the UltraPlonk verifier (complex assembly)
+      "contracts/UltraPlonkAuthVerifier.sol": {
+        version: "0.8.24",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 1,  // Lower runs for complex contracts
+          },
+          viaIR: false,  // Disable IR for assembly-heavy contracts
+        },
+      },
     },
   },
   zksolc: {
@@ -36,6 +53,8 @@ const config: HardhatUserConfig = {
     hardhat: {
       zksync: false, // Disable zkSync for local testing to avoid build info parsing issues
       chainId: 1337,
+      blockGasLimit: 30000000, // Increase block gas limit for large batch operations
+      allowUnlimitedContractSize: true, // Allow large contracts like UltraPlonk verifier
     },
     localhost: {
       url: "http://127.0.0.1:8545",
