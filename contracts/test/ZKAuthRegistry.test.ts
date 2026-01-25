@@ -58,23 +58,15 @@ describe("ZKAuthRegistry", function () {
     ) as unknown as ZKAuthRegistry;
     await zkAuthRegistry.waitForDeployment();
     
-    // Note: Real ZK proof generation is skipped for tests due to version matching complexity
-    // The mock verifier tests provide full coverage of business logic
-    // Real ZK verification works in production with properly configured environment
-    /*
     // Generate real test commitments and proofs
     console.log("Generating test commitments and proofs...");
     studentCommitment = await computeCommitment(testPrivateKey, await user1.getAddress(), testSalt);
     employerCommitment = await computeCommitment(testPrivateKey, await user2.getAddress(), testSalt);
     
+    console.log("Generating ZK proofs (this may take 30-60 seconds)...");
     studentProof = await generateAuthProof(testPrivateKey, await user1.getAddress(), testSalt, studentCommitment);
     employerProof = await generateAuthProof(testPrivateKey, await user2.getAddress(), testSalt, employerCommitment);
-    console.log("Test data generated successfully");
-    */
-    
-    // Use mock commitments for tests
-    studentCommitment = ethers.id("student_commitment_test");
-    employerCommitment = ethers.id("employer_commitment_test");
+    console.log("✅ Test data generated successfully");
   });
 
   describe("Initialization", function () {
@@ -483,6 +475,223 @@ describe("ZKAuthRegistry", function () {
       
       expect(await upgraded.getAddress()).to.equal(await zkAuthRegistry.getAddress());
       expect(await upgraded.VERSION()).to.equal("1.0.0");
+    });
+  });
+
+  describe("Real ZK Proof Verification", function () {
+    this.timeout(120000); // 2 minutes for ZK operations
+
+    beforeEach(async function () {
+      // Switch to real verifier for these tests
+      await zkAuthRegistry.connect(admin).updateVerifier(await realVerifier.getAddress());
+      console.log("✅ Switched to real UltraPlonk verifier");
+    });
+
+    it("Should verify real ZK proof for student registration", async function () {
+      console.log("\n🔐 Testing Real ZK Proof Verification - Student Registration");
+      console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+      
+      console.log("Registering student with REAL ZK proof...");
+      console.log("Commitment:", studentCommitment);
+      console.log("Proof length:", studentProof.length, "bytes");
+      
+      const tx = await zkAuthRegistry.connect(user1).registerCommitment(
+        studentCommitment,
+        1, // UserRole.Student
+        studentProof
+      );
+      
+      await tx.wait();
+      console.log("✅ Registration successful with real ZK proof verification!");
+      
+      // Verify registration
+      expect(await zkAuthRegistry.isRegistered(studentCommitment)).to.be.true;
+      expect(await zkAuthRegistry.getRole(studentCommitment)).to.equal(1);
+      
+      console.log("✅ Commitment registered and verified on-chain");
+      console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+    });
+
+    it("Should verify real ZK proof for employer registration", async function () {
+      console.log("\n🔐 Testing Real ZK Proof Verification - Employer Registration");
+      console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+      
+      console.log("Registering employer with REAL ZK proof...");
+      console.log("Commitment:", employerCommitment);
+      console.log("Proof length:", employerProof.length, "bytes");
+      
+      const tx = await zkAuthRegistry.connect(user2).registerCommitment(
+        employerCommitment,
+        2, // UserRole.Employer
+        employerProof
+      );
+      
+      await tx.wait();
+      console.log("✅ Registration successful with real ZK proof verification!");
+      
+      // Verify registration
+      expect(await zkAuthRegistry.isRegistered(employerCommitment)).to.be.true;
+      expect(await zkAuthRegistry.getRole(employerCommitment)).to.equal(2);
+      
+      console.log("✅ Commitment registered and verified on-chain");
+      console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+    });
+
+    it("Should reject invalid ZK proof", async function () {
+      console.log("\n🔐 Testing Invalid ZK Proof Rejection");
+      console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+      
+      const invalidProof = "0x" + "00".repeat(2000); // Invalid proof bytes
+      console.log("Attempting registration with invalid proof...");
+      
+      await expect(
+        zkAuthRegistry.connect(user1).registerCommitment(
+          studentCommitment,
+          1, // UserRole.Student
+          invalidProof
+        )
+      ).to.be.revertedWithCustomError(zkAuthRegistry, "InvalidProof");
+      
+      console.log("✅ Invalid proof correctly rejected!");
+      console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+    });
+
+    it("Should start session with real ZK proof", async function () {
+      console.log("\n🔐 Testing Real ZK Proof - Session Start");
+      console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+      
+      // First register the commitment
+      console.log("Step 1: Registering commitment...");
+      await zkAuthRegistry.connect(user1).registerCommitment(
+        studentCommitment,
+        1, // UserRole.Student
+        studentProof
+      );
+      console.log("✅ Commitment registered");
+      
+      // Generate a new proof for session start (reusing the same proof for simplicity)
+      console.log("Step 2: Starting session with real ZK proof...");
+      const tx = await zkAuthRegistry.connect(user1).startSession(
+        studentCommitment,
+        studentProof
+      );
+      
+      const receipt = await tx.wait();
+      
+      // Extract session ID from event
+      const sessionStartedEvent = receipt!.logs.find(
+        (log: any) => {
+          try {
+            const parsed = zkAuthRegistry.interface.parseLog({
+              topics: log.topics as string[],
+              data: log.data
+            });
+            return parsed?.name === 'SessionStarted';
+          } catch {
+            return false;
+          }
+        }
+      );
+      
+      expect(sessionStartedEvent).to.not.be.undefined;
+      console.log("✅ Session started successfully with real ZK proof!");
+      
+      console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+    });
+
+    it("Should complete full authentication flow with real ZK proofs", async function () {
+      console.log("\n🎉 Testing Complete Real ZK Authentication Flow");
+      console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+      
+      // Step 1: Registration
+      console.log("Step 1: User registration with ZK proof...");
+      await zkAuthRegistry.connect(user1).registerCommitment(
+        studentCommitment,
+        1, // UserRole.Student
+        studentProof
+      );
+      console.log("✅ User registered");
+      
+      // Step 2: Start Session
+      console.log("\nStep 2: Starting authenticated session...");
+      const startTx = await zkAuthRegistry.connect(user1).startSession(
+        studentCommitment,
+        studentProof
+      );
+      const startReceipt = await startTx.wait();
+      
+      // Extract session ID
+      const sessionEvent = startReceipt!.logs.find((log: any) => {
+        try {
+          const parsed = zkAuthRegistry.interface.parseLog({
+            topics: log.topics as string[],
+            data: log.data
+          });
+          return parsed?.name === 'SessionStarted';
+        } catch {
+          return false;
+        }
+      });
+      
+      expect(sessionEvent).to.not.be.undefined;
+      const parsedEvent = zkAuthRegistry.interface.parseLog({
+        topics: sessionEvent!.topics as string[],
+        data: sessionEvent!.data
+      });
+      const sessionId = parsedEvent!.args[0];
+      
+      console.log("✅ Session started, ID:", sessionId);
+      
+      // Step 3: Verify session is active
+      console.log("\nStep 3: Verifying session status...");
+      const sessionInfo = await zkAuthRegistry.getSession(sessionId);
+      expect(sessionInfo.isActive).to.be.true;
+      expect(sessionInfo.commitment).to.equal(studentCommitment);
+      expect(sessionInfo.user).to.equal(user1.address);
+      console.log("✅ Session is active and valid");
+      
+      // Step 4: End session
+      console.log("\nStep 4: Ending session...");
+      await zkAuthRegistry.connect(user1).endSession(sessionId);
+      const endedSession = await zkAuthRegistry.getSession(sessionId);
+      expect(endedSession.isActive).to.be.false;
+      console.log("✅ Session ended successfully");
+      
+      console.log("\n🎉 COMPLETE AUTHENTICATION FLOW SUCCESSFUL!");
+      console.log("   All ZK proofs verified on-chain ✅");
+      console.log("   Privacy-preserving authentication works ✅");
+      console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+    });
+
+    it("Should prove hash compatibility between JavaScript and Solidity", async function () {
+      console.log("\n🔬 Proving Hash Compatibility: JS (circomlibjs) → Noir → Solidity");
+      console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+      
+      // This test proves the entire chain works:
+      // 1. JavaScript (circomlibjs) computes commitment
+      // 2. Noir circuit generates proof using same commitment
+      // 3. Solidity verifier accepts the proof
+      
+      console.log("\n📊 Test Flow:");
+      console.log("  1. JavaScript (circomlibjs) computes commitment");
+      console.log("     Commitment:", studentCommitment);
+      console.log("\n  2. Noir circuit generates ZK proof");
+      console.log("     Proof length:", studentProof.length, "bytes");
+      console.log("\n  3. Solidity UltraPlonk verifier checks proof...");
+      
+      const tx = await zkAuthRegistry.connect(user1).registerCommitment(
+        studentCommitment,
+        1,
+        studentProof
+      );
+      await tx.wait();
+      
+      console.log("\n✅ SUCCESS! Full chain compatibility proven:");
+      console.log("   ✓ JavaScript (circomlibjs) → commitment computed");
+      console.log("   ✓ Noir circuit → proof generated");
+      console.log("   ✓ Solidity verifier → proof accepted");
+      console.log("\n🎉 Hash functions are 100% compatible across the stack!");
+      console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
     });
   });
 });

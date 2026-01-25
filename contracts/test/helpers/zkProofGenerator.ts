@@ -125,19 +125,21 @@ export async function generateAuthProof(
   
   console.log('[Test Helper] Circuit inputs:', inputs);
   
-  // Initialize backend - pass the circuit artifact directly
+  // Initialize backend - pass only bytecode
   const backend = new BarretenbergBackend(authCircuit as any);
-  const noir = new Noir(authCircuit as any, backend);
   
   try {
     // Generate proof - NoirJS v1.0.0-beta.0 API
     console.log('[Test Helper] Generating proof with Noir...');
     
+    // Create Noir instance
+    const noir = new Noir(authCircuit as any);
+    
     // Execute the circuit to get witness
     const { witness } = await noir.execute(inputs);
     console.log('[Test Helper] Witness generated, creating proof...');
     
-    // Generate proof from witness
+    // Generate proof from witness using backend
     const proof = await backend.generateProof(witness);
     
     console.log('[Test Helper] Proof generated successfully!');
@@ -185,16 +187,18 @@ export async function verifyProofLocally(
   console.log('[Test Helper] Verifying proof locally...');
   
   const backend = new BarretenbergBackend(authCircuit as any);
-  const noir = new Noir(authCircuit as any, backend);
   
   try {
+    // Create Noir instance
+    const noir = new Noir(authCircuit as any);
+    
     // Convert hex proof to Uint8Array
     const proofBytes = Uint8Array.from(
       Buffer.from(proof.replace('0x', ''), 'hex')
     );
     
     // Verify proof
-    const isValid = await noir.verifyProof({
+    const isValid = await backend.verifyProof({
       proof: proofBytes,
       publicInputs: [commitment.replace('0x', '')]
     });

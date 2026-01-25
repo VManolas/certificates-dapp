@@ -23,10 +23,13 @@
 import { ethers } from 'ethers';
 import { Noir } from '@noir-lang/noir_js';
 import { BarretenbergBackend } from '@noir-lang/backend_barretenberg';
-import authCircuit from './circuits/auth_login.json';
-// Import poseidon functions from subpath exports (named exports)
-import { poseidon1 } from 'poseidon-lite/poseidon1';
-import { poseidon3 } from 'poseidon-lite/poseidon3';
+import type { CompiledCircuit } from '@noir-lang/types';
+import authCircuitJson from './circuits/auth_login.json';
+// Import Poseidon from circomlibjs (proven compatibility with Noir)
+import { buildPoseidon } from 'circomlibjs';
+
+// Type the circuit properly
+const authCircuit = authCircuitJson as CompiledCircuit;
 
 /**
  * User credentials stored locally (encrypted)
@@ -36,6 +39,25 @@ export interface ZKCredentials {
   salt: string;
   commitment: string;
   role: 'student' | 'university' | 'employer';
+}
+
+/**
+ * Poseidon hash instance (cached at module level)
+ * Initialization is async and takes ~100ms, so we cache it
+ */
+let poseidonInstance: any = null;
+
+/**
+ * Get or initialize Poseidon hasher instance
+ * Uses circomlibjs which is proven compatible with Noir's Poseidon
+ */
+async function getPoseidon() {
+  if (!poseidonInstance) {
+    console.log('[ZK Auth] Initializing Poseidon hasher (circomlibjs)...');
+    poseidonInstance = await buildPoseidon();
+    console.log('[ZK Auth] ✅ Poseidon hasher initialized');
+  }
+  return poseidonInstance;
 }
 
 /**
@@ -102,8 +124,7 @@ function addressToFieldString(address: string): string {
  * 1. public_key = poseidon_hash_1([private_key])
  * 2. commitment = poseidon_hash_3([public_key, wallet_address, salt])
  * 
- * Both JavaScript (poseidon-lite) and Noir (noir-lang/poseidon) use the same
- * Poseidon implementation compatible with BN254 curve.
+ * Uses circomlibjs which is proven compatible with Noir's Poseidon (BN254 curve)
  * 
  * @param privateKey User's private authentication key (hex string)
  * @param walletAddress User's blockchain wallet (hex string)
@@ -116,10 +137,13 @@ export async function computeCommitment(
   salt: string
 ): Promise<string> {
   try {
+    // Get Poseidon hasher instance (cached after first call)
+    const poseidon = await getPoseidon();
+    
     // Normalize wallet address to lowercase to ensure consistency
     const normalizedAddress = walletAddress.toLowerCase();
     
-    console.log('[ZK Auth] Computing commitment using Poseidon hash...');
+    console.log('[ZK Auth] Computing commitment using Poseidon hash (circomlibjs)...');
     console.log('[ZK Auth] Inputs (HEX):', {
       privateKey: privateKey,
       walletAddressOriginal: walletAddress,
@@ -139,23 +163,30 @@ export async function computeCommitment(
     });
     
     // Step 1: Derive public key from private key using Poseidon single-input hash
-    // Matches: let public_key = poseidon_hash_1([private_key]);
-    const publicKeyBigInt = poseidon1([privateKeyBigInt]);
-    console.log('[ZK Auth] Public key computed (DECIMAL):', publicKeyBigInt.toString());
+    // Matches Noir: let public_key = poseidon_hash_1([private_key]);
+    // circomlibjs returns field element, convert to string then to BigInt
+    const publicKeyField = poseidon([privateKeyBigInt]);
+    const publicKey = poseidon.F.toString(publicKeyField);
+    const publicKeyBigInt = BigInt(publicKey);
+    
+    console.log('[ZK Auth] Public key computed (DECIMAL):', publicKey);
     console.log('[ZK Auth] Public key computed (HEX):', '0x' + publicKeyBigInt.toString(16));
     
     // Step 2: Compute commitment from public key, wallet address, and salt
-    // Matches: let commitment = poseidon_hash_3([public_key, wallet_address, salt]);
-    const commitmentBigInt = poseidon3([publicKeyBigInt, walletAddressBigInt, saltBigInt]);
-    console.log('[ZK Auth] Commitment computed (DECIMAL):', commitmentBigInt.toString());
+    // Matches Noir: let commitment = poseidon_hash_3([public_key, wallet_address, salt]);
+    const commitmentField = poseidon([publicKeyBigInt, walletAddressBigInt, saltBigInt]);
+    const commitment = poseidon.F.toString(commitmentField);
+    const commitmentBigInt = BigInt(commitment);
+    
+    console.log('[ZK Auth] Commitment computed (DECIMAL):', commitment);
     console.log('[ZK Auth] Commitment computed (HEX):', '0x' + commitmentBigInt.toString(16));
     
     // Convert to hex string with proper padding (32 bytes = 64 hex chars)
-    const commitment = '0x' + commitmentBigInt.toString(16).padStart(64, '0');
+    const commitmentHex = '0x' + commitmentBigInt.toString(16).padStart(64, '0');
     
-    console.log('[ZK Auth] ✅ Final Commitment (Poseidon):', commitment);
+    console.log('[ZK Auth] ✅ Final Commitment (Poseidon):', commitmentHex);
     
-    return commitment;
+    return commitmentHex;
     
   } catch (error) {
     console.error('[ZK Auth] Failed to compute commitment:', error);
@@ -263,11 +294,12 @@ export async function generateAuthProof(
     console.log('[ZK Auth] Wallet (normalized):', normalizedAddress);
     console.log('[ZK Auth] ==========================================');
     
-    // Initialize the BarretenbergBackend
-    const backend = new BarretenbergBackend(authCircuit.bytecode);
+    // Initialize the BarretenbergBackend with circuit bytecode
+    // Type assertion needed due to minor type incompatibility in @noir-lang packages
+    const backend = new BarretenbergBackend(authCircuit as any);
     
-    // Initialize Noir with the circuit
-    const noir = new Noir(authCircuit as any, backend);
+    // Initialize Noir with the circuit artifact
+    const noir = new Noir(authCircuit as any);
     
     // Prepare inputs for the circuit
     // Convert all inputs to Field-compatible format (decimal strings)
