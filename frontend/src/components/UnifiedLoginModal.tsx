@@ -8,7 +8,8 @@
  */
 
 import { UnifiedAuthFlow } from './UnifiedAuthFlow';
-import type { UserRole } from '@/store/authStore';
+import type { UserRole } from '@/types/auth';
+import { logger } from '@/lib/logger';
 
 interface UnifiedLoginModalProps {
   isOpen: boolean;
@@ -29,7 +30,7 @@ export function UnifiedLoginModal({
   preSelectedRole = null,
 }: UnifiedLoginModalProps) {
   const handleSuccess = () => {
-    console.log('[UnifiedLoginModal] Authentication successful! Closing modal and calling success callback.');
+    logger.info('Authentication successful', { component: 'UnifiedLoginModal' });
     
     // Close modal FIRST to prevent re-renders
     onClose();

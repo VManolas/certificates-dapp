@@ -8,6 +8,7 @@ import InstitutionRegistryABI from '@/contracts/abis/InstitutionRegistry.json';
 import { truncateHash } from '@/lib/pdfHash';
 import { ButtonWithLoading } from '@/components/LoadingSpinner';
 import type { Institution } from '@/types';
+import { logger } from '@/lib/logger';
 
 interface InstitutionStats {
   totalRegistered: bigint;
@@ -48,8 +49,10 @@ export function AdminDashboard() {
 
   // Debug logging
   useEffect(() => {
-    console.log('Stats data:', stats);
-    console.log('All institutions:', allInstitutionAddresses);
+    logger.debug('Admin dashboard data loaded', { 
+      stats, 
+      institutionCount: Array.isArray(allInstitutionAddresses) ? allInstitutionAddresses.length : 0
+    });
   }, [stats, allInstitutionAddresses]);
 
   const institutionAddresses = (allInstitutionAddresses as `0x${string}`[]) || [];

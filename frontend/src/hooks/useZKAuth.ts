@@ -29,6 +29,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { ethers } from 'ethers';
+import type { UserRole } from '@/types/auth';
 import { 
   generateRandomKey, 
   computeCommitment,
@@ -46,9 +47,8 @@ import { useAuthStore } from '@/store/authStore';
 // Contract address (will be set after deployment)
 const ZK_AUTH_REGISTRY_ADDRESS = import.meta.env.VITE_ZK_AUTH_REGISTRY_ADDRESS as `0x${string}` | undefined;
 
-// UserRole type includes all roles, but ZK auth only supports student and employer
-export type UserRole = 'student' | 'university' | 'employer' | 'admin' | null;
-export type ZKAuthRole = 'student' | 'employer'; // Only these roles can use ZK authentication
+// ZK auth only supports student and employer roles (universities and admins use Web3 auth)
+export type ZKAuthRole = 'student' | 'employer';
 
 interface ZKAuthState {
   isAuthenticated: boolean;

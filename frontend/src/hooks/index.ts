@@ -36,12 +36,14 @@ export {
   useCertificateExists,
   useHashExists,
   useCertificatesBatch,
-  type CertificateVerificationResult,
   type UseCertificateVerificationReturn,
   type CertificateDetails,
   type UseCertificateDetailsReturn,
   type BatchCertificatesResult,
 } from './useCertificateVerification';
+
+// Re-export ContractVerificationResult from types (formerly CertificateVerificationResult)
+export type { ContractVerificationResult as CertificateVerificationResult } from '@/types';
 
 // Institution Registry (Admin Functions)
 export {

@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAccount } from 'wagmi';
 import { useUnifiedAuth } from '../hooks/useUnifiedAuth';
 import { UserRole } from '../types/auth';
+import { logger } from '@/lib/logger';
 
 interface RouteGuardProps {
   children: ReactNode;
@@ -57,14 +58,14 @@ export function RouteGuard({
 
     // Redirect if wallet not connected (required for both auth methods)
     if (!isConnected) {
-      console.warn('RouteGuard: Wallet not connected, redirecting to', redirectTo);
+      logger.warn('Wallet not connected, redirecting', { redirectTo });
       navigate(redirectTo, { replace: true });
       return;
     }
 
     // Redirect if not authenticated (via either ZK or Web3)
     if (!isAuthenticated || !role) {
-      console.warn('RouteGuard: Not authenticated or no role, redirecting to', redirectTo);
+      logger.warn('Not authenticated or no role, redirecting', { redirectTo });
       navigate(redirectTo, { replace: true });
       return;
     }
@@ -74,7 +75,11 @@ export function RouteGuard({
     
     // 🔒 SECURITY CHECK: Verify role matches required role
     if (rolesAllowed.length > 0 && !rolesAllowed.includes(role)) {
-      console.warn(`🔒 RouteGuard: SECURITY BLOCK - User's ${authMethod} role "${role}" not in allowed roles:`, rolesAllowed);
+      logger.warn('Access denied - role not authorized', { 
+        authMethod, 
+        userRole: role, 
+        allowedRoles: rolesAllowed 
+      });
       
       // Navigate to access denied page or custom redirect
       if (showAccessDenied) {
@@ -85,7 +90,7 @@ export function RouteGuard({
       return;
     }
     
-    console.log(`✅ RouteGuard: Access granted for ${authMethod} role "${role}"`);
+    logger.debug('Access granted', { authMethod, role });
   }, [isConnected, isAuthenticated, role, authMethod, isLoading, requiredRole, allowedRoles, navigate, redirectTo, showAccessDenied]);
 
   // Show loading state while auth detection is in progress

@@ -11,6 +11,7 @@
 
 import { useUnifiedAuth } from '@/hooks/useUnifiedAuth';
 import { Link } from 'react-router-dom';
+import { logger } from '@/lib/logger';
 
 export function ZKAuthStatus() {
   const unifiedAuth = useUnifiedAuth();
@@ -23,7 +24,7 @@ export function ZKAuthStatus() {
   const isAuthenticated = unifiedAuth.isAuthenticated;
 
   // Debug logging
-  console.log('🔍 ZKAuthStatus Debug:', {
+  logger.debug('ZKAuthStatus component render check', {
     role: unifiedAuth.role,
     authMethod: unifiedAuth.authMethod,
     isAuthenticated,
@@ -34,21 +35,13 @@ export function ZKAuthStatus() {
 
   // Don't show if not using ZK auth
   if (!isUsingZK) {
-    console.log('❌ ZKAuthStatus: Not rendering - not using ZK auth');
     return null;
   }
 
   // Don't show if no credentials and not authenticated
   if (!hasCredentials && !isAuthenticated) {
-    console.log('❌ ZKAuthStatus: Not rendering - no credentials and not authenticated');
     return null;
   }
-
-  console.log('✅ ZKAuthStatus: Rendering with state:', {
-    isUsingZK,
-    isAuthenticated,
-    hasCredentials
-  });
 
   return (
     <Link

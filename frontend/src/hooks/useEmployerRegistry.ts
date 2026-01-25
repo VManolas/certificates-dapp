@@ -33,6 +33,48 @@ export function useIsEmployer(address?: Address) {
 }
 
 /**
+ * Hook to check if a VAT number is available for registration
+ */
+export function useIsVatAvailable(vatNumber?: string) {
+  const { data: isAvailable, isLoading, refetch } = useReadContract({
+    address: EMPLOYER_REGISTRY_ADDRESS,
+    abi: EmployerRegistryABI.abi,
+    functionName: 'isVatAvailable',
+    args: vatNumber ? [vatNumber] : undefined,
+    query: {
+      enabled: !!vatNumber && !!EMPLOYER_REGISTRY_ADDRESS && vatNumber.length > 0,
+    },
+  });
+
+  return {
+    isAvailable: isAvailable as boolean | undefined,
+    isLoading,
+    refetch,
+  };
+}
+
+/**
+ * Hook to get employer by VAT number
+ */
+export function useEmployerByVat(vatNumber?: string) {
+  const { data: employerAddress, isLoading, refetch } = useReadContract({
+    address: EMPLOYER_REGISTRY_ADDRESS,
+    abi: EmployerRegistryABI.abi,
+    functionName: 'getEmployerByVat',
+    args: vatNumber ? [vatNumber] : undefined,
+    query: {
+      enabled: !!vatNumber && !!EMPLOYER_REGISTRY_ADDRESS && vatNumber.length > 0,
+    },
+  });
+
+  return {
+    employerAddress: employerAddress as Address | undefined,
+    isLoading,
+    refetch,
+  };
+}
+
+/**
  * Hook to get employer information
  */
 export function useEmployerInfo(address?: Address) {
@@ -101,7 +143,20 @@ export function useEmployerRegistration() {
       setError(null);
     } else if (writeError) {
       setStatus('error');
-      setError(writeError.message || 'Registration failed');
+      // Parse common errors
+      let errorMessage = writeError.message || 'Registration failed';
+      if (errorMessage.includes('Admin cannot register as employer')) {
+        errorMessage = 'Administrators cannot register as employers';
+      } else if (errorMessage.includes('University cannot register as employer')) {
+        errorMessage = 'Universities cannot register as employers';
+      } else if (errorMessage.includes('Student cannot register as employer')) {
+        errorMessage = 'Students cannot register as employers';
+      } else if (errorMessage.includes('VAT already registered')) {
+        errorMessage = 'This VAT number is already registered to another employer';
+      } else if (errorMessage.includes('Already registered')) {
+        errorMessage = 'This wallet is already registered as an employer';
+      }
+      setError(errorMessage);
     }
   }, [isWritePending, isConfirming, isConfirmed, writeError]);
 

@@ -6,12 +6,20 @@ import * as dotenv from "dotenv";
 dotenv.config();
 
 /**
+ * ⚠️ IMPORTANT: THIS SCRIPT IS FOR FUTURE USE
+ * 
  * Script to upgrade CertificateRegistry from V1 to V2
  * 
  * Prerequisites:
- * 1. V1 contract must be deployed via UUPS proxy
- * 2. Deployer wallet must have SUPER_ADMIN_ROLE
- * 3. Set PROXY_ADDRESS in environment or pass as argument
+ * 1. CertificateRegistryV2.sol must exist in contracts/contracts/
+ * 2. V1 contract must be deployed via UUPS proxy
+ * 3. Deployer wallet must have ADMIN_ROLE
+ * 4. Set CERTIFICATE_REGISTRY_PROXY_ADDRESS in environment
+ * 
+ * Status: 
+ * - ❌ CertificateRegistryV2.sol does NOT exist yet
+ * - ❌ This script WILL FAIL if run now
+ * - ✅ Template ready for when V2 is implemented
  * 
  * Usage:
  * npx hardhat deploy-zksync --script upgrade-certificate-registry.ts --network zkSyncSepoliaTestnet

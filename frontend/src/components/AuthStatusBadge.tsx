@@ -18,8 +18,10 @@
  * ```
  */
 
-import { useAuthStore, type UserRole, type AuthMethod } from '@/store/authStore';
+import type { UserRole, AuthMethod } from '@/types/auth';
+import { useAuthStore } from '@/store/authStore';
 import { useUnifiedAuth } from '@/hooks/useUnifiedAuth';
+import { logger } from '@/lib/logger';
 
 const getRoleInfo = (role: UserRole) => {
   switch (role) {
@@ -64,7 +66,7 @@ export const AuthStatusBadge = () => {
   const unifiedAuth = useUnifiedAuth();
 
   // Debug logging
-  console.log('🎫 AuthStatusBadge state:', {
+  logger.debug('AuthStatusBadge render check', {
     role,
     isAuthenticated: unifiedAuth.isAuthenticated,
     authMethod: unifiedAuth.authMethod,

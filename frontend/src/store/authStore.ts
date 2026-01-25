@@ -1,16 +1,7 @@
 // src/store/authStore.ts
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-
-/**
- * User roles in the zkCredentials system
- */
-export type UserRole = 'university' | 'student' | 'employer' | 'admin' | null;
-
-/**
- * Authentication method
- */
-export type AuthMethod = 'web3' | 'zk' | null;
+import type { UserRole, AuthMethod } from '@/types/auth';
 
 /**
  * Institution data for university users

@@ -27,7 +27,8 @@
 
 import { useEffect, useCallback, useMemo } from 'react';
 import { useAccount } from 'wagmi';
-import { useAuthStore, type AuthMethod, type UserRole } from '@/store/authStore';
+import type { AuthMethod, UserRole } from '@/types/auth';
+import { useAuthStore } from '@/store/authStore';
 import { useZKAuth } from './useZKAuth';
 import { useUserRoles } from './useUserRoles';
 import { useInstitutionStatus } from './useInstitutionStatus';

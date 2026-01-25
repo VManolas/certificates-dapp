@@ -11,6 +11,7 @@ export interface IssueCertificateParams {
   documentHash: `0x${string}`;
   studentWallet: `0x${string}`;
   metadataURI?: string;
+  graduationYear: number; // Required: Year of graduation (1900-2100)
 }
 
 /**
@@ -81,7 +82,7 @@ export function useCertificateIssuance(): UseCertificateIssuanceReturn {
    * @param params - Certificate issuance parameters
    */
   const issueCertificate = async (params: IssueCertificateParams) => {
-    const { documentHash, studentWallet, metadataURI = '' } = params;
+    const { documentHash, studentWallet, metadataURI = '', graduationYear } = params;
 
     // Validate inputs
     if (!documentHash || documentHash === '0x0000000000000000000000000000000000000000000000000000000000000000') {
@@ -92,6 +93,15 @@ export function useCertificateIssuance(): UseCertificateIssuanceReturn {
       throw new Error('Valid student wallet address is required');
     }
 
+    // Validate graduation year (1900-2100)
+    if (!graduationYear || !Number.isInteger(graduationYear)) {
+      throw new Error('Graduation year must be a valid integer');
+    }
+    
+    if (graduationYear < 1900 || graduationYear > 2100) {
+      throw new Error('Graduation year must be between 1900 and 2100');
+    }
+
     if (!CERTIFICATE_REGISTRY_ADDRESS) {
       throw new Error('Certificate registry address not configured');
     }
@@ -100,7 +110,7 @@ export function useCertificateIssuance(): UseCertificateIssuanceReturn {
       address: CERTIFICATE_REGISTRY_ADDRESS,
       abi: CertificateRegistryABI.abi,
       functionName: 'issueCertificate',
-      args: [documentHash, studentWallet, metadataURI],
+      args: [documentHash, studentWallet, metadataURI, graduationYear],
     });
   };
 

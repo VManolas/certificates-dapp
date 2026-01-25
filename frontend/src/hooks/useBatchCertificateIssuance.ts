@@ -10,6 +10,7 @@ export interface BatchCertificateData {
   documentHash: `0x${string}`;
   studentWallet: `0x${string}`;
   metadataURI: string;
+  graduationYear: number; // Required: Year of graduation (1900-2100)
 }
 
 export interface UseBatchCertificateIssuanceReturn {
@@ -35,8 +36,8 @@ export interface UseBatchCertificateIssuanceReturn {
  * 
  * const handleBatchIssue = async () => {
  *   const certs = [
- *     { documentHash: '0x...', studentWallet: '0x...', metadataURI: '' },
- *     { documentHash: '0x...', studentWallet: '0x...', metadataURI: '' },
+ *     { documentHash: '0x...', studentWallet: '0x...', metadataURI: '', graduationYear: 2024 },
+ *     { documentHash: '0x...', studentWallet: '0x...', metadataURI: '', graduationYear: 2023 },
  *   ];
  *   await issueCertificatesBatch(certs);
  * };
@@ -69,6 +70,21 @@ export function useBatchCertificateIssuance(): UseBatchCertificateIssuanceReturn
       throw new Error('Cannot issue empty batch of certificates');
     }
 
+    // Validate batch size (1-100)
+    if (certificates.length > 100) {
+      throw new Error('Batch size must be between 1 and 100 certificates');
+    }
+
+    // Validate all graduation years
+    for (const cert of certificates) {
+      if (!cert.graduationYear || !Number.isInteger(cert.graduationYear)) {
+        throw new Error('All certificates must have a valid graduation year');
+      }
+      if (cert.graduationYear < 1900 || cert.graduationYear > 2100) {
+        throw new Error(`Invalid graduation year: ${cert.graduationYear}. Must be between 1900 and 2100`);
+      }
+    }
+
     if (!CERTIFICATE_REGISTRY_ADDRESS) {
       throw new Error('Certificate Registry address not configured');
     }
@@ -80,12 +96,13 @@ export function useBatchCertificateIssuance(): UseBatchCertificateIssuanceReturn
     const documentHashes = certificates.map(c => c.documentHash);
     const studentWallets = certificates.map(c => c.studentWallet);
     const metadataURIs = certificates.map(c => c.metadataURI || '');
+    const graduationYears = certificates.map(c => c.graduationYear);
 
     writeContract({
       address: CERTIFICATE_REGISTRY_ADDRESS as `0x${string}`,
       abi: CertificateRegistryABI.abi,
       functionName: 'issueCertificatesBatch',
-      args: [documentHashes, studentWallets, metadataURIs],
+      args: [documentHashes, studentWallets, metadataURIs, graduationYears],
     });
   }, [writeContract]);
 

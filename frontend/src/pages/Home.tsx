@@ -3,11 +3,13 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import { useAccount } from 'wagmi';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
-import { useAuthStore, type UserRole } from '@/store/authStore';
+import type { UserRole } from '@/types/auth';
+import { useAuthStore } from '@/store/authStore';
 import { useUnifiedAuth } from '@/hooks/useUnifiedAuth';
 import { UnifiedLoginModal } from '@/components/UnifiedLoginModal';
 import { RoleSelector } from '@/components/RoleSelector';
 import { ZKAuthUpgrade } from '@/components/zkauth/ZKAuthUpgrade';
+import { logger } from '@/lib/logger';
 
 export function Home() {
   const navigate = useNavigate();
@@ -48,20 +50,20 @@ export function Home() {
 
   // Handle successful login
   const handleLoginSuccess = () => {
-    console.log('Login successful, navigating to dashboard...');
+    logger.info('Login successful, navigating to dashboard', { role: unifiedAuth.role });
     // Navigate to appropriate dashboard based on role
     const role = unifiedAuth.role;
-    if (role === 'student') {
-      navigate('/student/dashboard');
+    if (role === 'admin') {
+      navigate('/admin/dashboard');
     } else if (role === 'university') {
       navigate('/university/dashboard');
+    } else if (role === 'student') {
+      navigate('/student/dashboard');
     } else if (role === 'employer') {
       navigate('/employer/dashboard');
-    } else if (role === 'admin') {
-      navigate('/admin/dashboard');
     } else {
-      // Default fallback
-      navigate('/verify');
+      // Default fallback for unknown roles
+      navigate('/');
     }
   };
 

@@ -80,10 +80,16 @@ export function useInstitutionStatus(
   const institution = institutionData as Institution | undefined;
 
   // Parse institution status
+  // CRITICAL FIX: An unregistered wallet returns a zero struct from the contract.
+  // We must check BOTH that the name is not empty AND that the wallet address
+  // is non-zero. The wallet address field is the most reliable indicator.
   const isRegistered =
     !!institution &&
     institution.walletAddress !== '0x0000000000000000000000000000000000000000' &&
-    institution.name !== '';
+    institution.walletAddress !== undefined &&
+    institution.walletAddress !== null &&
+    institution.name !== '' &&
+    institution.name !== undefined;
 
   const isVerified = isRegistered && institution.isVerified === true;
   const isActive = isRegistered && institution.isActive === true;

@@ -110,16 +110,15 @@ export default defineConfig({
       'wagmi',
       'viem',
       '@rainbow-me/rainbowkit',
-      // Poseidon lite - pre-bundle for faster startup
-      'poseidon-lite/poseidon1',
-      'poseidon-lite/poseidon3',
+      // circomlibjs and its dependencies (fixes blake2b ESM issue)
+      'circomlibjs',
+      'blake2b',
     ],
     // Exclude heavy libraries that should load on-demand
     exclude: [
       // ZK and WASM libraries - load when needed
       '@noir-lang/noir_js',
       '@noir-lang/backend_barretenberg',
-      'circomlibjs',
     ],
     // Force dependency re-bundling optimization
     force: false, // Only set to true if you're debugging dep issues

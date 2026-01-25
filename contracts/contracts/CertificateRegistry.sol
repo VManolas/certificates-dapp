@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.24;
 
-import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
+import "./base/UpgradeableBase.sol";
 import "./interfaces/ICertificateRegistry.sol";
 import "./interfaces/IInstitutionRegistry.sol";
 
@@ -26,25 +24,12 @@ import "./interfaces/IInstitutionRegistry.sol";
  * - Duplicate hash prevention
  */
 contract CertificateRegistry is
-    Initializable,
-    AccessControlUpgradeable,
-    UUPSUpgradeable,
+    UpgradeableBase,
     ReentrancyGuardUpgradeable,
     ICertificateRegistry
 {
     /// @notice Contract version for tracking upgrades
     string public constant VERSION = "1.0.0";
-
-    /// @notice Role identifier for admin
-    bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
-
-    /// @notice Struct to track contract upgrades
-    struct UpgradeInfo {
-        string version;
-        uint256 timestamp;
-        address upgrader;
-        string notes;
-    }
 
     /// @notice Reference to the InstitutionRegistry contract
     IInstitutionRegistry public institutionRegistry;
@@ -60,9 +45,6 @@ contract CertificateRegistry is
 
     /// @notice Counter for generating unique certificate IDs
     uint256 internal _certificateIdCounter;
-
-    /// @notice Array tracking all contract upgrades
-    UpgradeInfo[] public upgradeHistory;
 
     // Custom Errors
     error UnauthorizedIssuer();
@@ -101,7 +83,7 @@ contract CertificateRegistry is
         institutionRegistry = IInstitutionRegistry(_institutionRegistry);
         _certificateIdCounter = 1; // Start from 1 so 0 means "not found"
 
-        // Record initial version
+        // Record initial version in upgrade history (from base contract)
         upgradeHistory.push(UpgradeInfo({
             version: VERSION,
             timestamp: block.timestamp,
@@ -485,42 +467,17 @@ contract CertificateRegistry is
      * @notice Get current contract version
      * @return Current version string
      */
-    function getVersion() public pure virtual returns (string memory) {
+    function getVersion() public pure virtual override returns (string memory) {
         return VERSION;
     }
 
     /**
-     * @notice Get complete upgrade history
-     * @return Array of all UpgradeInfo structs
+     * @dev Storage gap for future upgrades (inherited from UpgradeableBase)
+     * Combined with base contract gap, provides safe upgrade path
+     * Current usage: 3 slots (institutionRegistry, mappings, counter)
+     * Base provides: 47 slots
      */
-    function getUpgradeHistory() external view returns (UpgradeInfo[] memory) {
-        return upgradeHistory;
-    }
-
-    /**
-     * @notice Record a contract upgrade
-     * @param newVersion Version string for the upgrade (e.g., "2.0.0")
-     * @param notes Description of changes in this upgrade
-     * @dev Only callable by admin. Should be called after upgrading the contract.
-     */
-    function recordUpgrade(
-        string calldata newVersion,
-        string calldata notes
-    ) external onlyRole(ADMIN_ROLE) {
-        upgradeHistory.push(UpgradeInfo({
-            version: newVersion,
-            timestamp: block.timestamp,
-            upgrader: msg.sender,
-            notes: notes
-        }));
-    }
-
-    /**
-     * @dev Storage gap for future upgrades
-     * Reserves 47 slots for adding new state variables without breaking storage layout
-     * If adding new variables, reduce this number accordingly (50 - added slots)
-     */
-    uint256[47] private __gap;
+    uint256[44] private __gap;
 
     /**
      * @notice Update the institution registry address
@@ -537,10 +494,10 @@ contract CertificateRegistry is
     /**
      * @notice Authorize contract upgrade
      * @param newImplementation Address of the new implementation
-     * @dev Only callable by admin
+     * @dev Only callable by admin, inherited from UpgradeableBase
      */
     function _authorizeUpgrade(
         address newImplementation
-    ) internal override onlyRole(ADMIN_ROLE) {}
+    ) internal override(UpgradeableBase) onlyRole(ADMIN_ROLE) {}
 }
 

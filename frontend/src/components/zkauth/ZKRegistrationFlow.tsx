@@ -25,7 +25,8 @@ import { useAccount } from 'wagmi';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { ProgressSteps } from '@/components/ProgressSteps';
 import { useZKAuth, type ZKAuthRole } from '@/hooks/useZKAuth';
-import { useAuthStore, type UserRole } from '@/store/authStore';
+import type { UserRole } from '@/types/auth';
+import { useAuthStore } from '@/store/authStore';
 import { logger } from '@/lib/logger';
 import { getFriendlyError } from '@/lib/errors/zkAuthErrors';
 

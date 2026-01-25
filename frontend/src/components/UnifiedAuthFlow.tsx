@@ -26,7 +26,8 @@ import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useUnifiedAuth } from '@/hooks/useUnifiedAuth';
 import { ProgressSteps } from './ProgressSteps';
 import { getFriendlyError, getErrorAction, logError } from '@/lib/errors/zkAuthErrors';
-import type { UserRole, AuthMethod } from '@/store/authStore';
+import type { UserRole, AuthMethod } from '@/types/auth';
+import { logger } from '@/lib/logger';
 
 interface UnifiedAuthFlowProps {
   onComplete?: () => void;
@@ -131,12 +132,12 @@ export function UnifiedAuthFlow({
       
       // Auto-login after successful registration
       // This matches the behavior of the /zkauth page
-      console.log('✅ Registration successful, auto-logging in...');
+      logger.info('ZK registration successful, initiating auto-login', { role: selectedRole });
       setCurrentStep('zk-generate-proof');
       
       try {
         await unifiedAuth.zkAuth.login();
-        console.log('✅ Auto-login successful');
+        logger.info('ZK auto-login successful');
         
         setCurrentStep('complete');
         setTimeout(() => {

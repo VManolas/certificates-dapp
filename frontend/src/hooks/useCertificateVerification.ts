@@ -4,15 +4,13 @@ import CertificateRegistryABI from '@/contracts/abis/CertificateRegistry.json';
 import { validateTuple, certificateVerificationSchema } from '@/lib/validation';
 import { logger } from '@/lib/logger';
 import { parseError } from '@/lib/errorHandling';
+import type { ContractVerificationResult } from '@/types';
 
 /**
- * Certificate verification result from smart contract
+ * Contract-level verification result (simplified)
+ * Use ContractVerificationResult from @/types for consistency
  */
-export interface CertificateVerificationResult {
-  isValid: boolean;
-  certificateId: bigint;
-  isRevoked: boolean;
-}
+type CertificateVerificationResult = ContractVerificationResult;
 
 /**
  * Return type for certificate verification hook
@@ -127,6 +125,7 @@ export interface CertificateDetails {
   isRevoked: boolean;
   revokedAt: bigint;
   revocationReason: string;
+  graduationYear: number; // Year of graduation (1900-2100) - matches smart contract
 }
 
 /**

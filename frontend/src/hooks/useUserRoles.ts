@@ -2,12 +2,10 @@
 import { useAccount, useReadContracts } from 'wagmi';
 import { useMemo } from 'react';
 import { keccak256, toBytes } from 'viem';
+import type { UserRole } from '@/types/auth';
 import InstitutionRegistryABI from '@/contracts/abis/InstitutionRegistry.json';
 import CertificateRegistryABI from '@/contracts/abis/CertificateRegistry.json';
 import EmployerRegistryABI from '@/contracts/abis/EmployerRegistry.json';
-
-// Role type as defined in authStore
-export type UserRole = 'university' | 'student' | 'employer' | 'admin' | null;
 
 // Computed role constant for contract queries
 const ADMIN_ROLE = keccak256(toBytes('ADMIN_ROLE'));

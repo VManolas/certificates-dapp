@@ -24,7 +24,7 @@
  */
 
 import { useState } from 'react';
-import type { AuthMethod, UserRole } from '@/store/authStore';
+import type { AuthMethod, UserRole } from '@/types/auth';
 
 interface AuthMethodSelectorProps {
   isOpen: boolean;

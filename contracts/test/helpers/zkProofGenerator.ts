@@ -4,8 +4,10 @@
  * =====================================
  * 
  * This helper generates real ZK proofs for testing the authentication circuit.
- * It uses NoirJS and Barretenberg to create valid proofs that can be verified
- * by the UltraPlonkAuthVerifier contract.
+ * It uses NoirJS and @aztec/bb.js (UltraPlonk backend) to create valid proofs
+ * that can be verified by the UltraPlonkAuthVerifier contract.
+ * 
+ * Note: For Noir 1.0.0+, use @aztec/bb.js UltraPlonkBackend instead of deprecated @noir-lang/backend_barretenberg
  * 
  * Usage in tests:
  * ```typescript
@@ -21,7 +23,7 @@
  */
 
 import { Noir } from '@noir-lang/noir_js';
-import { BarretenbergBackend } from '@noir-lang/backend_barretenberg';
+import { UltraPlonkBackend } from '@aztec/bb.js';
 import { buildPoseidon } from 'circomlibjs';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -125,8 +127,8 @@ export async function generateAuthProof(
   
   console.log('[Test Helper] Circuit inputs:', inputs);
   
-  // Initialize backend - pass only bytecode
-  const backend = new BarretenbergBackend(authCircuit as any);
+  // Initialize backend with UltraPlonkBackend (compatible with Noir 1.0.0+ and UltraPlonk verifier)
+  const backend = new UltraPlonkBackend(authCircuit.bytecode);
   
   try {
     // Generate proof - NoirJS v1.0.0-beta.0 API
@@ -143,10 +145,17 @@ export async function generateAuthProof(
     const proof = await backend.generateProof(witness);
     
     console.log('[Test Helper] Proof generated successfully!');
-    console.log('[Test Helper] Proof length:', proof.proof.length);
+    console.log('[Test Helper] Proof type:', typeof proof);
+    console.log('[Test Helper] Proof keys:', proof ? Object.keys(proof) : 'null');
+    console.log('[Test Helper] Proof.proof?:', proof?.proof ? 'yes' : 'no');
+    console.log('[Test Helper] Proof is Uint8Array?:', proof instanceof Uint8Array);
+    
+    // UltraPlonkBackend returns {proof: Uint8Array} object
+    const proofBytes = proof.proof instanceof Uint8Array ? proof.proof : proof;
+    console.log('[Test Helper] Proof length:', proofBytes.length);
     
     // Convert to hex string
-    const proofHex = '0x' + Buffer.from(proof.proof).toString('hex');
+    const proofHex = '0x' + Buffer.from(proofBytes).toString('hex');
     
     // Cleanup
     await backend.destroy();
@@ -186,18 +195,15 @@ export async function verifyProofLocally(
 ): Promise<boolean> {
   console.log('[Test Helper] Verifying proof locally...');
   
-  const backend = new BarretenbergBackend(authCircuit as any);
+  const backend = new UltraPlonkBackend(authCircuit.bytecode);
   
   try {
-    // Create Noir instance
-    const noir = new Noir(authCircuit as any);
-    
     // Convert hex proof to Uint8Array
     const proofBytes = Uint8Array.from(
       Buffer.from(proof.replace('0x', ''), 'hex')
     );
     
-    // Verify proof
+    // Verify proof - UltraPlonkBackend expects just proof bytes and public inputs
     const isValid = await backend.verifyProof({
       proof: proofBytes,
       publicInputs: [commitment.replace('0x', '')]

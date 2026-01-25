@@ -1,7 +1,9 @@
 // frontend/src/components/RoleSelectorModal.tsx
 import { memo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuthStore, UserRole } from '@/store/authStore';
+import type { UserRole } from '@/types/auth';
+import { useAuthStore } from '@/store/authStore';
+import { logger } from '@/lib/logger';
 
 // All possible roles in display order
 const ALL_ROLES: NonNullable<UserRole>[] = ['admin', 'university', 'student', 'employer'];
@@ -79,7 +81,7 @@ export const RoleSelectorModal = memo(function RoleSelectorModal({
   const availableRolesSet = new Set(availableRoles.filter(Boolean));
 
   const handleSelectRole = (role: NonNullable<UserRole>, isAspirational: boolean = false) => {
-    console.log('🎯 handleSelectRole called', { role, isAspirational, canRegisterAsEmployer });
+    logger.debug('Role selection initiated', { role, isAspirational, canRegisterAsEmployer });
     
     // For non-aspirational, must be in available roles
     if (!isAspirational && !availableRolesSet.has(role)) return;
@@ -88,13 +90,13 @@ export const RoleSelectorModal = memo(function RoleSelectorModal({
     
     // Special handling for employer aspirational mode
     if (isAspirational && role === 'employer') {
-      console.log('🚀 Navigating to /employer/register', { canRegisterAsEmployer });
+      logger.info('Navigating to employer registration', { canRegisterAsEmployer });
       if (canRegisterAsEmployer) {
         navigate('/employer/register');
         onClose();
         return;
       } else {
-        console.warn('❌ Cannot register as employer - canRegisterAsEmployer is false');
+        logger.warn('Cannot register as employer - eligibility check failed');
         return;
       }
     }
@@ -137,7 +139,7 @@ export const RoleSelectorModal = memo(function RoleSelectorModal({
             
             // Debug logging for employer role
             if (role === 'employer') {
-              console.log('👔 Employer role debug:', { 
+              logger.debug('Employer role availability check', { 
                 isAvailable, 
                 canRegisterAsEmployer, 
                 canAspire,

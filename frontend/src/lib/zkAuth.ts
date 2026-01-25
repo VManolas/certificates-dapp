@@ -22,11 +22,12 @@
 
 import { ethers } from 'ethers';
 import { Noir } from '@noir-lang/noir_js';
-import { BarretenbergBackend } from '@noir-lang/backend_barretenberg';
+import { UltraPlonkBackend } from '@aztec/bb.js';
 import type { CompiledCircuit } from '@noir-lang/types';
 import authCircuitJson from './circuits/auth_login.json';
 // Import Poseidon from circomlibjs (proven compatibility with Noir)
 import { buildPoseidon } from 'circomlibjs';
+import { logger } from './logger';
 
 // Type the circuit properly
 const authCircuit = authCircuitJson as CompiledCircuit;
@@ -53,9 +54,9 @@ let poseidonInstance: any = null;
  */
 async function getPoseidon() {
   if (!poseidonInstance) {
-    console.log('[ZK Auth] Initializing Poseidon hasher (circomlibjs)...');
+    logger.debug('[ZK Auth] Initializing Poseidon hasher (circomlibjs)...');
     poseidonInstance = await buildPoseidon();
-    console.log('[ZK Auth] ✅ Poseidon hasher initialized');
+    logger.debug('[ZK Auth] ✅ Poseidon hasher initialized');
   }
   return poseidonInstance;
 }
@@ -85,14 +86,14 @@ export function generateRandomKey(): string {
   // 3. The key space is still enormous (> 2^250 possible values)
   if (keyBigInt >= BN254_FIELD_MODULUS) {
     keyBigInt = keyBigInt % BN254_FIELD_MODULUS;
-    console.log('[ZK Auth] Generated key exceeded field modulus, applied modulo reduction');
+    logger.debug('[ZK Auth] Generated key exceeded field modulus, applied modulo reduction');
   }
   
   // Convert back to hex
   const keyHex = keyBigInt.toString(16);
   const result = '0x' + keyHex.padStart(64, '0');
   
-  console.log('[ZK Auth] Generated random key within field bounds');
+  logger.debug('[ZK Auth] Generated random key within field bounds');
   
   return result;
 }
@@ -143,12 +144,11 @@ export async function computeCommitment(
     // Normalize wallet address to lowercase to ensure consistency
     const normalizedAddress = walletAddress.toLowerCase();
     
-    console.log('[ZK Auth] Computing commitment using Poseidon hash (circomlibjs)...');
-    console.log('[ZK Auth] Inputs (HEX):', {
-      privateKey: privateKey,
+    logger.debug('[ZK Auth] Computing commitment using Poseidon hash (circomlibjs)...', {
+      privateKey,
       walletAddressOriginal: walletAddress,
       walletAddress: normalizedAddress,
-      salt: salt
+      salt
     });
     
     // Convert inputs to BigInt for Poseidon
@@ -156,7 +156,7 @@ export async function computeCommitment(
     const walletAddressBigInt = BigInt(normalizedAddress);
     const saltBigInt = BigInt(salt);
     
-    console.log('[ZK Auth] BigInt inputs (DECIMAL):', {
+    logger.debug('[ZK Auth] BigInt inputs (DECIMAL):', {
       privateKey: privateKeyBigInt.toString(),
       wallet: walletAddressBigInt.toString(),
       salt: saltBigInt.toString()
@@ -169,8 +169,10 @@ export async function computeCommitment(
     const publicKey = poseidon.F.toString(publicKeyField);
     const publicKeyBigInt = BigInt(publicKey);
     
-    console.log('[ZK Auth] Public key computed (DECIMAL):', publicKey);
-    console.log('[ZK Auth] Public key computed (HEX):', '0x' + publicKeyBigInt.toString(16));
+    logger.debug('[ZK Auth] Public key computed', {
+      decimal: publicKey,
+      hex: '0x' + publicKeyBigInt.toString(16)
+    });
     
     // Step 2: Compute commitment from public key, wallet address, and salt
     // Matches Noir: let commitment = poseidon_hash_3([public_key, wallet_address, salt]);
@@ -178,18 +180,20 @@ export async function computeCommitment(
     const commitment = poseidon.F.toString(commitmentField);
     const commitmentBigInt = BigInt(commitment);
     
-    console.log('[ZK Auth] Commitment computed (DECIMAL):', commitment);
-    console.log('[ZK Auth] Commitment computed (HEX):', '0x' + commitmentBigInt.toString(16));
+    logger.debug('[ZK Auth] Commitment computed', {
+      decimal: commitment,
+      hex: '0x' + commitmentBigInt.toString(16)
+    });
     
     // Convert to hex string with proper padding (32 bytes = 64 hex chars)
     const commitmentHex = '0x' + commitmentBigInt.toString(16).padStart(64, '0');
     
-    console.log('[ZK Auth] ✅ Final Commitment (Poseidon):', commitmentHex);
+    logger.info('[ZK Auth] ✅ Final Commitment (Poseidon):', commitmentHex);
     
     return commitmentHex;
     
   } catch (error) {
-    console.error('[ZK Auth] Failed to compute commitment:', error);
+    logger.error('[ZK Auth] Failed to compute commitment', error);
     throw new Error(`Failed to compute commitment: ${error}`);
   }
 }
@@ -243,7 +247,7 @@ export async function decryptCredentials(
   } catch (error) {
     // If decryption fails, credentials might be from old format or wrong wallet
     // Silently clear them - this is expected during version upgrades or wallet switches
-    console.info('[ZK Auth] Clearing outdated or incompatible stored credentials (this is normal after updates)');
+    logger.info('[ZK Auth] Clearing outdated or incompatible stored credentials (this is normal after updates)');
     clearStoredCredentials();
     // Don't throw - just return null to indicate no valid credentials
     throw new Error('CREDENTIALS_OUTDATED');
@@ -272,8 +276,8 @@ function xorEncrypt(data: string | Uint8Array, key: string): Uint8Array {
  * This function generates a cryptographic proof that the user knows the privateKey,
  * walletAddress, and salt that produce the given commitment, without revealing them.
  * 
- * The proof is generated using the Barretenberg backend and matches the circuit's
- * Pedersen hash implementation.
+ * The proof is generated using the UltraPlonk backend (@aztec/bb.js) which is
+ * compatible with Noir 1.0.0+ and matches the circuit's Poseidon hash implementation.
  * 
  * @param credentials User credentials
  * @param walletAddress Current wallet address
@@ -288,15 +292,14 @@ export async function generateAuthProof(
     // This MUST match the normalization in computeCommitment()
     const normalizedAddress = walletAddress.toLowerCase();
     
-    console.log('[ZK Auth] ==========================================');
-    console.log('[ZK Auth] Generating proof...');
-    console.log('[ZK Auth] Wallet (original):', walletAddress);
-    console.log('[ZK Auth] Wallet (normalized):', normalizedAddress);
-    console.log('[ZK Auth] ==========================================');
+    logger.debug('[ZK Auth] Generating proof', {
+      walletOriginal: walletAddress,
+      walletNormalized: normalizedAddress
+    });
     
-    // Initialize the BarretenbergBackend with circuit bytecode
-    // Type assertion needed due to minor type incompatibility in @noir-lang packages
-    const backend = new BarretenbergBackend(authCircuit as any);
+    // Initialize the UltraPlonk Backend with circuit bytecode
+    // UltraPlonkBackend is the correct backend for Noir 1.0.0+ with UltraPlonk verifier
+    const backend = new UltraPlonkBackend(authCircuit.bytecode);
     
     // Initialize Noir with the circuit artifact
     const noir = new Noir(authCircuit as any);
@@ -311,33 +314,30 @@ export async function generateAuthProof(
       commitment: hexToFieldString(credentials.commitment)
     };
     
-    console.log('[ZK Auth] ==========================================');
-    console.log('[ZK Auth] Circuit inputs (DECIMAL STRINGS):');
-    console.log('[ZK Auth]   private_key:', inputs.private_key);
-    console.log('[ZK Auth]   wallet_address:', inputs.wallet_address);
-    console.log('[ZK Auth]   salt:', inputs.salt);
-    console.log('[ZK Auth]   commitment:', inputs.commitment);
-    console.log('[ZK Auth] ==========================================');
-    console.log('[ZK Auth] Circuit inputs (converted back to HEX for verification):');
-    console.log('[ZK Auth]   private_key:', '0x' + BigInt(inputs.private_key).toString(16));
-    console.log('[ZK Auth]   wallet_address:', '0x' + BigInt(inputs.wallet_address).toString(16));
-    console.log('[ZK Auth]   salt:', '0x' + BigInt(inputs.salt).toString(16));
-    console.log('[ZK Auth]   commitment:', '0x' + BigInt(inputs.commitment).toString(16));
-    console.log('[ZK Auth] ==========================================');
-    console.log('[ZK Auth] Generating proof (this may take a few seconds)...');
+    logger.debug('[ZK Auth] Circuit inputs prepared', {
+      privateKey: inputs.private_key.substring(0, 10) + '...',
+      walletAddress: inputs.wallet_address,
+      salt: inputs.salt.substring(0, 10) + '...',
+      commitment: inputs.commitment.substring(0, 10) + '...'
+    });
+    
+    logger.info('[ZK Auth] Generating proof (this may take a few seconds)...');
     
     // Execute the circuit to get witness
     const { witness } = await noir.execute(inputs);
-    console.log('[ZK Auth] Witness generated, creating proof...');
+    logger.debug('[ZK Auth] Witness generated, creating proof...');
     
     // Generate proof from witness
-    const proof = await backend.generateProof(witness);
+    const proofResult = await backend.generateProof(witness);
     
-    console.log('[ZK Auth] Proof generated successfully!');
-    console.log('[ZK Auth] Proof length:', proof.proof.length);
+    logger.info('[ZK Auth] Proof generated successfully!');
+    
+    // UltraPlonkBackend returns {proof: Uint8Array} object
+    const proof = proofResult.proof || proofResult;
+    logger.debug('[ZK Auth] Proof length:', proof.length);
     
     // Convert proof to hex string for contract submission
-    const proofHex = ethers.utils.hexlify(proof.proof);
+    const proofHex = ethers.utils.hexlify(proof);
     
     // Cleanup backend
     await backend.destroy();
@@ -345,7 +345,7 @@ export async function generateAuthProof(
     return proofHex;
     
   } catch (error) {
-    console.error('[ZK Auth] Proof generation failed:', error);
+    logger.error('[ZK Auth] Proof generation failed', error);
     
     // Provide helpful error messages
     if (error instanceof Error) {

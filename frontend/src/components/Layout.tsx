@@ -2,7 +2,8 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useAccount } from 'wagmi';
-import { useAuthStore, type UserRole } from '@/store/authStore';
+import type { UserRole } from '@/types/auth';
+import { useAuthStore } from '@/store/authStore';
 import { useEffect, useState, lazy, Suspense } from 'react';
 import { useUnifiedAuth } from '@/hooks/useUnifiedAuth';
 import { SkipToContent } from './SkipToContent';

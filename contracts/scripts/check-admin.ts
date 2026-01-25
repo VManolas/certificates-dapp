@@ -16,17 +16,17 @@ async function main() {
   
   // Check roles
   const DEFAULT_ADMIN_ROLE = await InstitutionRegistry.DEFAULT_ADMIN_ROLE();
-  const SUPER_ADMIN_ROLE = await InstitutionRegistry.SUPER_ADMIN_ROLE();
+  const ADMIN_ROLE = await InstitutionRegistry.ADMIN_ROLE();
   
   const hasDefaultAdmin = await InstitutionRegistry.hasRole(DEFAULT_ADMIN_ROLE, signerAddress);
-  const hasSuperAdmin = await InstitutionRegistry.hasRole(SUPER_ADMIN_ROLE, signerAddress);
+  const hasAdminRole = await InstitutionRegistry.hasRole(ADMIN_ROLE, signerAddress);
   
   console.log("\n✓ Role Check:");
   console.log("  - Has DEFAULT_ADMIN_ROLE:", hasDefaultAdmin);
-  console.log("  - Has SUPER_ADMIN_ROLE:", hasSuperAdmin);
+  console.log("  - Has ADMIN_ROLE:", hasAdminRole);
   
-  if (!hasSuperAdmin) {
-    console.log("\n❌ ERROR: You don't have SUPER_ADMIN_ROLE!");
+  if (!hasAdminRole) {
+    console.log("\n❌ ERROR: You don't have ADMIN_ROLE!");
     console.log("   This is required to call registerInstitutionByAdmin()");
     return;
   }

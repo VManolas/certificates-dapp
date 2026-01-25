@@ -1,19 +1,17 @@
 // src/types/index.ts
 
 /**
- * Certificate data structure matching the smart contract
+ * Re-export certificate types from certificate module
  */
-export interface Certificate {
-  documentHash: `0x${string}`;
-  studentWallet: `0x${string}`;
-  issuingInstitution: `0x${string}`;
-  issueDate: bigint;
-  certificateId: bigint;
-  metadataURI: string;
-  isRevoked: boolean;
-  revokedAt: bigint;
-  revocationReason: string;
-}
+export type { 
+  Certificate,
+  CertificateVerificationResult,
+  CertificateIssuanceForm,
+  BulkCertificateForm,
+  CSVRow,
+  PrivacySettings,
+  QRCodePayload
+} from './certificate';
 
 /**
  * Institution data structure matching the smart contract
@@ -29,9 +27,10 @@ export interface Institution {
 }
 
 /**
- * Certificate verification result
+ * Contract-level verification result (from smart contract reads)
+ * This is different from CertificateVerificationResult which includes full certificate data
  */
-export interface VerificationResult {
+export interface ContractVerificationResult {
   isValid: boolean;
   certificateId: bigint;
   isRevoked: boolean;

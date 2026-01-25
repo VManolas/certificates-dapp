@@ -206,9 +206,16 @@ function CertificateCard({
       </div>
 
       {/* Modals */}
-      {isShareModalOpen && (
+      {isShareModalOpen && certificate && (
         <ShareCertificateModal
-          certificateId={certificateId}
+          certificate={{
+            ...certificate,
+            certificateId: certificateId,
+            documentHash: certificate.documentHash as `0x${string}`,
+            studentWallet: certificate.studentWallet as `0x${string}`,
+            issuingInstitution: certificate.issuingInstitution as `0x${string}`,
+          }}
+          universityName={`Institution ${certificate.issuingInstitution.slice(0, 6)}`}
           isOpen={isShareModalOpen}
           onClose={() => setIsShareModalOpen(false)}
         />

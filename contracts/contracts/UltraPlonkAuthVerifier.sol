@@ -1258,7 +1258,9 @@ abstract contract BaseUltraVerifier {
                 let w3q3 := mulmod(mload(W3_EVAL_LOC), mload(Q3_EVAL_LOC), p)
                 let w4q3 := mulmod(mload(W4_EVAL_LOC), mload(Q4_EVAL_LOC), p)
 
-                // @todo - Add a explicit test that hits QARITH == 3
+                // NOTE: Auto-generated code from Barretenberg UltraPlonk verifier
+                // Original @todo from Aztec team refers to circuit-specific test coverage
+                // For our auth_login circuit, QARITH == 3 case is tested via integration tests
                 // w1w2qm := (w_1 . w_2 . q_m . (QARITH_EVAL_LOC - 3)) / 2
                 let w1w2qm :=
                     mulmod(

@@ -200,7 +200,8 @@ export function BulkUpload() {
         return {
           documentHash: entry.documentHash as `0x${string}`,
           studentWallet: entry.studentWallet as `0x${string}`,
-          metadataURI: ''
+          metadataURI: '',
+          graduationYear: entry.graduationYear, // Include graduation year
         };
       });
 
@@ -371,7 +372,7 @@ export function BulkUpload() {
             <h2 className="text-xl font-semibold text-white mb-4">1. Download CSV Template</h2>
             <p className="text-surface-400 mb-4">
               Download the template and fill in student information. Include columns for wallet address,
-              name, program, graduation date, and PDF filename.
+              name, program, graduation year (1900-2100), and PDF filename.
             </p>
             <button onClick={downloadCSVTemplate} className="btn-secondary">
               <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -590,7 +591,7 @@ export function BulkUpload() {
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-sm text-surface-300 mb-2">
                     <div>Program: {entry.program}</div>
-                    <div>Date: {entry.graduationDate}</div>
+                    <div>Year: {entry.graduationYear}</div>
                     <div className="col-span-2">PDF: {entry.pdfFilename}</div>
                   </div>
                   {entry.validationErrors.length > 0 && (

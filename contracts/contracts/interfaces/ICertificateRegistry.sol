@@ -126,5 +126,17 @@ interface ICertificateRegistry {
         string[] calldata metadataURIs,
         uint16[] calldata graduationYears
     ) external returns (uint256[] memory certificateIds);
+
+    /// @notice Get all certificate IDs issued by a specific institution with pagination
+    /// @param institution The address of the issuing institution
+    /// @param offset Starting index for pagination
+    /// @param limit Maximum number of results to return
+    /// @return certificateIds Array of certificate IDs
+    /// @return total Total number of certificates issued by this institution
+    function getCertificatesByInstitution(
+        address institution,
+        uint256 offset,
+        uint256 limit
+    ) external view returns (uint256[] memory certificateIds, uint256 total);
 }
 

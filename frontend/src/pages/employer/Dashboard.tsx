@@ -6,6 +6,7 @@ import { useVerificationHistory } from '@/hooks/useVerificationHistory';
 import { useStudentCertificates } from '@/hooks';
 import { truncateHash } from '@/lib/pdfHash';
 import { isAddress } from 'viem';
+import { logger } from '@/lib/logger';
 
 // Helper function to safely check if certificateId should be displayed
 const shouldShowCertificateId = (certificateId: bigint | undefined): certificateId is bigint => {
@@ -37,7 +38,7 @@ export function EmployerDashboard() {
   // Handle URL search parameter on mount/update
   useEffect(() => {
     if (searchFromUrl && isAddress(searchFromUrl)) {
-      console.log('🔍 Auto-searching from URL parameter:', searchFromUrl);
+      logger.debug('Auto-searching from URL parameter', { address: searchFromUrl });
       setWalletAddress(searchFromUrl);
       setSearchError(null);
       setIsSearching(true);

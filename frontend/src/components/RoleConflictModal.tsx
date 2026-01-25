@@ -1,7 +1,7 @@
 // frontend/src/components/RoleConflictModal.tsx
 import { memo } from 'react';
 import { useDisconnect } from 'wagmi';
-import { type UserRole } from '@/store/authStore';
+import type { UserRole } from '@/types/auth';
 
 interface RoleConflictModalProps {
   isOpen: boolean;

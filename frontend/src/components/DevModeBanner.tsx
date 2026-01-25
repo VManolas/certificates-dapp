@@ -4,7 +4,7 @@
  * ======================
  * 
  * A visual indicator that shows when the app is running in development mode
- * with simplified ZK proofs and format-only verification.
+ * with production-grade UltraPlonk ZK verification on local network.
  * 
  * Features:
  * - Sticky banner at top of page
@@ -64,36 +64,36 @@ export function DevModeBanner({ variant = 'banner', showDetails = false }: DevMo
             </h3>
             
             <p className="text-sm text-surface-300 mb-3">
-              This application is running with development-only ZK authentication. 
-              The verifier validates proof format but does not perform cryptographic verification.
+              This application is running with production-grade UltraPlonk ZK verification on a local Hardhat network. 
+              Full cryptographic verification is active and operational.
             </p>
 
             {/* Security Status */}
             <div className="space-y-2">
               <div className="flex items-center gap-2 text-xs">
                 <span className="w-16 text-surface-400">Proofs:</span>
-                <span className="px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-300 border border-yellow-500/30">
-                  Simplified
+                <span className="px-2 py-0.5 rounded bg-green-500/20 text-green-300 border border-green-500/30">
+                  UltraPlonk ✓
                 </span>
               </div>
               <div className="flex items-center gap-2 text-xs">
                 <span className="w-16 text-surface-400">Verifier:</span>
-                <span className="px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-300 border border-yellow-500/30">
-                  Format-Only
+                <span className="px-2 py-0.5 rounded bg-green-500/20 text-green-300 border border-green-500/30">
+                  Production-Grade ✓
                 </span>
               </div>
               <div className="flex items-center gap-2 text-xs">
-                <span className="w-16 text-surface-400">Use Case:</span>
-                <span className="px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30">
-                  Testing & Demo
+                <span className="w-16 text-surface-400">Network:</span>
+                <span className="px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-300 border border-yellow-500/30">
+                  Local Hardhat
                 </span>
               </div>
             </div>
 
             {/* Warning */}
-            <div className="mt-3 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
-              <p className="text-xs text-red-300">
-                ⚠️ <strong>Not for production:</strong> Do not use with real user data or sensitive information.
+            <div className="mt-3 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+              <p className="text-xs text-blue-300">
+                💡 <strong>Local Network:</strong> Running on local Hardhat with production-grade cryptography. Ready for testing and presentation.
               </p>
             </div>
           </div>
@@ -117,7 +117,7 @@ export function DevModeBanner({ variant = 'banner', showDetails = false }: DevMo
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-sm font-semibold text-white">Development Mode</span>
               <span className="hidden sm:inline text-xs text-yellow-200/80">
-                • ZK Proofs: Simplified • Verifier: Format-Only
+                • ZK Proofs: UltraPlonk (Production) • Local Network
               </span>
             </div>
           </div>
@@ -158,6 +158,10 @@ export function DevModeBanner({ variant = 'banner', showDetails = false }: DevMo
                   <ul className="space-y-1 text-xs text-surface-300">
                     <li className="flex items-start gap-2">
                       <span className="text-green-400 mt-0.5">✓</span>
+                      <span>UltraPlonk ZK proof verification (production-grade)</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-green-400 mt-0.5">✓</span>
                       <span>Commitment cryptography (Poseidon hash)</span>
                     </li>
                     <li className="flex items-start gap-2">
@@ -171,28 +175,32 @@ export function DevModeBanner({ variant = 'banner', showDetails = false }: DevMo
                   </ul>
                 </div>
 
-                {/* Right column - What's Not Protected */}
+                {/* Right column - Network Status */}
                 <div>
                   <h4 className="text-sm font-semibold text-white mb-2 flex items-center gap-2">
-                    <svg className="w-4 h-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                     </svg>
-                    What's Not Protected
+                    Network Status
                   </h4>
                   <ul className="space-y-1 text-xs text-surface-300">
                     <li className="flex items-start gap-2">
-                      <span className="text-red-400 mt-0.5">✗</span>
-                      <span>ZK proof generation (using placeholder proofs)</span>
+                      <span className="text-blue-400 mt-0.5">⚡</span>
+                      <span>Local Hardhat network (Chain ID: 1337)</span>
                     </li>
                     <li className="flex items-start gap-2">
-                      <span className="text-red-400 mt-0.5">✗</span>
-                      <span>Cryptographic verification (format check only)</span>
+                      <span className="text-blue-400 mt-0.5">⚡</span>
+                      <span>Test accounts with unlimited ETH</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-blue-400 mt-0.5">⚡</span>
+                      <span>Instant transactions (no mining delays)</span>
                     </li>
                   </ul>
                   
-                  <div className="mt-3 p-2 bg-red-500/10 border border-red-500/30 rounded">
-                    <p className="text-xs text-red-300">
-                      <strong>⚠️ Use Case:</strong> Testing and demonstration only
+                  <div className="mt-3 p-2 bg-green-500/10 border border-green-500/30 rounded">
+                    <p className="text-xs text-green-300">
+                      <strong>✓ Production Ready:</strong> Full cryptographic security for testing and presentation
                     </p>
                   </div>
                 </div>

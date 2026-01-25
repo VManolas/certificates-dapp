@@ -4,6 +4,8 @@ import { useChainId } from 'wagmi';
 import { BlockExplorerLink } from './BlockExplorerLink';
 import { VerificationReport } from './VerificationReport';
 import { ShareCertificateModal } from './ShareCertificateModal';
+import { Modal, ModalBody } from './ui/Modal';
+import { useClipboard } from '@/hooks/useClipboard';
 import { getChainName } from '@/lib/blockExplorer';
 import type { CertificateDetails } from '@/hooks';
 
@@ -20,49 +22,44 @@ export function CertificateDetailModal({
 }: CertificateDetailModalProps) {
   const chainId = useChainId();
   const [showShareModal, setShowShareModal] = useState(false);
-  const [copiedField, setCopiedField] = useState<string | null>(null);
+  const { copy, isFieldCopied } = useClipboard();
 
   const issueDate = new Date(Number(certificate.issueDate) * 1000);
   const chainName = getChainName(chainId);
 
-  const copyToClipboard = async (text: string, field: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopiedField(field);
-      setTimeout(() => setCopiedField(null), 2000);
-    } catch (error) {
-      console.error('Failed to copy:', error);
-    }
-  };
-
   return (
     <>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
-        <div className="bg-surface-900 rounded-2xl shadow-2xl max-w-3xl w-full border border-surface-700 my-8">
-          {/* Header */}
-          <div className="flex items-center justify-between p-6 border-b border-surface-700">
-            <div className="flex items-center gap-4">
-              <h2 className="text-2xl font-bold text-white">
-                Certificate #{certificateId.toString()}
-              </h2>
-              {certificate.isRevoked ? (
-                <span className="badge badge-warning">Revoked</span>
-              ) : (
-                <span className="badge badge-success">Valid</span>
-              )}
-            </div>
-            <button
-              onClick={onClose}
-              className="text-surface-400 hover:text-white transition-colors"
-            >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
+      <Modal
+        isOpen={true}
+        onClose={onClose}
+        maxWidth="3xl"
+        padding="none"
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between p-6 border-b border-surface-700">
+          <div className="flex items-center gap-4">
+            <h2 className="text-2xl font-bold text-white">
+              Certificate #{certificateId.toString()}
+            </h2>
+            {certificate.isRevoked ? (
+              <span className="badge badge-warning">Revoked</span>
+            ) : (
+              <span className="badge badge-success">Valid</span>
+            )}
           </div>
+          <button
+            onClick={onClose}
+            className="text-surface-400 hover:text-white transition-colors"
+            aria-label="Close modal"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
 
-          {/* Content */}
-          <div className="p-6 space-y-6">
+        {/* Content */}
+        <ModalBody className="space-y-6" scrollable maxHeight="max-h-[80vh]">
             {/* General Information */}
             <div className="card bg-surface-800/50">
               <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
@@ -83,11 +80,11 @@ export function CertificateDetailModal({
                       {certificate.documentHash}
                     </code>
                     <button
-                      onClick={() => copyToClipboard(certificate.documentHash, 'hash')}
+                      onClick={() => copy(certificate.documentHash, 'hash')}
                       className="btn-secondary text-sm px-3 py-2"
                       title="Copy full hash"
                     >
-                      {copiedField === 'hash' ? (
+                      {isFieldCopied('hash') ? (
                         <svg className="w-4 h-4 text-accent-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                         </svg>
@@ -110,11 +107,11 @@ export function CertificateDetailModal({
                       {certificate.studentWallet}
                     </code>
                     <button
-                      onClick={() => copyToClipboard(certificate.studentWallet, 'student')}
+                      onClick={() => copy(certificate.studentWallet, 'student')}
                       className="btn-secondary text-sm px-3 py-2"
                       title="Copy address"
                     >
-                      {copiedField === 'student' ? '✓' : '📋'}
+                      {isFieldCopied('student') ? '✓' : '📋'}
                     </button>
                     <BlockExplorerLink
                       hash={certificate.studentWallet}
@@ -137,11 +134,11 @@ export function CertificateDetailModal({
                       {certificate.issuingInstitution}
                     </code>
                     <button
-                      onClick={() => copyToClipboard(certificate.issuingInstitution, 'institution')}
+                      onClick={() => copy(certificate.issuingInstitution, 'institution')}
                       className="btn-secondary text-sm px-3 py-2"
                       title="Copy address"
                     >
-                      {copiedField === 'institution' ? '✓' : '📋'}
+                      {isFieldCopied('institution') ? '✓' : '📋'}
                     </button>
                     <BlockExplorerLink
                       hash={certificate.issuingInstitution}
@@ -220,14 +217,20 @@ export function CertificateDetailModal({
                 isRevoked={certificate.isRevoked}
               />
             </div>
-          </div>
-        </div>
-      </div>
+          </ModalBody>
+        </Modal>
 
       {/* Share Modal */}
       {showShareModal && (
         <ShareCertificateModal
-          certificateId={certificateId}
+          certificate={{
+            ...certificate,
+            certificateId: certificateId,
+            documentHash: certificate.documentHash as `0x${string}`,
+            studentWallet: certificate.studentWallet as `0x${string}`,
+            issuingInstitution: certificate.issuingInstitution as `0x${string}`,
+          }}
+          universityName={`Institution ${certificate.issuingInstitution.slice(0, 6)}`}
           isOpen={showShareModal}
           onClose={() => setShowShareModal(false)}
         />

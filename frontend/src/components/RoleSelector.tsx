@@ -14,7 +14,8 @@
  */
 
 import { useState } from 'react';
-import type { UserRole } from '@/store/authStore';
+import type { UserRole } from '@/types/auth';
+import { ALL_ROLES, ROLE_METADATA, getBadgeVariantClass } from '@/lib/constants/roles';
 
 interface RoleSelectorProps {
   isOpen: boolean;
@@ -22,69 +23,8 @@ interface RoleSelectorProps {
   openConnectModal?: () => void;
 }
 
-interface RoleOption {
-  role: UserRole;
-  icon: string;
-  title: string;
-  description: string;
-  badge?: string;
-  features: string[];
-}
-
-const roleOptions: RoleOption[] = [
-  {
-    role: 'admin',
-    icon: '👔',
-    title: 'Admin',
-    description: 'System administrator with full access',
-    badge: 'Public Auth Only',
-    features: [
-      'Manage universities and employers',
-      'Oversee all certificates',
-      'System configuration',
-      'Must use standard Web3 login',
-    ],
-  },
-  {
-    role: 'university',
-    icon: '🏛️',
-    title: 'University',
-    description: 'Educational institution issuing certificates',
-    badge: 'Public Auth Only',
-    features: [
-      'Issue student certificates',
-      'Bulk certificate operations',
-      'Manage certificate templates',
-      'Must use standard Web3 login',
-    ],
-  },
-  {
-    role: 'student',
-    icon: '🎓',
-    title: 'Student',
-    description: 'Certificate holder with privacy options',
-    badge: 'Privacy Recommended',
-    features: [
-      'View your certificates',
-      'Share certificates privately',
-      'Generate verification links',
-      'Private or standard login available',
-    ],
-  },
-  {
-    role: 'employer',
-    icon: '💼',
-    title: 'Employer',
-    description: 'Organization verifying credentials',
-    badge: 'Flexible Auth',
-    features: [
-      'Verify student certificates',
-      'Access certificate data',
-      'Manage verification requests',
-      'Private or standard login available',
-    ],
-  },
-];
+// Convert ROLE_METADATA to array format for easier mapping
+const roleOptions = ALL_ROLES.map(role => ROLE_METADATA[role]);
 
 export function RoleSelector({ isOpen, onSelectRole, openConnectModal }: RoleSelectorProps) {
   const [selectedRole, setSelectedRole] = useState<UserRole | null>(null);
@@ -135,13 +75,7 @@ export function RoleSelector({ isOpen, onSelectRole, openConnectModal }: RoleSel
                     {option.icon}
                   </div>
                   {option.badge && (
-                    <span className={`px-2 py-1 text-xs rounded-full border ${
-                      option.role === 'student'
-                        ? 'bg-green-500/20 text-green-400 border-green-500/30'
-                        : option.role === 'employer'
-                        ? 'bg-blue-500/20 text-blue-400 border-blue-500/30'
-                        : 'bg-orange-500/20 text-orange-400 border-orange-500/30'
-                    }`}>
+                    <span className={`px-2 py-1 text-xs rounded-full border ${getBadgeVariantClass(option.role)}`}>
                       {option.badge}
                     </span>
                   )}

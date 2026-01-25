@@ -15,46 +15,16 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useAccount } from 'wagmi';
-import type { UserRole } from '@/store/authStore';
+import type { UserRole } from '@/types/auth';
+import { ALL_ROLES, getRoleInfo } from '@/lib/constants/roles';
 
 interface RoleDropdownProps {
   currentRole: UserRole | null;
   onChangeRole: (role: UserRole) => void;
 }
 
-interface RoleOption {
-  role: UserRole;
-  icon: string;
-  label: string;
-  badge?: string;
-}
-
-const roleOptions: RoleOption[] = [
-  {
-    role: 'admin',
-    icon: '👔',
-    label: 'Admin',
-    badge: 'Public Auth',
-  },
-  {
-    role: 'university',
-    icon: '🏛️',
-    label: 'University',
-    badge: 'Public Auth',
-  },
-  {
-    role: 'student',
-    icon: '🎓',
-    label: 'Student',
-    badge: 'Privacy',
-  },
-  {
-    role: 'employer',
-    icon: '💼',
-    label: 'Employer',
-    badge: 'Flexible',
-  },
-];
+// Convert role metadata to dropdown format
+const roleOptions = ALL_ROLES.map(role => getRoleInfo(role)!);
 
 export function RoleDropdown({ currentRole, onChangeRole }: RoleDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);

@@ -2,17 +2,20 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
+import { useAccount } from 'wagmi';
 import { generatePDFHash, formatFileSize, truncateHash, type HashResult } from '@/lib/pdfHash';
 import { useCertificateVerification, useHashExists, useCertificateDetails } from '@/hooks';
 import { useVerificationHistory } from '@/hooks/useVerificationHistory';
 import { useAuthStore } from '@/store/authStore';
 import { QRScanner } from '@/components/QRScanner';
 import { VerificationReport } from '@/components/VerificationReport';
-// BlockExplorerLink import removed - not used in this component
 import { CertificateDetailModal } from '@/components/CertificateDetailModal';
+import { RoleSelector } from '@/components/RoleSelector';
+import { UnifiedLoginModal } from '@/components/UnifiedLoginModal';
 import { validatePdfFile, globalRateLimiter } from '@/lib/sanitization';
 import { parseError, withRetry } from '@/lib/errorHandling';
 import { logger } from '@/lib/logger';
+import type { UserRole } from '@/types/auth';
 
 type VerificationState = 'idle' | 'hashing' | 'verifying' | 'complete' | 'verifying-id';
 
@@ -20,7 +23,8 @@ export function Verify() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const certIdParam = searchParams.get('cert');
-  const { role } = useAuthStore();
+  const { isConnected } = useAccount();
+  const { role, preSelectedRole, setPreSelectedRole } = useAuthStore();
   const { addEntry } = useVerificationHistory();
   const queryClient = useQueryClient();
   
@@ -34,6 +38,36 @@ export function Verify() {
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [showLinkInput, setShowLinkInput] = useState(false);
   const [linkInput, setLinkInput] = useState('');
+  
+  // Role selection modal state (for non-connected users)
+  const [showRoleSelector, setShowRoleSelector] = useState(!isConnected && !preSelectedRole);
+  const [showLoginModal, setShowLoginModal] = useState(false);
+
+  // Show role selector when user is not connected and hasn't pre-selected a role
+  useEffect(() => {
+    if (!isConnected && !preSelectedRole) {
+      setShowRoleSelector(true);
+    } else {
+      setShowRoleSelector(false);
+    }
+  }, [isConnected, preSelectedRole]);
+
+  // Handle role selection (opens login modal)
+  const handleRoleSelection = (selectedRole: UserRole) => {
+    setPreSelectedRole(selectedRole);
+    setShowRoleSelector(false);
+    
+    // Open the unified login modal
+    setTimeout(() => {
+      setShowLoginModal(true);
+    }, 300);
+  };
+
+  // Handle successful login
+  const handleLoginSuccess = () => {
+    setShowLoginModal(false);
+    // User can now proceed with verification
+  };
 
   // Certificate ID verification (from URL parameter)
   const certificateIdFromUrl = certIdParam ? BigInt(certIdParam) : undefined;
@@ -435,6 +469,20 @@ export function Verify() {
 
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-gradient-to-br from-surface-950 via-primary-950/20 to-surface-950">
+      {/* Role Selector Modal */}
+      <RoleSelector
+        isOpen={showRoleSelector}
+        onSelectRole={handleRoleSelection}
+      />
+      
+      {/* Unified Login Modal */}
+      <UnifiedLoginModal
+        isOpen={showLoginModal}
+        onClose={() => setShowLoginModal(false)}
+        onSuccess={handleLoginSuccess}
+        preSelectedRole={preSelectedRole}
+      />
+
       <div className="container mx-auto px-4 py-16">
         {/* Header */}
         <div className="text-center mb-12">
