@@ -76,8 +76,9 @@ export function PrivacyControlModal({
       initials: includeInitials ? initials.trim() : undefined,
     };
 
+    // Only call onConfirm - parent will handle closing the modal
     onConfirm(settings);
-    onClose();
+    // Don't call onClose() here - it's handled by the parent ShareCertificateModal
   };
 
   const handleInitialsToggle = (checked: boolean) => {
@@ -92,7 +93,7 @@ export function PrivacyControlModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
       <div className="bg-surface-900 rounded-2xl shadow-2xl max-w-lg w-full border border-surface-700">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-surface-700">

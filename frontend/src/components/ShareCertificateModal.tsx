@@ -72,6 +72,9 @@ export function ShareCertificateModal({
       setQRCodeGenerated(true); // Mark as successfully generated
       
       console.log('✅ QR code data set successfully');
+      console.log('📋 QR code string (first 100 chars):', payload.substring(0, 100));
+      console.log('📏 QR code length:', payload.length);
+      console.log('🔍 QR code full data:', payload);
     } catch (error) {
       console.error('❌ Failed to generate/parse QR payload:', error);
       console.error('Certificate:', certificate);
@@ -101,24 +104,48 @@ export function ShareCertificateModal({
     const svg = qrRef.current?.querySelector('svg');
     if (!svg) return;
 
-    // Convert SVG to canvas
+    console.log('📥 Downloading QR code...');
+    
+    // Get the actual QR code size
+    const svgWidth = svg.getAttribute('width') || qrSize.toString();
+    const svgHeight = svg.getAttribute('height') || qrSize.toString();
+    const size = parseInt(svgWidth);
+    
+    console.log('🔍 QR Code size:', { width: svgWidth, height: svgHeight, size });
+
+    // Convert SVG to canvas with high resolution
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+
+    // Use high resolution for better QR code quality
+    const scale = 4; // 4x resolution
+    canvas.width = size * scale;
+    canvas.height = size * scale;
+    
+    console.log('🖼️ Canvas dimensions:', { width: canvas.width, height: canvas.height });
 
     const svgData = new XMLSerializer().serializeToString(svg);
     const img = new Image();
     
     img.onload = () => {
-      canvas.width = img.width;
-      canvas.height = img.height;
+      // Fill white background
       ctx.fillStyle = 'white';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(img, 0, 0);
+      
+      // Draw QR code at high resolution
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-      // Download as PNG
+      console.log('✅ QR code rendered to canvas');
+
+      // Download as PNG with high quality
       canvas.toBlob((blob) => {
-        if (!blob) return;
+        if (!blob) {
+          console.error('❌ Failed to create blob');
+          return;
+        }
+        console.log('💾 Blob created, size:', blob.size, 'bytes');
+        
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -127,7 +154,13 @@ export function ShareCertificateModal({
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-      }, 'image/png');
+        
+        console.log('✅ QR code downloaded successfully');
+      }, 'image/png', 1.0); // Maximum quality
+    };
+
+    img.onerror = (error) => {
+      console.error('❌ Failed to load image:', error);
     };
 
     img.src = 'data:image/svg+xml;base64,' + btoa(svgData);
@@ -140,7 +173,7 @@ export function ShareCertificateModal({
 
   return (
     <>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+      <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
         <div className="bg-surface-900 rounded-2xl shadow-2xl max-w-2xl w-full border border-surface-700 max-h-[90vh] overflow-y-auto">
           {/* Header */}
           <div className="flex items-center justify-between p-6 border-b border-surface-700">
@@ -158,11 +191,6 @@ export function ShareCertificateModal({
 
           {/* Content */}
           <div className="p-6 space-y-6">
-            {(() => {
-              console.log('🔍 ShareCertificateModal render - qrCodeData:', qrCodeData);
-              console.log('🔍 ShareCertificateModal render - qrPayload:', qrPayload);
-              return null;
-            })()}
             {!qrCodeData ? (
               // Waiting for privacy settings
               <div className="text-center py-12">

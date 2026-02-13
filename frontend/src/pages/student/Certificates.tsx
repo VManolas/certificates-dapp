@@ -5,6 +5,7 @@ import { CERTIFICATE_REGISTRY_ADDRESS } from '@/lib/wagmi';
 import CertificateRegistryABI from '@/contracts/abis/CertificateRegistry.json';
 import { truncateHash } from '@/lib/pdfHash';
 import { useCertificatesBatch, type CertificateDetails } from '@/hooks';
+import { useIsInstitution } from '@/hooks/useInstitutionRegistry';
 import { ShareCertificateModal } from '@/components/ShareCertificateModal';
 import { WalletQRDisplay } from '@/components/WalletQRDisplay';
 import { CertificateDetailModal } from '@/components/CertificateDetailModal';
@@ -130,6 +131,10 @@ function CertificateCard({
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
 
+  // Fetch university name from blockchain (pass undefined if certificate not loaded yet)
+  const { institutionData } = useIsInstitution(certificate?.issuingInstitution as `0x${string}` | undefined);
+  const universityName = institutionData?.name || (certificate ? `Institution ${certificate.issuingInstitution.slice(0, 6)}` : '');
+
   // No need to fetch individual certificate - passed from batch
   if (!certificate) {
     return (
@@ -215,7 +220,7 @@ function CertificateCard({
             studentWallet: certificate.studentWallet as `0x${string}`,
             issuingInstitution: certificate.issuingInstitution as `0x${string}`,
           }}
-          universityName={`Institution ${certificate.issuingInstitution.slice(0, 6)}`}
+          universityName={universityName}
           isOpen={isShareModalOpen}
           onClose={() => setIsShareModalOpen(false)}
         />

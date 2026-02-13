@@ -6,6 +6,7 @@ import { VerificationReport } from './VerificationReport';
 import { ShareCertificateModal } from './ShareCertificateModal';
 import { Modal, ModalBody } from './ui/Modal';
 import { useClipboard } from '@/hooks/useClipboard';
+import { useIsInstitution } from '@/hooks/useInstitutionRegistry';
 import { getChainName } from '@/lib/blockExplorer';
 import type { CertificateDetails } from '@/hooks';
 
@@ -23,6 +24,10 @@ export function CertificateDetailModal({
   const chainId = useChainId();
   const [showShareModal, setShowShareModal] = useState(false);
   const { copy, isFieldCopied } = useClipboard();
+  
+  // Fetch university name from blockchain
+  const { institutionData } = useIsInstitution(certificate.issuingInstitution as `0x${string}`);
+  const universityName = institutionData?.name || `Institution ${certificate.issuingInstitution.slice(0, 6)}`;
 
   const issueDate = new Date(Number(certificate.issueDate) * 1000);
   const chainName = getChainName(chainId);
@@ -230,7 +235,7 @@ export function CertificateDetailModal({
             studentWallet: certificate.studentWallet as `0x${string}`,
             issuingInstitution: certificate.issuingInstitution as `0x${string}`,
           }}
-          universityName={`Institution ${certificate.issuingInstitution.slice(0, 6)}`}
+          universityName={universityName}
           isOpen={showShareModal}
           onClose={() => setShowShareModal(false)}
         />

@@ -227,8 +227,21 @@ export function Verify() {
   );
 
   const resetVerification = () => {
-    // Force a full page refresh to clear all state and cache
-    window.location.href = '/verify';
+    // Clear verification state without full page reload
+    setFile(null);
+    setHashResult(null);
+    setState('idle');
+    setError(null);
+    setHasLoggedVerification(false);
+    setShowDetailModal(false);
+    
+    // Clear React Query cache for certificate data
+    queryClient.removeQueries({ queryKey: ['readContract'] });
+    
+    // If there's a cert parameter in URL, navigate to clean /verify route
+    if (certIdParam) {
+      navigate('/verify', { replace: true });
+    }
   };
 
   const handleLinkSubmit = () => {
@@ -337,6 +350,32 @@ export function Verify() {
       <div className="min-h-[calc(100vh-4rem)] bg-gradient-to-br from-surface-950 via-primary-950/20 to-surface-950">
         <div className="container mx-auto px-4 py-16">
           <div className="max-w-2xl mx-auto space-y-6">
+            {/* Navigation Buttons */}
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => navigate(-1)}
+                className="btn-secondary flex items-center gap-2"
+                title="Go back to previous page"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+                Back
+              </button>
+              {role === 'university' && (
+                <button
+                  onClick={() => navigate('/university/dashboard')}
+                  className="btn-primary flex items-center gap-2"
+                  title="Go to University Dashboard"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                  </svg>
+                  Dashboard
+                </button>
+              )}
+            </div>
+
             {/* Status Card */}
             <div
               className={`card ${
@@ -669,6 +708,32 @@ export function Verify() {
           {/* Result State */}
           {state === 'complete' && hashResult && (
             <div className="space-y-6">
+              {/* Navigation Buttons */}
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => navigate(-1)}
+                  className="btn-secondary flex items-center gap-2"
+                  title="Go back to previous page"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                  Back
+                </button>
+                {role === 'university' && (
+                  <button
+                    onClick={() => navigate('/university/dashboard')}
+                    className="btn-primary flex items-center gap-2"
+                    title="Go to University Dashboard"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                    </svg>
+                    Dashboard
+                  </button>
+                )}
+              </div>
+
               {/* Status Card */}
               <div
                 className={`card ${

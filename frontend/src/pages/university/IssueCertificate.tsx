@@ -388,7 +388,8 @@ export function IssueCertificate() {
             (['confirm', 'submitting', 'success'].includes(formState) && stepNum === 3);
           const isComplete = 
             (stepNum === 1 && formState !== 'upload') ||
-            (stepNum === 2 && ['confirm', 'submitting', 'success'].includes(formState));
+            (stepNum === 2 && ['confirm', 'submitting', 'success'].includes(formState)) ||
+            (stepNum === 3 && formState === 'success');
 
           return (
             <div key={step} className="flex items-center gap-2">

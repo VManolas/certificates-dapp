@@ -16,11 +16,25 @@ export function generateQRCodePayload(
   universityName: string,
   privacySettings: PrivacySettings
 ): string {
+  console.log('🔍 generateQRCodePayload called with:', { certificate, universityName, privacySettings });
+  
+  // Parse metadataURI to extract program name
+  let programName = 'Unknown Program';
+  if (certificate.metadataURI) {
+    try {
+      const metadata = JSON.parse(certificate.metadataURI);
+      programName = metadata.program || certificate.metadataURI;
+      console.log('✅ Parsed program from metadata:', programName);
+    } catch {
+      // If parsing fails, use metadataURI as-is (might be a plain string)
+      programName = certificate.metadataURI;
+      console.log('ℹ️ Using metadataURI as program name:', programName);
+    }
+  }
+  
   // Build payload with always-included fields
   const payload: QRCodePayload = {
-    // Note: In production, parse certificate.metadataURI to extract program name
-    // Currently using metadataURI as fallback. Consider parsing JSON metadata.
-    program: certificate.metadataURI || 'Unknown Program',
+    program: programName,
     university: universityName,
     graduationYear: certificate.graduationYear || new Date().getFullYear(),
     status: certificate.isRevoked ? 'Revoked' : 'Verified',
@@ -31,16 +45,24 @@ export function generateQRCodePayload(
   // Add optional fields based on privacy settings
   if (privacySettings.includeWallet && certificate.studentWallet) {
     payload.studentWallet = certificate.studentWallet;
+    console.log('✅ Including wallet:', certificate.studentWallet);
   }
 
   if (privacySettings.includeInitials && privacySettings.initials) {
     payload.studentInitials = privacySettings.initials;
+    console.log('✅ Including initials:', privacySettings.initials);
   }
+
+  console.log('📦 Final payload:', payload);
 
   // Encode as V1:{base64(json)}
   const jsonString = JSON.stringify(payload);
   const base64Encoded = btoa(jsonString);
-  return `V1:${base64Encoded}`;
+  const encoded = `V1:${base64Encoded}`;
+  
+  console.log('🎫 Encoded QR code data (length:', encoded.length, '):', encoded.substring(0, 50) + '...');
+  
+  return encoded;
 }
 
 /**

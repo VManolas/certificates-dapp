@@ -196,15 +196,15 @@ export function EmployerDashboard() {
                           <p className="text-white font-semibold mb-1">
                             Certificate #{certId.toString()}
                           </p>
-                          <a
-                            href={`/verify?cert=${certId.toString()}`}
+                          <Link
+                            to={`/verify?cert=${certId.toString()}`}
                             className="text-primary-400 hover:text-primary-300 text-sm inline-flex items-center gap-1"
                           >
                             View Details
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                             </svg>
-                          </a>
+                          </Link>
                         </div>
                         <span className="badge badge-success">On-chain</span>
                       </div>
