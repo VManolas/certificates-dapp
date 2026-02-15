@@ -52,7 +52,7 @@ type LoginStep =
 
 export function ZKRegistrationFlow({ onComplete, onCancel, mode }: ZKRegistrationFlowProps) {
   const { address, isConnected } = useAccount();
-  const { register, login, error: zkError, isLoading } = useZKAuth();
+  const { register, login, hasCredentials, error: zkError, isLoading } = useZKAuth();
   const { setRole } = useAuthStore();
   
   const [currentStep, setCurrentStep] = useState<RegistrationStep | LoginStep>(
@@ -97,6 +97,18 @@ export function ZKRegistrationFlow({ onComplete, onCancel, mode }: ZKRegistratio
     
     try {
       setError(null);
+
+      // Defensive optimization: if credentials already exist for this wallet,
+      // skip registration and continue with private login.
+      if (hasCredentials) {
+        await login();
+        setCurrentStep('complete');
+        setTimeout(() => {
+          onComplete?.();
+        }, 1500);
+        return;
+      }
+
       setCurrentStep('register-onchain');
       
       await register(selectedRole as ZKAuthRole);
@@ -273,10 +285,13 @@ export function ZKRegistrationFlow({ onComplete, onCancel, mode }: ZKRegistratio
         {/* Generate Credentials (Registration) */}
         {mode === 'register' && currentStep === 'generate-credentials' && (
           <div>
-            <h4 className="text-white font-semibold mb-2">Step 3: Generate ZK Credentials</h4>
+            <h4 className="text-white font-semibold mb-2">
+              {hasCredentials ? 'Step 3: Continue Private Login' : 'Step 3: Generate ZK Credentials'}
+            </h4>
             <p className="text-surface-300 text-sm mb-4">
-              Generate your private ZK credentials and register your commitment on the blockchain.
-              Your private key will be encrypted and stored securely in your browser.
+              {hasCredentials
+                ? 'Private credentials already exist for this wallet. Continue to start a private session without re-registering.'
+                : 'Generate your private ZK credentials and register your commitment on the blockchain. Your private key will be encrypted and stored securely in your browser.'}
             </p>
             <button
               onClick={handleGenerateAndRegister}
@@ -293,7 +308,7 @@ export function ZKRegistrationFlow({ onComplete, onCancel, mode }: ZKRegistratio
                   <span>Generating Credentials...</span>
                 </>
               ) : (
-                'Generate & Register'
+                hasCredentials ? 'Continue Private Login' : 'Generate & Register'
               )}
             </button>
           </div>

@@ -25,11 +25,13 @@
  * ```
  */
 
-import { useEffect, useCallback, useMemo } from 'react';
+import { useEffect, useCallback, useMemo, useRef } from 'react';
 import { useAccount } from 'wagmi';
+import { useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import type { AuthMethod, UserRole } from '@/types/auth';
 import { useAuthStore } from '@/store/authStore';
-import { useZKAuth } from './useZKAuth';
+import { useZKAuth, type ZKAuthProgressEvent } from './useZKAuth';
 import { useUserRoles } from './useUserRoles';
 import { useInstitutionStatus } from './useInstitutionStatus';
 import { logger } from '@/lib/logger';
@@ -52,21 +54,23 @@ export interface UnifiedAuthState {
   
   // Loading states
   isLoading: boolean;
+  isLogoutCooldown: boolean;
   
   // Errors
   error: Error | null;
   
   // Actions
   selectAuthMethod: (method: AuthMethod, remember: boolean) => void;
-  switchAuthMethod: (method: AuthMethod) => Promise<void>;
+  switchAuthMethod: (method: AuthMethod, onProgress?: (event: ZKAuthProgressEvent) => void) => Promise<void>;
   logout: () => Promise<void>;
   
   // ZK Auth specific (when authMethod === 'zk')
   zkAuth: {
     hasCredentials: boolean;
-    register: (role: 'student' | 'employer') => Promise<string>;
-    login: () => Promise<void>;
+    register: (role: 'student' | 'employer', onProgress?: (event: ZKAuthProgressEvent) => void) => Promise<string>;
+    login: (onProgress?: (event: ZKAuthProgressEvent) => void) => Promise<void>;
     clearCredentials: () => void;
+    logout: (onProgress?: (event: ZKAuthProgressEvent) => void) => Promise<void>;
   };
   
   // Web3 Auth specific (when authMethod === 'web3')
@@ -127,6 +131,8 @@ function getAllowedAuthMethods(role: UserRole | null): {
 
 export function useUnifiedAuth(): UnifiedAuthState {
   const { address, isConnected } = useAccount();
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
   
   // Auth store
   const {
@@ -135,11 +141,19 @@ export function useUnifiedAuth(): UnifiedAuthState {
     authMethod,
     showAuthMethodSelector,
     preferredAuthMethod,
+    isLogoutCooldown,
     setAuthMethod,
     setShowAuthMethodSelector,
     setPreferredAuthMethod,
+    setPreSelectedRole,
     setRole,
+    setIsLogoutCooldown,
     zkAuth: zkAuthState,
+    setZKAuthEnabled,
+    setZKAuthenticated,
+    setZKCommitment,
+    setZKSessionId,
+    setZKRole,
   } = useAuthStore();
   
   // ZK Auth hook
@@ -147,6 +161,59 @@ export function useUnifiedAuth(): UnifiedAuthState {
   
   // Web3 role detection
   const userRoles = useUserRoles();
+  
+  // Track previous connection state to detect disconnections
+  const prevConnectedRef = useRef(isConnected);
+  const prevAddressRef = useRef(address);
+  
+  // CRITICAL: Clear query cache when wallet disconnects and redirect to home
+  // This ensures the next wallet that connects gets fresh data
+  useEffect(() => {
+    // Detect disconnection (was connected, now disconnected)
+    if (prevConnectedRef.current && !isConnected) {
+      console.log('🧹 [useUnifiedAuth] Wallet disconnected, clearing role cache and redirecting to home');
+      
+      // Clear queries immediately
+      queryClient.removeQueries({ queryKey: ['userRoles'] });
+      queryClient.removeQueries({ queryKey: ['readContract'] });
+      
+      // Also invalidate to force refetch on next connection
+      queryClient.invalidateQueries({ queryKey: ['userRoles'] });
+      queryClient.invalidateQueries({ queryKey: ['readContract'] });
+      
+      // Clear auth state (including preSelectedRole to prevent role conflicts!)
+      setAuthMethod(null);
+      setRole(null);
+      setPreSelectedRole(null); // CRITICAL: Clear pre-selected role on disconnect
+      
+      // Redirect to home page
+      navigate('/', { replace: true });
+      
+      console.log('🧹 [useUnifiedAuth] Cache cleared, auth state cleared, and redirected to home');
+    }
+    
+    // Detect address change while still connected (MetaMask account switch)
+    if (prevAddressRef.current && address && prevAddressRef.current !== address) {
+      console.log('🔄 [useUnifiedAuth] Address changed, clearing role cache', {
+        from: prevAddressRef.current.slice(0, 8),
+        to: address.slice(0, 8),
+      });
+      
+      // Clear queries for fresh role detection
+      queryClient.removeQueries({ queryKey: ['userRoles'] });
+      queryClient.invalidateQueries({ queryKey: ['readContract'] });
+      
+      // Clear auth state for new wallet
+      setRole(null);
+      setPreSelectedRole(null);
+      
+      console.log('🔄 [useUnifiedAuth] Cache cleared for new address');
+    }
+    
+    // Update previous state
+    prevConnectedRef.current = isConnected;
+    prevAddressRef.current = address;
+  }, [isConnected, address, queryClient, navigate, setAuthMethod, setRole, setPreSelectedRole]);
   
   // Check institution suspension status (only for universities)
   // IMPORTANT: Only enable this query AFTER we've detected the user is a university
@@ -178,9 +245,34 @@ export function useUnifiedAuth(): UnifiedAuthState {
   
   // Auto-select auth method based on preference, role restrictions, and detection
   useEffect(() => {
+    console.log('🔄 [useUnifiedAuth] Auto-select effect triggered', {
+      isConnected,
+      address: address ? `${address.slice(0, 6)}...${address.slice(-4)}` : null,
+      authMethod,
+      role,
+      'userRoles.primaryRole': userRoles.primaryRole,
+      'userRoles.isLoading': userRoles.isLoading,
+      'userRoles.isUniversity': userRoles.isUniversity,
+      'userRoles.isStudent': userRoles.isStudent,
+      'userRoles.isEmployer': userRoles.isEmployer,
+      isAuthenticated,
+      preSelectedRole,
+      preferredAuthMethod,
+      allowedAuthMethods,
+    });
+    
     if (!isConnected || !address) {
+      console.log('⏹️ [useUnifiedAuth] Not connected, skipping');
       return;
     }
+    
+    // Wait for role detection to complete
+    if (userRoles.isLoading) {
+      console.log('⏳ [useUnifiedAuth] Waiting for role detection to complete...');
+      return;
+    }
+    
+    console.log('✅ [useUnifiedAuth] Role detection complete, proceeding with auto-select logic');
     
     // CRITICAL: Block authentication for suspended universities
     // This prevents signature requests before SuspensionGuard disconnects the wallet
@@ -259,6 +351,11 @@ export function useUnifiedAuth(): UnifiedAuthState {
     
     // Auto-select if only one method is allowed (for admin/university)
     if (!authMethod && allowedAuthMethods.length === 1) {
+      console.log('🎯 [useUnifiedAuth] Auto-selecting single allowed method', { 
+        method: allowedAuthMethods[0],
+        role: userRoles.primaryRole,
+        allowed: allowedAuthMethods 
+      });
       logger.info('Auto-selecting only available auth method', { 
         method: allowedAuthMethods[0],
         role: userRoles.primaryRole,
@@ -268,6 +365,7 @@ export function useUnifiedAuth(): UnifiedAuthState {
       
       // If auto-selected method is Web3 and user has role, auto-authenticate
       if (allowedAuthMethods[0] === 'web3' && userRoles.primaryRole) {
+        console.log('🔐 [useUnifiedAuth] Auto-authenticating with Web3 role', { role: userRoles.primaryRole });
         logger.info('Auto-authenticating with Web3 role', { role: userRoles.primaryRole });
         setRole(userRoles.primaryRole);
       }
@@ -278,10 +376,18 @@ export function useUnifiedAuth(): UnifiedAuthState {
     // Additional fallback: If auth method is set to Web3 but role is not set yet, 
     // and we have a detected role, set it now
     if (authMethod === 'web3' && !role && userRoles.primaryRole) {
-      logger.info('Setting role for Web3 auth method', { role: userRoles.primaryRole });
+      logger.info('🔧 Setting role for Web3 auth method', { role: userRoles.primaryRole });
+      console.log('🔧 [useUnifiedAuth] Setting role for Web3:', userRoles.primaryRole);
       setRole(userRoles.primaryRole);
       return;
     }
+    
+    console.log('🏁 [useUnifiedAuth] End of auto-select logic', {
+      authMethod,
+      role,
+      'userRoles.primaryRole': userRoles.primaryRole,
+      isAuthenticated,
+    });
     
     // ONLY show auth method selector when user has a CHOICE
     // 1. User connects wallet for the first time (no authMethod set)
@@ -352,7 +458,10 @@ export function useUnifiedAuth(): UnifiedAuthState {
   /**
    * Switch authentication method (with role-based validation)
    */
-  const switchAuthMethod = useCallback(async (newMethod: AuthMethod) => {
+  const switchAuthMethod = useCallback(async (
+    newMethod: AuthMethod,
+    onProgress?: (event: ZKAuthProgressEvent) => void
+  ) => {
     // Validate that new method is allowed for this role
     if (!allowedAuthMethods.includes(newMethod)) {
       logger.warn('Attempted to switch to disallowed auth method', { 
@@ -365,9 +474,24 @@ export function useUnifiedAuth(): UnifiedAuthState {
     
     logger.info('Switching auth method', { from: authMethod, to: newMethod, allowed: allowedAuthMethods });
     
-    // Logout from current method
+    // Logout from current method and clear its state
     if (authMethod === 'zk' && zkAuthState.isZKAuthenticated) {
-      await zkAuth.logout();
+      await zkAuth.logout(onProgress);
+      
+      // CRITICAL: Clear all ZK state from store after switching away from ZK
+      // This ensures the UI shows "Upgrade to ZK" option again
+      setZKAuthEnabled(false);
+      setZKAuthenticated(false);
+      setZKCommitment(null);
+      setZKSessionId(null);
+      setZKRole(null);
+      
+      // CRITICAL: Also clear stored credentials from localStorage
+      // This prevents auto-selection of ZK auth on page reload
+      // User made an explicit choice to switch to Web3 - respect that
+      zkAuth.clearCredentials();
+      
+      logger.info('✅ Cleared ZK auth state AND credentials after switching to Web3');
     }
     
     // Clear current role
@@ -380,7 +504,20 @@ export function useUnifiedAuth(): UnifiedAuthState {
     if (newMethod === 'web3' && userRoles.primaryRole) {
       setRole(userRoles.primaryRole);
     }
-  }, [authMethod, zkAuthState.isZKAuthenticated, zkAuth, setRole, setAuthMethod, userRoles.primaryRole, allowedAuthMethods]);
+  }, [
+    authMethod, 
+    zkAuthState.isZKAuthenticated, 
+    zkAuth, 
+    setRole, 
+    setAuthMethod, 
+    userRoles.primaryRole, 
+    allowedAuthMethods,
+    setZKAuthEnabled,
+    setZKAuthenticated,
+    setZKCommitment,
+    setZKSessionId,
+    setZKRole
+  ]);
   
   /**
    * Unified logout
@@ -392,12 +529,61 @@ export function useUnifiedAuth(): UnifiedAuthState {
       await zkAuth.logout();
     }
     
-    // Clear auth state
+    // Set cooldown period to prevent immediate re-login
+    setIsLogoutCooldown(true);
+    
+    // Clear ALL auth state (including pre-selected role)
     setAuthMethod(null);
     setRole(null);
+    setPreSelectedRole(null); // IMPORTANT: Clear pre-selected role
+    setShowAuthMethodSelector(false);
+    
+    // CRITICAL: Also clear from localStorage to prevent any persistence of stale data
+    try {
+      const storedState = localStorage.getItem('zkcredentials-auth');
+      if (storedState) {
+        const parsed = JSON.parse(storedState);
+        // Clear ALL role-related fields from persisted state
+        // This prevents stale role data from causing conflicts on next login
+        parsed.state = {
+          ...parsed.state,
+          preSelectedRole: null,
+          role: null,
+          authMethod: null,
+          hasSelectedRole: false,
+          isAspirationalRole: false,
+          detectedRoles: [], // Clear detected roles (though no longer persisted as of fix)
+          address: null, // Also clear address to force fresh detection
+          isRoleDetectionComplete: false, // Reset detection flag
+        };
+        localStorage.setItem('zkcredentials-auth', JSON.stringify(parsed));
+        logger.info('✅ Cleared ALL role data from localStorage', {
+          clearedFields: ['preSelectedRole', 'role', 'authMethod', 'hasSelectedRole', 'detectedRoles', 'address']
+        });
+      }
+    } catch (error) {
+      logger.warn('⚠️ Failed to clear localStorage', error);
+    }
+    
+    // CRITICAL: Clear all role-related queries to prevent cache pollution
+    // This ensures that when a new wallet connects, it gets fresh data
+    queryClient.removeQueries({ queryKey: ['userRoles'] });
+    queryClient.removeQueries({ queryKey: ['readContract'] });
+    
+    logger.info('Cleared query cache after logout');
+    
+    // IMPORTANT: Redirect to home page to prevent stale dashboard access
+    navigate('/', { replace: true });
+    logger.info('Redirected to home after logout');
+    
+    // End cooldown period after 3 seconds (increased from 2 for safety)
+    setTimeout(() => {
+      setIsLogoutCooldown(false);
+      logger.info('Logout cooldown ended - ready for new connection');
+    }, 3000);
     
     // Don't clear preferred method - user can reuse it
-  }, [authMethod, zkAuth, setAuthMethod, setRole]);
+  }, [authMethod, zkAuth, setAuthMethod, setRole, setPreSelectedRole, setShowAuthMethodSelector, setIsLogoutCooldown, queryClient, navigate]);
   
   return {
     // Authentication status
@@ -421,6 +607,9 @@ export function useUnifiedAuth(): UnifiedAuthState {
     // Errors
     error: zkAuth.error || userRoles.error,
     
+    // Logout cooldown
+    isLogoutCooldown,
+    
     // Actions
     selectAuthMethod,
     switchAuthMethod,
@@ -432,6 +621,7 @@ export function useUnifiedAuth(): UnifiedAuthState {
       register: zkAuth.register,
       login: zkAuth.login,
       clearCredentials: zkAuth.clearCredentials,
+      logout: zkAuth.logout,
     },
     
     // Web3 Auth specific

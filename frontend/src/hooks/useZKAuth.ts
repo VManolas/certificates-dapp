@@ -49,6 +49,22 @@ const ZK_AUTH_REGISTRY_ADDRESS = import.meta.env.VITE_ZK_AUTH_REGISTRY_ADDRESS a
 
 // ZK auth only supports student and employer roles (universities and admins use Web3 auth)
 export type ZKAuthRole = 'student' | 'employer';
+export type ZKAuthProgressEvent =
+  | 'register_signature_required'
+  | 'register_signature_complete'
+  | 'register_transaction_required'
+  | 'register_transaction_submitted'
+  | 'register_transaction_confirmed'
+  | 'login_wallet_access_required'
+  | 'login_signature_required'
+  | 'login_signature_complete'
+  | 'login_transaction_required'
+  | 'login_transaction_submitted'
+  | 'login_transaction_confirmed'
+  | 'logout_transaction_required'
+  | 'logout_transaction_submitted'
+  | 'logout_transaction_confirmed'
+  | 'logout_no_active_session';
 
 interface ZKAuthState {
   isAuthenticated: boolean;
@@ -61,7 +77,7 @@ interface ZKAuthState {
 
 export function useZKAuth() {
   const { address, isConnected } = useAccount();
-  const { writeContract, data: txHash, isPending: isWriting, error: writeError } = useWriteContract();
+  const { writeContractAsync, data: txHash, isPending: isWriting, error: writeError } = useWriteContract();
   const { isLoading: isConfirming, isSuccess: txSuccess } = useWaitForTransactionReceipt({ hash: txHash });
   const { 
     setZKAuthEnabled, 
@@ -69,6 +85,7 @@ export function useZKAuth() {
     setZKSessionId, 
     setZKAuthenticated,
     setZKRole,
+    setAuthMethod,
     zkAuth 
   } = useAuthStore();
   
@@ -98,7 +115,7 @@ export function useZKAuth() {
    * @param role User role (student or employer only - universities and admins use Web3 auth)
    * @returns Commitment hash
    */
-  const register = useCallback(async (role: ZKAuthRole) => {
+  const register = useCallback(async (role: ZKAuthRole, onProgress?: (event: ZKAuthProgressEvent) => void) => {
     if (!address || !isConnected) {
       throw new Error('Wallet not connected');
     }
@@ -136,14 +153,17 @@ export function useZKAuth() {
       const provider = new ethers.providers.Web3Provider(window.ethereum as any);
       const signer = provider.getSigner();
       const message = 'Sign this message to encrypt your zkAuth credentials.\n\nThis signature is used locally and never leaves your device.';
+      onProgress?.('register_signature_required');
       const signature = await signer.signMessage(message);
+      onProgress?.('register_signature_complete');
 
       const encrypted = await encryptCredentials(
         { privateKey, salt, commitment, role },
-        signature
+        signature,
+        address
       );
 
-      storeCredentials(encrypted);
+      storeCredentials(encrypted, address);
 
       logger.info('Credentials encrypted and stored');
 
@@ -154,14 +174,18 @@ export function useZKAuth() {
         role === 'employer' ? 2 : 
         1; // Default to student if unknown
 
-      writeContract({
+      onProgress?.('register_transaction_required');
+      const registrationTxHash = await writeContractAsync({
         address: ZK_AUTH_REGISTRY_ADDRESS,
         abi: ZKAuthRegistryABI.abi,
         functionName: 'registerCommitment',
         args: [commitment, roleEnum, proof],
       });
+      onProgress?.('register_transaction_submitted');
+      await provider.waitForTransaction(registrationTxHash);
+      onProgress?.('register_transaction_confirmed');
 
-      setState(s => ({ ...s, commitment }));
+      setState(s => ({ ...s, commitment, isLoading: false }));
       
       // Update auth store
       setZKCommitment(commitment);
@@ -173,7 +197,7 @@ export function useZKAuth() {
       setState(s => ({ ...s, isLoading: false, error: error as Error }));
       throw error;
     }
-  }, [address, isConnected, writeContract]);
+  }, [address, isConnected, writeContractAsync, setZKCommitment, setZKRole]);
 
   /**
    * Login with ZK proof
@@ -189,13 +213,9 @@ export function useZKAuth() {
    * 
    * @returns Session ID (set via transaction confirmation)
    */
-  const login = useCallback(async () => {
+  const login = useCallback(async (onProgress?: (event: ZKAuthProgressEvent) => void) => {
     if (!ZK_AUTH_REGISTRY_ADDRESS) {
       throw new Error('ZK Auth Registry not configured');
-    }
-
-    if (!hasStoredCredentials()) {
-      throw new Error('No stored credentials. Please register first.');
     }
 
     if (!window.ethereum) {
@@ -211,6 +231,7 @@ export function useZKAuth() {
       // This is needed to get a signer for the signature request
       let accounts: string[];
       try {
+        onProgress?.('login_wallet_access_required');
         accounts = await window.ethereum.request({ 
           method: 'eth_requestAccounts' 
         }) as string[];
@@ -225,8 +246,12 @@ export function useZKAuth() {
 
       logger.info(`Account access granted: ${accounts[0].slice(0, 6)}...${accounts[0].slice(-4)}`);
 
+      if (!hasStoredCredentials(accounts[0])) {
+        throw new Error('No stored credentials for this wallet. Please register first.');
+      }
+
       // Step 2: Decrypt stored credentials using wallet signature
-      const encrypted = getStoredCredentials()!;
+      const encrypted = getStoredCredentials(accounts[0])!;
       const provider = new ethers.providers.Web3Provider(window.ethereum as any);
       const signer = provider.getSigner();
       
@@ -234,12 +259,14 @@ export function useZKAuth() {
       
       let signature: string;
       try {
+        onProgress?.('login_signature_required');
         signature = await signer.signMessage(message);
+        onProgress?.('login_signature_complete');
       } catch (err) {
         throw new Error('Signature required to decrypt credentials. Please approve the signature request.');
       }
 
-      const credentials = await decryptCredentials(encrypted, signature);
+      const credentials = await decryptCredentials(encrypted, signature, accounts[0]);
       logger.debug('Credentials decrypted successfully');
 
       // Restore role from credentials to auth store
@@ -253,14 +280,29 @@ export function useZKAuth() {
       logger.debug('Authentication proof generated for login');
 
       // Step 4: Start session on-chain
-      writeContract({
+      onProgress?.('login_transaction_required');
+      const loginTxHash = await writeContractAsync({
         address: ZK_AUTH_REGISTRY_ADDRESS,
         abi: ZKAuthRegistryABI.abi,
         functionName: 'startSession',
         args: [credentials.commitment, proof],
       });
+      onProgress?.('login_transaction_submitted');
+      await provider.waitForTransaction(loginTxHash);
+      onProgress?.('login_transaction_confirmed');
 
-      setState(s => ({ ...s, commitment: credentials.commitment }));
+      setState(s => ({
+        ...s,
+        commitment: credentials.commitment,
+        sessionId: loginTxHash,
+        role: credentials.role,
+        isAuthenticated: true,
+        isLoading: false,
+      }));
+      setZKAuthEnabled(true);
+      setZKAuthenticated(true);
+      setZKSessionId(loginTxHash);
+      setAuthMethod('zk');
       
       // NOTE: Transaction submitted, but not confirmed yet
       // The transaction confirmation will be handled by the useEffect below
@@ -268,26 +310,30 @@ export function useZKAuth() {
     } catch (error) {
       const err = error as Error;
       
-      // Handle outdated credentials silently - this is expected after updates
+      // Outdated credentials are recoverable, but login did NOT succeed.
+      // Propagate the error so UI flows don't falsely mark authentication complete.
       if (err.message === 'CREDENTIALS_OUTDATED') {
         logger.info('ℹ️ Stored credentials are outdated. Please register again with the new version.');
         setState(s => ({ ...s, isLoading: false }));
-        // Don't set error state - just let the user know they need to register again
-        return;
+        throw err;
       }
       
       logger.error('Login failed', error);
       setState(s => ({ ...s, isLoading: false, error: err }));
       throw error;
     }
-  }, [writeContract]);
+  }, [writeContractAsync, setZKRole, setZKAuthEnabled, setZKAuthenticated, setZKSessionId, setAuthMethod]);
 
   /**
    * Logout (end session)
    */
-  const logout = useCallback(async () => {
-    if (!state.sessionId || !ZK_AUTH_REGISTRY_ADDRESS) {
-      // Just clear local state
+  const logout = useCallback(async (onProgress?: (event: ZKAuthProgressEvent) => void) => {
+    const isSessionNotFoundError = (error: unknown): boolean => {
+      const message = error instanceof Error ? error.message : String(error);
+      return message.includes('SessionNotFound');
+    };
+
+    const clearLocalSessionState = () => {
       setState({
         isAuthenticated: false,
         role: null,
@@ -296,11 +342,14 @@ export function useZKAuth() {
         isLoading: false,
         error: null,
       });
-      
-      // Update auth store
       setZKAuthenticated(false);
       setZKSessionId(null);
-      
+    };
+
+    if (!state.sessionId || !ZK_AUTH_REGISTRY_ADDRESS) {
+      // Just clear local state
+      onProgress?.('logout_no_active_session');
+      clearLocalSessionState();
       return;
     }
 
@@ -309,40 +358,72 @@ export function useZKAuth() {
     try {
       logger.info('Logging out', { sessionId: state.sessionId });
 
+      const provider = new ethers.providers.Web3Provider(window.ethereum as any);
+      const sessionReader = new ethers.Contract(
+        ZK_AUTH_REGISTRY_ADDRESS,
+        ZKAuthRegistryABI.abi,
+        provider
+      );
+
+      // Pre-check session status to avoid unnecessary failing tx prompts.
+      try {
+        const session = await sessionReader.getSession(state.sessionId);
+        if (!session?.active) {
+          logger.info('Session already inactive on-chain. Clearing local state only.');
+          onProgress?.('logout_no_active_session');
+          onProgress?.('logout_transaction_confirmed');
+          clearLocalSessionState();
+          return;
+        }
+      } catch (readError) {
+        if (isSessionNotFoundError(readError)) {
+          logger.info('Session not found on-chain. Treating as already logged out.');
+          onProgress?.('logout_no_active_session');
+          onProgress?.('logout_transaction_confirmed');
+          clearLocalSessionState();
+          return;
+        }
+        // If read check fails for unrelated reasons, continue with write attempt.
+        logger.warn('Session pre-check failed, attempting on-chain logout anyway.', readError);
+      }
+
       // End session on-chain
-      writeContract({
+      onProgress?.('logout_transaction_required');
+      const logoutTxHash = await writeContractAsync({
         address: ZK_AUTH_REGISTRY_ADDRESS,
         abi: ZKAuthRegistryABI.abi,
         functionName: 'endSession',
         args: [state.sessionId],
       });
+      onProgress?.('logout_transaction_submitted');
 
-      // Clear local state immediately (optimistic)
-      setState({
-        isAuthenticated: false,
-        role: null,
-        commitment: null,
-        sessionId: null,
-        isLoading: false,
-        error: null,
-      });
-      
-      // Update auth store
-      setZKAuthenticated(false);
-      setZKSessionId(null);
+      // Wait for confirmation so the UI can reflect pending/confirmed states.
+      await provider.waitForTransaction(logoutTxHash);
+      onProgress?.('logout_transaction_confirmed');
+
+      // Clear local state after confirmation
+      clearLocalSessionState();
 
       logger.info('Logged out successfully');
     } catch (error) {
+      if (isSessionNotFoundError(error)) {
+        logger.info('Session already ended (SessionNotFound). Clearing local state.');
+        onProgress?.('logout_no_active_session');
+        onProgress?.('logout_transaction_confirmed');
+        clearLocalSessionState();
+        return;
+      }
+
       logger.error('Logout failed', error);
       setState(s => ({ ...s, isLoading: false, error: error as Error }));
     }
-  }, [state.sessionId, writeContract]);
+  }, [state.sessionId, writeContractAsync, setZKAuthenticated, setZKSessionId]);
 
   /**
    * Clear stored credentials (for testing)
    */
   const clearCredentials = useCallback(() => {
-    clearStoredCredentials();
+    clearStoredCredentials(address || undefined);
     setState({
       isAuthenticated: false,
       role: null,
@@ -360,35 +441,14 @@ export function useZKAuth() {
     setZKRole(null);
     
     logger.info('Credentials cleared');
-  }, [setZKAuthEnabled, setZKCommitment, setZKSessionId, setZKAuthenticated, setZKRole]);
+  }, [address, setZKAuthEnabled, setZKCommitment, setZKSessionId, setZKAuthenticated, setZKRole]);
 
-  // Handle transaction success
+  // Keep loading state resilient if a tx is confirmed externally.
   useEffect(() => {
-    logger.debug('Transaction status check', { 
-      txSuccess, 
-      isLoading: state.isLoading, 
-      hasCommitment: !!state.commitment,
-      txHash 
-    });
-    
-    if (txSuccess && !state.isLoading) {
+    if (txSuccess && state.isLoading) {
       setState(s => ({ ...s, isLoading: false }));
-      
-      // Enable ZK auth in store when tx succeeds
-      if (state.commitment) {
-        logger.info('✅ Setting ZK authentication state', {
-          commitment: state.commitment,
-          txHash
-        });
-        setZKAuthEnabled(true);
-        setZKAuthenticated(true);
-        setZKSessionId(txHash || null);
-        logger.info('✅ ZK authentication successful - transaction confirmed');
-      } else {
-        logger.warn('⚠️ Transaction succeeded but no commitment found in state');
-      }
     }
-  }, [txSuccess, state.isLoading, state.commitment, txHash, setZKAuthEnabled, setZKAuthenticated, setZKSessionId]);
+  }, [txSuccess, state.isLoading]);
 
   // Handle transaction errors
   useEffect(() => {
@@ -405,7 +465,7 @@ export function useZKAuth() {
     sessionId: state.sessionId,
     isLoading: state.isLoading || isWriting || isConfirming,
     error: state.error || writeError,
-    hasCredentials: hasStoredCredentials(),
+    hasCredentials: hasStoredCredentials(address),
     
     // Actions
     register,

@@ -61,7 +61,7 @@ export interface PrivacySettings {
  * Version 1 format: V1:{base64(json)}
  * 
  * Always included fields:
- * - program, university, graduationYear, status
+ * - program, university, graduationYear, status, documentHash
  * 
  * Optional fields (controlled by student):
  * - studentWallet, studentInitials
@@ -72,6 +72,7 @@ export interface QRCodePayload {
   university: string;
   graduationYear: number;
   status: 'Verified' | 'Revoked';
+  documentHash: string; // SHA-256 hash for blockchain verification
   
   // Optional (privacy controls)
   studentWallet?: string;

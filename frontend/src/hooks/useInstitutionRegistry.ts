@@ -5,9 +5,12 @@
 
 import { useWriteContract, useWaitForTransactionReceipt, useReadContract } from 'wagmi';
 import { Address } from 'viem';
+import { useEffect, useRef, useState } from 'react';
 import InstitutionRegistryABI from '@/contracts/abis/InstitutionRegistry.json';
 
 const INSTITUTION_REGISTRY_ADDRESS = import.meta.env.VITE_INSTITUTION_REGISTRY_ADDRESS as Address;
+type TransactionPhase = 'idle' | 'awaiting_wallet_confirmation' | 'pending_onchain' | 'confirmed' | 'failed';
+const MIN_PENDING_DISPLAY_MS = 1200;
 
 /**
  * Hook for admin to register a new university directly (admin-initiated)
@@ -15,14 +18,54 @@ const INSTITUTION_REGISTRY_ADDRESS = import.meta.env.VITE_INSTITUTION_REGISTRY_A
 export function useRegisterInstitutionByAdmin() {
   const {
     data: hash,
-    writeContract,
+    writeContractAsync,
     isPending: isWritePending,
     error: writeError,
   } = useWriteContract();
 
-  const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({
+  const {
+    isSuccess: isConfirmed,
+    error: receiptError,
+  } = useWaitForTransactionReceipt({
     hash,
   });
+  const [transactionPhase, setTransactionPhase] = useState<TransactionPhase>('idle');
+  const pendingStartRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (writeError || receiptError) {
+      setTransactionPhase('failed');
+      return;
+    }
+
+    if (isWritePending && !hash) {
+      setTransactionPhase('awaiting_wallet_confirmation');
+      pendingStartRef.current = null;
+      return;
+    }
+
+    if (hash && !isConfirmed) {
+      if (pendingStartRef.current === null) {
+        pendingStartRef.current = Date.now();
+      }
+      setTransactionPhase('pending_onchain');
+      return;
+    }
+
+    if (isConfirmed && hash) {
+      const pendingSince = pendingStartRef.current ?? Date.now();
+      const elapsed = Date.now() - pendingSince;
+      const waitRemaining = Math.max(0, MIN_PENDING_DISPLAY_MS - elapsed);
+      const timer = setTimeout(() => setTransactionPhase('confirmed'), waitRemaining);
+      return () => clearTimeout(timer);
+    }
+
+    setTransactionPhase('idle');
+    pendingStartRef.current = null;
+  }, [isWritePending, hash, isConfirmed, writeError, receiptError]);
+
+  const isAwaitingWalletConfirmation = transactionPhase === 'awaiting_wallet_confirmation';
+  const isPendingOnchain = transactionPhase === 'pending_onchain';
 
   const registerInstitutionByAdmin = async (walletAddress: Address, name: string, emailDomain: string) => {
     if (!INSTITUTION_REGISTRY_ADDRESS) {
@@ -30,7 +73,7 @@ export function useRegisterInstitutionByAdmin() {
     }
 
     try {
-      writeContract({
+      await writeContractAsync({
         address: INSTITUTION_REGISTRY_ADDRESS,
         abi: InstitutionRegistryABI.abi,
         functionName: 'registerInstitutionByAdmin',
@@ -44,10 +87,13 @@ export function useRegisterInstitutionByAdmin() {
 
   return {
     registerInstitutionByAdmin,
-    isRegistering: isWritePending || isConfirming,
-    isSuccess: isConfirmed,
-    error: writeError,
+    isRegistering: isAwaitingWalletConfirmation || isPendingOnchain,
+    isSuccess: transactionPhase === 'confirmed',
+    error: writeError ?? receiptError,
     transactionHash: hash,
+    transactionPhase,
+    isAwaitingWalletConfirmation,
+    isPendingOnchain,
   };
 }
 

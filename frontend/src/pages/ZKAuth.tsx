@@ -26,7 +26,7 @@
  * - On-chain commitment verification
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { logger } from '@/lib/logger';
 import type { UserRole } from '@/types/auth';
@@ -34,6 +34,9 @@ import { useAuthStore } from '@/store/authStore';
 import { useUnifiedAuth } from '@/hooks/useUnifiedAuth';
 import { UnifiedAuthFlow } from '@/components/UnifiedAuthFlow';
 import { DevModeBanner } from '@/components/DevModeBanner';
+import { ZKAuthUpgrade } from '@/components/zkauth/ZKAuthUpgrade';
+
+type SwitchTxPhase = 'idle' | 'awaiting_wallet_confirmation' | 'pending_onchain' | 'confirmed' | 'failed';
 
 // Role options for inline display
 interface RoleOption {
@@ -107,7 +110,55 @@ export default function ZKAuthPage() {
   
   const [showAuthFlow, setShowAuthFlow] = useState(false);
   const [preSelectedRole, setPreSelectedRole] = useState<UserRole | null>(null);
+  const effectiveRole = unifiedAuth.role || authenticatedRole || preSelectedRole;
   const [showEducationalContent, setShowEducationalContent] = useState(true);
+  const [switchTxPhase, setSwitchTxPhase] = useState<SwitchTxPhase>('idle');
+  const [switchError, setSwitchError] = useState<string | null>(null);
+  const [switchSkippedOnchainTx, setSwitchSkippedOnchainTx] = useState(false);
+  const [showSwitchResultNotice, setShowSwitchResultNotice] = useState(false);
+
+  // Prevent stale switch status from leaking between auth-mode transitions.
+  useEffect(() => {
+    if (unifiedAuth.authMethod !== 'zk' && switchTxPhase !== 'idle' && !showSwitchResultNotice) {
+      setSwitchTxPhase('idle');
+      setSwitchError(null);
+      setSwitchSkippedOnchainTx(false);
+    }
+  }, [unifiedAuth.authMethod, switchTxPhase, showSwitchResultNotice]);
+
+  const handleSwitchToStandard = async () => {
+    try {
+      setSwitchError(null);
+      setSwitchSkippedOnchainTx(false);
+      setShowSwitchResultNotice(false);
+      setSwitchTxPhase('awaiting_wallet_confirmation');
+      await unifiedAuth.switchAuthMethod('web3', (event) => {
+        if (event === 'logout_no_active_session') {
+          setSwitchSkippedOnchainTx(true);
+          setSwitchTxPhase('confirmed');
+        } else if (event === 'logout_transaction_required') {
+          setSwitchTxPhase('awaiting_wallet_confirmation');
+        } else if (event === 'logout_transaction_submitted') {
+          setSwitchTxPhase('pending_onchain');
+        } else if (event === 'logout_transaction_confirmed') {
+          setSwitchTxPhase('confirmed');
+        }
+      });
+      // Keep the switch result visible briefly before showing other Web3 UI cards.
+      setShowSwitchResultNotice(true);
+      setTimeout(() => {
+        setShowSwitchResultNotice(false);
+        setSwitchTxPhase('idle');
+        setSwitchError(null);
+        setSwitchSkippedOnchainTx(false);
+      }, 3000);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to switch authentication method';
+      setSwitchError(message);
+      setSwitchTxPhase('failed');
+    }
+  };
+
 
   // Handle role selection
   const handleRoleSelection = (selectedRole: UserRole) => {
@@ -118,9 +169,9 @@ export default function ZKAuthPage() {
 
   // Handle successful authentication
   const handleAuthSuccess = () => {
-    logger.info('ZK authentication successful', { role: unifiedAuth.role });
+    logger.info('ZK authentication successful', { role: effectiveRole });
     // Navigate to appropriate dashboard based on role
-    const role = unifiedAuth.role;
+    const role = effectiveRole;
     if (role === 'student') {
       navigate('/student/certificates');
     } else if (role === 'university') {
@@ -140,7 +191,7 @@ export default function ZKAuthPage() {
   };
 
   // If already authenticated, show welcome screen
-  if (unifiedAuth.isAuthenticated && authenticatedRole) {
+  if (unifiedAuth.isAuthenticated && effectiveRole) {
     return (
       <div className="relative overflow-hidden min-h-screen">
         {/* Background gradient */}
@@ -153,8 +204,9 @@ export default function ZKAuthPage() {
         </div>
 
         <div className="relative py-12 px-4">
-          <div className="max-w-3xl mx-auto text-center">
-            <div className="card bg-surface-900 p-12">
+          <div className="max-w-3xl mx-auto space-y-6">
+            {/* Main Authentication Status Card */}
+            <div className="card bg-surface-900 p-12 text-center">
               <div className="w-20 h-20 mx-auto rounded-full bg-green-500/20 flex items-center justify-center mb-6">
                 <svg className="w-10 h-10 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -173,7 +225,7 @@ export default function ZKAuthPage() {
               </p>
               
               <p className="text-lg text-surface-400 mb-8">
-                Role: <span className="text-primary-400 font-semibold capitalize">{authenticatedRole}</span>
+                Role: <span className="text-primary-400 font-semibold capitalize">{effectiveRole}</span>
               </p>
               
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -195,6 +247,173 @@ export default function ZKAuthPage() {
                 </button>
               </div>
             </div>
+
+            {/* ZK Auth Upgrade Card - Show for Web3 users who can upgrade */}
+            {showSwitchResultNotice && (
+              <div className="card bg-gradient-to-r from-green-900/40 to-emerald-800/30 border-green-500/30">
+                <div className="flex items-start gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-green-500/20 flex items-center justify-center flex-shrink-0">
+                    <svg className="w-6 h-6 text-green-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="text-lg font-semibold text-white mb-2">Switched to Standard Login</h4>
+                    <p className="text-sm text-surface-200">
+                      {switchSkippedOnchainTx
+                        ? 'No active private session found on-chain. Switched locally to standard login.'
+                        : 'Private session closure confirmed on-chain. You are now using standard login.'}
+                    </p>
+                    <p className="text-xs text-surface-400 mt-2">
+                      This message will close automatically in a moment.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {unifiedAuth.authMethod === 'web3' && !showSwitchResultNotice && (
+              <ZKAuthUpgrade 
+                variant="card" 
+                onUpgradeComplete={() => {
+                  setSwitchTxPhase('idle');
+                  setSwitchError(null);
+                  logger.info('ZK auth upgrade completed from ZKAuth page');
+                  // Force component re-render by logging state
+                  logger.debug('Current auth state after upgrade:', {
+                    authMethod: unifiedAuth.authMethod,
+                    isAuthenticated: unifiedAuth.isAuthenticated,
+                    role: unifiedAuth.role,
+                  });
+                }}
+              />
+            )}
+
+            {/* Switch to Standard Card - Show for ZK users who want to switch back */}
+            {unifiedAuth.authMethod === 'zk' && (effectiveRole === 'student' || effectiveRole === 'employer') && (
+              <div className="card bg-gradient-to-r from-primary-900/50 to-primary-700/30 border-primary-500/20">
+                <div className="flex items-start gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-primary-500/20 flex items-center justify-center flex-shrink-0">
+                    <svg className="w-6 h-6 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-2">
+                      <h4 className="text-lg font-semibold text-white">Private Login Active</h4>
+                      <span className="px-2 py-0.5 text-xs bg-green-500/20 text-green-400 rounded-full border border-green-500/30">
+                        ✓ Authenticated
+                      </span>
+                      <div className="relative group">
+                        <button
+                          type="button"
+                          className="text-primary-300/80 hover:text-primary-200 transition-colors cursor-help"
+                          aria-label="ZKP algorithm information"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </button>
+                        <div className="absolute left-1/2 -translate-x-1/2 top-6 z-50 hidden group-hover:block w-80 max-w-[80vw]">
+                          <div className="bg-surface-900 border border-surface-700 rounded-lg shadow-xl p-3 text-left">
+                            <p className="text-xs font-semibold text-white mb-1">ZKP algorithm used</p>
+                            <p className="text-xs text-surface-300 mb-2">
+                              This flow uses a Noir-based circuit with an <span className="text-primary-300 font-medium">UltraPlonk</span> verifier on-chain.
+                            </p>
+                            <p className="text-xs text-surface-400">
+                              Chosen for strong security with practical proof generation and verification performance for real user login flows.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <p className="text-sm text-surface-300 mb-4">
+                      Your wallet address is hidden. You're using privacy-preserving authentication.
+                    </p>
+                    <div className="mb-4 rounded-lg border border-primary-500/20 bg-surface-900/50 p-4">
+                      <h5 className="text-sm font-semibold text-white mb-2">Why Private Login helps</h5>
+                      <div className="space-y-2 text-xs text-surface-300">
+                        <p className="flex items-start gap-2">
+                          <span className="text-green-400">•</span>
+                          <span><strong className="text-white">Protects identity:</strong> routine logins do not publicly expose your wallet address.</span>
+                        </p>
+                        <p className="flex items-start gap-2">
+                          <span className="text-green-400">•</span>
+                          <span><strong className="text-white">Reduces tracking:</strong> it becomes harder to correlate your activity across sessions.</span>
+                        </p>
+                        <p className="flex items-start gap-2">
+                          <span className="text-green-400">•</span>
+                          <span><strong className="text-white">Keeps trust strong:</strong> authentication still relies on cryptographic proof verification.</span>
+                        </p>
+                      </div>
+                    </div>
+
+                    {(switchTxPhase === 'awaiting_wallet_confirmation'
+                      || switchTxPhase === 'pending_onchain'
+                      || switchTxPhase === 'confirmed'
+                      || switchTxPhase === 'failed') && (
+                      <div
+                        className={`mb-4 rounded-lg border p-3 ${
+                          switchTxPhase === 'awaiting_wallet_confirmation'
+                            ? 'border-yellow-500/30 bg-yellow-500/10'
+                            : switchTxPhase === 'pending_onchain'
+                            ? 'border-blue-500/30 bg-blue-500/10'
+                            : switchTxPhase === 'confirmed'
+                            ? 'border-green-500/30 bg-green-500/10'
+                            : 'border-red-500/30 bg-red-500/10'
+                        }`}
+                      >
+                        <p
+                          className={`text-sm font-medium ${
+                            switchTxPhase === 'awaiting_wallet_confirmation'
+                              ? 'text-yellow-300'
+                              : switchTxPhase === 'pending_onchain'
+                              ? 'text-blue-300'
+                              : switchTxPhase === 'confirmed'
+                              ? 'text-green-300'
+                              : 'text-red-300'
+                          }`}
+                        >
+                          {switchTxPhase === 'awaiting_wallet_confirmation' && 'Waiting to submit transaction'}
+                          {switchTxPhase === 'pending_onchain' && 'Transaction pending'}
+                          {switchTxPhase === 'confirmed' && 'Transaction confirmed'}
+                          {switchTxPhase === 'failed' && 'Transaction failed'}
+                        </p>
+                        <p className="text-xs text-surface-300 mt-1">
+                          {switchTxPhase === 'awaiting_wallet_confirmation' &&
+                            'Approve the MetaMask transaction to end your private session and switch to standard login.'}
+                          {switchTxPhase === 'pending_onchain' &&
+                            'Your transaction was submitted. Waiting for blockchain confirmation.'}
+                          {switchTxPhase === 'confirmed' && switchSkippedOnchainTx &&
+                            'No active private session found on-chain. Switched locally to standard login.'}
+                          {switchTxPhase === 'confirmed' && !switchSkippedOnchainTx &&
+                            'Session closure confirmed. Switching to standard login...'}
+                          {switchTxPhase === 'failed' && (switchError || 'Unable to switch authentication method.')}
+                        </p>
+                      </div>
+                    )}
+                    <div className="mb-3 rounded-lg border border-surface-700 bg-surface-900/40 p-3">
+                      <h6 className="text-xs font-semibold text-white mb-1">When to switch to Standard login</h6>
+                      <p className="text-xs text-surface-400 leading-relaxed">
+                        Use Standard mode when you need full wallet-visible interactions or troubleshooting steps that
+                        require explicit wallet context. You can switch back to Private login any time.
+                      </p>
+                    </div>
+                    <button
+                      onClick={handleSwitchToStandard}
+                      disabled={switchTxPhase === 'awaiting_wallet_confirmation' || switchTxPhase === 'pending_onchain'}
+                      className="btn-secondary text-sm disabled:opacity-50"
+                    >
+                      {switchTxPhase === 'awaiting_wallet_confirmation'
+                        ? 'Waiting for wallet confirmation...'
+                        : switchTxPhase === 'pending_onchain'
+                        ? 'Transaction pending...'
+                        : 'Switch to Standard'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -443,6 +662,58 @@ function EducationalContent() {
               </h4>
               <p className="text-xs text-blue-300 leading-relaxed">
                 You control when to reveal wallet for transactions.
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Impact of ZK Auth */}
+      <div className="card bg-surface-900 transition-smooth hover:border-primary-500/20">
+        <button
+          onClick={() => toggleSection('impact')}
+          className="w-full flex items-center justify-between text-left transition-smooth hover:text-primary-400"
+        >
+          <h3 className="text-lg font-bold text-white">Impact of ZK Auth</h3>
+          <svg
+            className={`w-4 h-4 text-surface-400 transition-all duration-300 ${
+              expandedSection === 'impact' ? 'rotate-180 text-primary-400' : ''
+            }`}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+
+        {expandedSection === 'impact' && (
+          <div className="space-y-3 mt-4 animate-fade-in">
+            <div className="p-3 bg-green-500/10 border border-green-500/20 rounded-lg transition-smooth hover:border-green-500/40">
+              <h4 className="font-semibold text-green-400 mb-1 text-sm">🔒 Privacy Impact</h4>
+              <p className="text-xs text-green-300 leading-relaxed">
+                Daily authentication no longer exposes your wallet address. This reduces account linkability across sessions.
+              </p>
+            </div>
+
+            <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg transition-smooth hover:border-blue-500/40">
+              <h4 className="font-semibold text-blue-400 mb-1 text-sm">🛡 Security Impact</h4>
+              <p className="text-xs text-blue-300 leading-relaxed">
+                Access is backed by cryptographic proof verification on-chain, not just session cookies or front-end flags.
+              </p>
+            </div>
+
+            <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg transition-smooth hover:border-purple-500/40">
+              <h4 className="font-semibold text-purple-400 mb-1 text-sm">⚡ UX Impact</h4>
+              <p className="text-xs text-purple-300 leading-relaxed">
+                One-time setup has extra wallet prompts; after setup, private login is fast and repeatable.
+              </p>
+            </div>
+
+            <div className="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg transition-smooth hover:border-yellow-500/40">
+              <h4 className="font-semibold text-yellow-400 mb-1 text-sm">📊 Transparency Trade-off</h4>
+              <p className="text-xs text-yellow-300 leading-relaxed">
+                Privacy increases during authentication, while operational blockchain actions remain auditable when transactions are submitted.
               </p>
             </div>
           </div>

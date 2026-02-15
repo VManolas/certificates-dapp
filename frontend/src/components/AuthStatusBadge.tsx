@@ -19,7 +19,6 @@
  */
 
 import type { UserRole, AuthMethod } from '@/types/auth';
-import { useAuthStore } from '@/store/authStore';
 import { useUnifiedAuth } from '@/hooks/useUnifiedAuth';
 import { logger } from '@/lib/logger';
 
@@ -62,8 +61,8 @@ const getAuthMethodInfo = (authMethod: AuthMethod) => {
 };
 
 export const AuthStatusBadge = () => {
-  const { role } = useAuthStore();
   const unifiedAuth = useUnifiedAuth();
+  const role = unifiedAuth.role;
 
   // Debug logging
   logger.debug('AuthStatusBadge render check', {

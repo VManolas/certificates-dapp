@@ -250,4 +250,5 @@ export class RateLimiter {
 }
 
 // Global rate limiter instance
-export const globalRateLimiter = new RateLimiter(5, 60000);
+// Increased to 30 attempts per 60 seconds for extensive testing
+export const globalRateLimiter = new RateLimiter(30, 60000);

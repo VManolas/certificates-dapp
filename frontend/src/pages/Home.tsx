@@ -1,6 +1,6 @@
 // src/pages/Home.tsx
 import { Link, useNavigate } from 'react-router-dom';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAccount } from 'wagmi';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import type { UserRole } from '@/types/auth';
@@ -17,6 +17,10 @@ export function Home() {
   const { role: storeRole, preSelectedRole, setPreSelectedRole } = useAuthStore();
   const [showRoleSelector, setShowRoleSelector] = useState(!isConnected && !preSelectedRole);
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [switchTxPhase, setSwitchTxPhase] = useState<'idle' | 'awaiting_wallet_confirmation' | 'pending_onchain' | 'confirmed' | 'failed'>('idle');
+  const [switchError, setSwitchError] = useState<string | null>(null);
+  const [switchSkippedOnchainTx, setSwitchSkippedOnchainTx] = useState(false);
+  const [showSwitchResultNotice, setShowSwitchResultNotice] = useState(false);
   
   // OPTIMIZATION: Only use unified auth when wallet is connected or login modal is shown
   // This avoids unnecessary blockchain queries for anonymous visitors browsing the home page
@@ -36,6 +40,15 @@ export function Home() {
     universityData: null,
   };
 
+  // Keep switch-state cleanup deterministic and avoid stale notices.
+  useEffect(() => {
+    if (unifiedAuth.authMethod !== 'zk' && switchTxPhase !== 'idle' && !showSwitchResultNotice) {
+      setSwitchTxPhase('idle');
+      setSwitchError(null);
+      setSwitchSkippedOnchainTx(false);
+    }
+  }, [unifiedAuth.authMethod, switchTxPhase, showSwitchResultNotice]);
+
   // Handle role selection (Step 1)
   const handleRoleSelection = (selectedRole: UserRole) => {
     setPreSelectedRole(selectedRole);
@@ -51,19 +64,47 @@ export function Home() {
   // Handle successful login
   const handleLoginSuccess = () => {
     logger.info('Login successful, navigating to dashboard', { role: unifiedAuth.role });
-    // Navigate to appropriate dashboard based on role
-    const role = unifiedAuth.role;
-    if (role === 'admin') {
-      navigate('/admin/dashboard');
-    } else if (role === 'university') {
-      navigate('/university/dashboard');
-    } else if (role === 'student') {
-      navigate('/student/dashboard');
-    } else if (role === 'employer') {
-      navigate('/employer/dashboard');
-    } else {
-      // Default fallback for unknown roles
-      navigate('/');
+    
+    // Close the modal
+    setShowLoginModal(false);
+    
+    // DON'T auto-navigate - let the user see the home page with dashboard button
+    // This prevents navigation with stale/cached role data
+    // The dashboard buttons on the home page will use fresh role data when clicked
+  };
+
+  const handleSwitchToStandard = async () => {
+    try {
+      setSwitchError(null);
+      setSwitchSkippedOnchainTx(false);
+      setShowSwitchResultNotice(false);
+      setSwitchTxPhase('awaiting_wallet_confirmation');
+
+      await unifiedAuth.switchAuthMethod('web3', (event) => {
+        if (event === 'logout_no_active_session') {
+          setSwitchSkippedOnchainTx(true);
+          setSwitchTxPhase('confirmed');
+        } else if (event === 'logout_transaction_required') {
+          setSwitchTxPhase('awaiting_wallet_confirmation');
+        } else if (event === 'logout_transaction_submitted') {
+          setSwitchTxPhase('pending_onchain');
+        } else if (event === 'logout_transaction_confirmed') {
+          setSwitchTxPhase('confirmed');
+        }
+      });
+
+      // Keep result visible before showing "Upgrade to ZK Authentication" again.
+      setShowSwitchResultNotice(true);
+      setTimeout(() => {
+        setShowSwitchResultNotice(false);
+        setSwitchTxPhase('idle');
+        setSwitchError(null);
+        setSwitchSkippedOnchainTx(false);
+      }, 3000);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to switch authentication method';
+      setSwitchError(message);
+      setSwitchTxPhase('failed');
     }
   };
 
@@ -141,14 +182,7 @@ export function Home() {
 
           {/* CTA Buttons */}
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            {isConnected && role !== 'admin' ? (
-              <Link to="/verify" className="btn-primary text-lg px-8 py-4">
-                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                Verify Certificate
-              </Link>
-            ) : !isConnected ? (
+            {!isConnected ? (
               <ConnectButton.Custom>
                 {({ openConnectModal }) => (
                   <button onClick={openConnectModal} className="btn-primary text-lg px-8 py-4">
@@ -168,39 +202,6 @@ export function Home() {
       {isConnected && role && (
         <section className="relative container mx-auto px-4 pb-16">
           <div className="max-w-2xl mx-auto space-y-6">
-            {/* ZK Auth Upgrade Card - Only show for Web3 users */}
-            {unifiedAuth.authMethod === 'web3' && <ZKAuthUpgrade variant="card" />}
-            
-            {/* ZK Auth Status Card - Show for ZK users who are ACTUALLY authenticated */}
-            {unifiedAuth.authMethod === 'zk' && unifiedAuth.isAuthenticated && (
-              <div className="card bg-gradient-to-r from-primary-900/50 to-primary-700/30 border-primary-500/20">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-primary-500/20 flex items-center justify-center">
-                    <svg className="w-6 h-6 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                    </svg>
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <h4 className="font-semibold text-white">Private Login Active</h4>
-                      <span className="px-2 py-0.5 text-xs bg-green-500/20 text-green-400 rounded-full border border-green-500/30">
-                        ✓ Authenticated
-                      </span>
-                    </div>
-                    <p className="text-sm text-surface-300">
-                      Your wallet address is hidden. You're using privacy-preserving authentication.
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => unifiedAuth.switchAuthMethod('web3')}
-                    className="btn-secondary text-sm"
-                  >
-                    Switch to Standard
-                  </button>
-                </div>
-              </div>
-            )}
-            
             {/* Role-specific welcome card */}
             <div className="card bg-gradient-to-r from-primary-900/50 to-accent-900/50 border-primary-500/20 text-center py-8">
               {role === 'admin' && userRoles.isAdmin && (
@@ -292,9 +293,181 @@ export function Home() {
                 </>
               )}
             </div>
+
+            {/* ZK Auth Upgrade Card - Only show for Web3 users */}
+            {showSwitchResultNotice && (
+              <div className="card bg-gradient-to-r from-green-900/40 to-emerald-800/30 border-green-500/30">
+                <div className="flex items-start gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-green-500/20 flex items-center justify-center flex-shrink-0">
+                    <svg className="w-6 h-6 text-green-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="text-lg font-semibold text-white mb-2">Switched to Standard Login</h4>
+                    <p className="text-sm text-surface-200">
+                      {switchSkippedOnchainTx
+                        ? 'No active private session found on-chain. Switched locally to standard login.'
+                        : 'Private session closure confirmed on-chain. You are now using standard login.'}
+                    </p>
+                    <p className="text-xs text-surface-400 mt-2">
+                      This message will close automatically in a moment.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {unifiedAuth.authMethod === 'web3' && !showSwitchResultNotice && (
+              <ZKAuthUpgrade
+                variant="card"
+                onUpgradeComplete={() => {
+                  // Keep Home page modal state aligned after upgrade completion.
+                  setShowLoginModal(false);
+                  setShowRoleSelector(false);
+                  logger.info('ZK auth upgrade completed from Home page');
+                  logger.debug('Current auth state after upgrade:', {
+                    authMethod: unifiedAuth.authMethod,
+                    isAuthenticated: unifiedAuth.isAuthenticated,
+                    role: unifiedAuth.role,
+                  });
+                }}
+              />
+            )}
+            
+            {/* ZK Auth Status Card - Show for ZK users who are ACTUALLY authenticated */}
+            {unifiedAuth.authMethod === 'zk' && unifiedAuth.isAuthenticated && (
+              <div className="card bg-gradient-to-r from-primary-900/50 to-primary-700/30 border-primary-500/20">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-primary-500/20 flex items-center justify-center">
+                    <svg className="w-6 h-6 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h4 className="font-semibold text-white">Private Login Active</h4>
+                      <span className="px-2 py-0.5 text-xs bg-green-500/20 text-green-400 rounded-full border border-green-500/30">
+                        ✓ Authenticated
+                      </span>
+                      <div className="relative group">
+                        <button
+                          type="button"
+                          className="text-primary-300/80 hover:text-primary-200 transition-colors cursor-help"
+                          aria-label="ZKP algorithm information"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </button>
+                        <div className="absolute left-1/2 -translate-x-1/2 top-6 z-50 hidden group-hover:block w-80 max-w-[80vw]">
+                          <div className="bg-surface-900 border border-surface-700 rounded-lg shadow-xl p-3 text-left">
+                            <p className="text-xs font-semibold text-white mb-1">ZKP algorithm used</p>
+                            <p className="text-xs text-surface-300 mb-2">
+                              This flow uses a Noir-based circuit with an <span className="text-primary-300 font-medium">UltraPlonk</span> verifier on-chain.
+                            </p>
+                            <p className="text-xs text-surface-400">
+                              Chosen for strong security with practical proof generation and verification performance for real user login flows.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <p className="text-sm text-surface-300">
+                      Your wallet address is hidden. You're using privacy-preserving authentication.
+                    </p>
+                    {(switchTxPhase === 'awaiting_wallet_confirmation'
+                      || switchTxPhase === 'pending_onchain'
+                      || switchTxPhase === 'confirmed'
+                      || switchTxPhase === 'failed') && (
+                      <div
+                        className={`mt-3 mb-3 rounded-lg border p-3 ${
+                          switchTxPhase === 'awaiting_wallet_confirmation'
+                            ? 'border-yellow-500/30 bg-yellow-500/10'
+                            : switchTxPhase === 'pending_onchain'
+                            ? 'border-blue-500/30 bg-blue-500/10'
+                            : switchTxPhase === 'confirmed'
+                            ? 'border-green-500/30 bg-green-500/10'
+                            : 'border-red-500/30 bg-red-500/10'
+                        }`}
+                      >
+                        <p
+                          className={`text-sm font-medium ${
+                            switchTxPhase === 'awaiting_wallet_confirmation'
+                              ? 'text-yellow-300'
+                              : switchTxPhase === 'pending_onchain'
+                              ? 'text-blue-300'
+                              : switchTxPhase === 'confirmed'
+                              ? 'text-green-300'
+                              : 'text-red-300'
+                          }`}
+                        >
+                          {switchTxPhase === 'awaiting_wallet_confirmation' && 'Waiting to submit transaction'}
+                          {switchTxPhase === 'pending_onchain' && 'Transaction pending'}
+                          {switchTxPhase === 'confirmed' && 'Transaction confirmed'}
+                          {switchTxPhase === 'failed' && 'Transaction failed'}
+                        </p>
+                        <p className="text-xs text-surface-300 mt-1">
+                          {switchTxPhase === 'awaiting_wallet_confirmation' &&
+                            'Approve the MetaMask transaction to end your private session and switch to standard login.'}
+                          {switchTxPhase === 'pending_onchain' &&
+                            'Your transaction was submitted. Waiting for blockchain confirmation.'}
+                          {switchTxPhase === 'confirmed' && switchSkippedOnchainTx &&
+                            'No active private session found on-chain. Switched locally to standard login.'}
+                          {switchTxPhase === 'confirmed' && !switchSkippedOnchainTx &&
+                            'Session closure confirmed. Switching to standard login...'}
+                          {switchTxPhase === 'failed' && (switchError || 'Unable to switch authentication method.')}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    onClick={handleSwitchToStandard}
+                    disabled={switchTxPhase === 'awaiting_wallet_confirmation' || switchTxPhase === 'pending_onchain'}
+                    className="btn-secondary text-sm disabled:opacity-50"
+                  >
+                    {switchTxPhase === 'awaiting_wallet_confirmation'
+                      ? 'Waiting for wallet confirmation...'
+                      : switchTxPhase === 'pending_onchain'
+                      ? 'Transaction pending...'
+                      : 'Switch to Standard'}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </section>
       )}
+
+      {/* CTA Section */}
+      <section className="relative container mx-auto px-4 py-16">
+        <div className="card bg-gradient-to-r from-primary-900/50 to-accent-900/50 border-primary-500/20 text-center py-12">
+          <h2 className="text-2xl md:text-3xl font-bold text-white mb-4">
+            Ready to Get Started?
+          </h2>
+          <p className="text-surface-300 mb-8 max-w-xl mx-auto">
+            Whether you're an educational institution, student, or employer, 
+            zkCredentials makes credential verification simple and trustworthy.
+          </p>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            <Link to="/verify" className="btn-primary text-lg px-8 py-4 inline-flex">
+              Verify Certificate
+            </Link>
+            {!isConnected ? (
+              <ConnectButton.Custom>
+                {({ openConnectModal }) => (
+                  <button onClick={openConnectModal} className="btn-primary text-lg px-8 py-4 inline-flex">
+                    <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                    </svg>
+                    Connect Wallet to Get Started
+                  </button>
+                )}
+              </ConnectButton.Custom>
+            ) : null}
+          </div>
+        </div>
+      </section>
 
       {/* Features Section */}
       <section className="relative container mx-auto px-4 py-16">
@@ -360,34 +533,6 @@ export function Home() {
         </div>
       </section>
 
-      {/* CTA Section */}
-      <section className="relative container mx-auto px-4 py-16">
-        <div className="card bg-gradient-to-r from-primary-900/50 to-accent-900/50 border-primary-500/20 text-center py-12">
-          <h2 className="text-2xl md:text-3xl font-bold text-white mb-4">
-            Ready to Get Started?
-          </h2>
-          <p className="text-surface-300 mb-8 max-w-xl mx-auto">
-            Whether you're an educational institution, student, or employer, 
-            zkCredentials makes credential verification simple and trustworthy.
-          </p>
-          {isConnected && role !== 'admin' ? (
-            <Link to="/verify" className="btn-primary text-lg px-8 py-4 inline-flex">
-              Start Verifying
-            </Link>
-          ) : !isConnected ? (
-            <ConnectButton.Custom>
-              {({ openConnectModal }) => (
-                <button onClick={openConnectModal} className="btn-primary text-lg px-8 py-4 inline-flex">
-                  <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                  </svg>
-                  Connect Wallet to Get Started
-                </button>
-              )}
-            </ConnectButton.Custom>
-          ) : null}
-        </div>
-      </section>
     </div>
   );
 }

@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAccount } from 'wagmi';
 import { useVerificationHistory } from '@/hooks/useVerificationHistory';
-import { useStudentCertificates } from '@/hooks';
+import { useStudentCertificates, useCertificatesBatch } from '@/hooks';
 import { truncateHash } from '@/lib/pdfHash';
 import { isAddress } from 'viem';
 import { logger } from '@/lib/logger';
@@ -21,10 +21,13 @@ export function EmployerDashboard() {
   // Read search parameter from URL
   const [searchParams, setSearchParams] = useSearchParams();
   const searchFromUrl = searchParams.get('search');
+  const from = searchParams.get('from');
+  const isFromBatch = from === 'batch';
 
   const [walletAddress, setWalletAddress] = useState('');
   const [searchError, setSearchError] = useState<string | null>(null);
   const [isSearching, setIsSearching] = useState(false);
+  const [batchWallets, setBatchWallets] = useState<Array<{ walletAddress: string; certificateCount: number }>>([]);
 
   // Fetch certificates for the searched wallet
   const {
@@ -35,6 +38,15 @@ export function EmployerDashboard() {
     isSearching && isAddress(walletAddress)
   );
 
+  // Fetch certificate details in batch to show real active/revoked status in dashboard list.
+  const {
+    certificates: certificateDetails,
+    isLoading: isLoadingCertificateDetails,
+  } = useCertificatesBatch(
+    certificateIds ? [...certificateIds] : undefined,
+    isSearching && !!certificateIds && certificateIds.length > 0
+  );
+
   // Handle URL search parameter on mount/update
   useEffect(() => {
     if (searchFromUrl && isAddress(searchFromUrl)) {
@@ -42,10 +54,52 @@ export function EmployerDashboard() {
       setWalletAddress(searchFromUrl);
       setSearchError(null);
       setIsSearching(true);
-      // Clear the search param from URL to avoid re-triggering
-      setSearchParams({});
     }
-  }, [searchFromUrl, setSearchParams]);
+  }, [searchFromUrl]);
+
+  // Load previous batch wallets when coming from batch flow.
+  useEffect(() => {
+    if (!isFromBatch) {
+      setBatchWallets([]);
+      return;
+    }
+
+    try {
+      const raw = sessionStorage.getItem('zkcredentials-employer-batch-results');
+      if (!raw) {
+        setBatchWallets([]);
+        return;
+      }
+
+      const parsed = JSON.parse(raw) as
+        | Array<{
+            walletAddress: string;
+            status: string;
+            certificateCount?: number;
+          }>
+        | {
+            entries?: Array<{
+              walletAddress: string;
+              status: string;
+              certificateCount?: number;
+            }>;
+          };
+
+      const entries = Array.isArray(parsed) ? parsed : (parsed.entries || []);
+
+      const walletsWithCertificates = entries
+        .filter((entry) => entry.status === 'completed' && (entry.certificateCount ?? 0) > 0 && isAddress(entry.walletAddress))
+        .map((entry) => ({
+          walletAddress: entry.walletAddress,
+          certificateCount: entry.certificateCount ?? 0,
+        }));
+
+      setBatchWallets(walletsWithCertificates);
+    } catch (error) {
+      logger.warn('Failed to load batch wallet context for employer dashboard', error);
+      setBatchWallets([]);
+    }
+  }, [isFromBatch]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -68,6 +122,16 @@ export function EmployerDashboard() {
     setWalletAddress('');
     setSearchError(null);
     setIsSearching(false);
+    if (isFromBatch) {
+      setSearchParams({ from: 'batch' });
+    }
+  };
+
+  const handleSelectBatchWallet = (address: string) => {
+    setWalletAddress(address);
+    setSearchError(null);
+    setIsSearching(true);
+    setSearchParams({ search: address, from: 'batch' });
   };
 
   const handleClearHistory = () => {
@@ -167,6 +231,50 @@ export function EmployerDashboard() {
           )}
         </form>
 
+        {isFromBatch && (
+          <div className="mt-6 pt-6 border-t border-surface-700">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-lg font-semibold text-white">Batch Wallet Results</h3>
+              <Link to="/employer/batch-verify" className="text-sm text-primary-400 hover:text-primary-300">
+                Back to Batch Verify
+              </Link>
+            </div>
+
+            {batchWallets.length > 0 ? (
+              <div className="space-y-2">
+                {batchWallets.map((entry) => {
+                  const isCurrent = walletAddress.toLowerCase() === entry.walletAddress.toLowerCase() && isSearching;
+                  return (
+                    <button
+                      key={entry.walletAddress}
+                      type="button"
+                      onClick={() => handleSelectBatchWallet(entry.walletAddress)}
+                      className={`w-full rounded-lg border p-3 text-left transition-colors ${
+                        isCurrent
+                          ? 'border-primary-500/50 bg-primary-500/10'
+                          : 'border-surface-700 bg-surface-800/40 hover:border-surface-600'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono text-sm text-white">
+                          {truncateHash(entry.walletAddress, 8, 6)}
+                        </span>
+                        <span className="text-xs text-surface-300">
+                          {entry.certificateCount} certificate{entry.certificateCount !== 1 ? 's' : ''}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-sm text-surface-400">
+                No saved batch context found. Run batch verify again to restore wallet list context.
+              </p>
+            )}
+          </div>
+        )}
+
         {/* Search Results */}
         {isSearching && (
           <div className="mt-6 pt-6 border-t border-surface-700">
@@ -189,27 +297,43 @@ export function EmployerDashboard() {
                   </span>
                 </div>
                 <div className="space-y-3">
-                  {certificateIds.map((certId) => (
+                  {certificateIds.map((certId, index) => {
+                    const cert = certificateDetails?.[index];
+                    const isRevoked = cert?.isRevoked === true;
+                    const isStatusLoading = isLoadingCertificateDetails && !cert;
+
+                    return (
                     <div key={certId.toString()} className="rounded-lg bg-surface-800/50 p-4 border border-surface-700">
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="text-white font-semibold mb-1">
                             Certificate #{certId.toString()}
                           </p>
-                          <Link
-                            to={`/verify?cert=${certId.toString()}`}
-                            className="text-primary-400 hover:text-primary-300 text-sm inline-flex items-center gap-1"
-                          >
-                            View Details
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                            </svg>
-                          </Link>
+                          {cert?.documentHash ? (
+                            <Link
+                              to={`/verify?hash=${cert.documentHash}`}
+                              className="text-primary-400 hover:text-primary-300 text-sm inline-flex items-center gap-1"
+                            >
+                              View Details
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                              </svg>
+                            </Link>
+                          ) : (
+                            <span className="text-surface-500 text-sm">Loading details...</span>
+                          )}
                         </div>
-                        <span className="badge badge-success">On-chain</span>
+                        {isStatusLoading ? (
+                          <span className="badge bg-surface-700 text-surface-300">Loading status...</span>
+                        ) : isRevoked ? (
+                          <span className="badge badge-warning">Revoked</span>
+                        ) : (
+                          <span className="badge badge-success">Active</span>
+                        )}
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             ) : (
@@ -264,12 +388,12 @@ export function EmployerDashboard() {
             <p className="text-surface-400 mb-4">
               Your verification history will appear here
             </p>
-            <a href="/verify" className="btn-primary inline-flex items-center gap-2">
+            <Link to="/verify" className="btn-primary inline-flex items-center gap-2">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
               Verify a Certificate
-            </a>
+            </Link>
           </div>
         ) : (
           <div className="space-y-3">

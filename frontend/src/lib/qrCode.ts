@@ -6,7 +6,7 @@ import type { QRCodePayload, PrivacySettings, Certificate } from '@/types/certif
  * 
  * Format: V1:{base64(json)}
  * 
- * @param certificate - The certificate to share
+ * @param certificate - The certificate to share (must include documentHash)
  * @param universityName - Name of the issuing university
  * @param privacySettings - Privacy settings controlling what to include
  * @returns Encoded QR code string
@@ -17,6 +17,11 @@ export function generateQRCodePayload(
   privacySettings: PrivacySettings
 ): string {
   console.log('🔍 generateQRCodePayload called with:', { certificate, universityName, privacySettings });
+  
+  // Validate required fields
+  if (!certificate.documentHash) {
+    throw new Error('Certificate documentHash is required for QR code generation');
+  }
   
   // Parse metadataURI to extract program name
   let programName = 'Unknown Program';
@@ -38,6 +43,7 @@ export function generateQRCodePayload(
     university: universityName,
     graduationYear: certificate.graduationYear || new Date().getFullYear(),
     status: certificate.isRevoked ? 'Revoked' : 'Verified',
+    documentHash: certificate.documentHash, // Include for blockchain verification
     version: '1.0',
     generatedAt: Date.now(),
   };
@@ -85,6 +91,12 @@ export function decodeQRCodePayload(encoded: string): QRCodePayload {
     // Validate required fields
     if (!payload.program || !payload.university || !payload.graduationYear || !payload.status) {
       throw new Error('Invalid QR code payload: missing required fields');
+    }
+    
+    // documentHash is optional for backwards compatibility with old QR codes
+    // But it should be present in all newly generated QR codes
+    if (!payload.documentHash) {
+      console.warn('⚠️ QR code missing documentHash - cannot verify on blockchain');
     }
 
     return payload;

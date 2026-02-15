@@ -1,5 +1,5 @@
 // src/pages/admin/Dashboard.tsx
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract } from 'wagmi';
 import { useQueryClient } from '@tanstack/react-query';
@@ -16,6 +16,9 @@ interface InstitutionStats {
   totalActive: bigint;
   totalSuspended: bigint;
 }
+
+type TransactionPhase = 'idle' | 'awaiting_wallet_confirmation' | 'pending_onchain' | 'confirmed' | 'failed';
+const MIN_PENDING_DISPLAY_MS = 1200;
 
 export function AdminDashboard() {
   const { isConnected } = useAccount();
@@ -278,16 +281,115 @@ function InstitutionRow({
   });
 
   // Deactivate institution
-  const { data: deactivateHash, writeContract: deactivate, isPending: isDeactivating } = useWriteContract();
-  const { isLoading: isDeactivateConfirming, isSuccess: isDeactivateSuccess } = useWaitForTransactionReceipt({
+  const {
+    data: deactivateHash,
+    writeContract: deactivate,
+    isPending: isDeactivating,
+    error: deactivateWriteError,
+  } = useWriteContract();
+  const {
+    isLoading: isDeactivateConfirming,
+    isSuccess: isDeactivateSuccess,
+    error: deactivateReceiptError,
+  } = useWaitForTransactionReceipt({
     hash: deactivateHash,
   });
 
   // Reactivate institution
-  const { data: reactivateHash, writeContract: reactivate, isPending: isReactivating } = useWriteContract();
-  const { isLoading: isReactivateConfirming, isSuccess: isReactivateSuccess } = useWaitForTransactionReceipt({
+  const {
+    data: reactivateHash,
+    writeContract: reactivate,
+    isPending: isReactivating,
+    error: reactivateWriteError,
+  } = useWriteContract();
+  const {
+    isLoading: isReactivateConfirming,
+    isSuccess: isReactivateSuccess,
+    error: reactivateReceiptError,
+  } = useWaitForTransactionReceipt({
     hash: reactivateHash,
   });
+
+  const [deactivateTxPhase, setDeactivateTxPhase] = useState<TransactionPhase>('idle');
+  const deactivatePendingStartRef = useRef<number | null>(null);
+  const [reactivateTxPhase, setReactivateTxPhase] = useState<TransactionPhase>('idle');
+  const reactivatePendingStartRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (deactivateWriteError || deactivateReceiptError) {
+      setDeactivateTxPhase('failed');
+      return;
+    }
+
+    if (isDeactivating && !deactivateHash) {
+      setDeactivateTxPhase('awaiting_wallet_confirmation');
+      deactivatePendingStartRef.current = null;
+      return;
+    }
+
+    if (deactivateHash && !isDeactivateSuccess) {
+      if (deactivatePendingStartRef.current === null) {
+        deactivatePendingStartRef.current = Date.now();
+      }
+      setDeactivateTxPhase('pending_onchain');
+      return;
+    }
+
+    if (isDeactivateSuccess && deactivateHash) {
+      const pendingSince = deactivatePendingStartRef.current ?? Date.now();
+      const elapsed = Date.now() - pendingSince;
+      const waitRemaining = Math.max(0, MIN_PENDING_DISPLAY_MS - elapsed);
+      const timer = setTimeout(() => setDeactivateTxPhase('confirmed'), waitRemaining);
+      return () => clearTimeout(timer);
+    }
+
+    setDeactivateTxPhase('idle');
+    deactivatePendingStartRef.current = null;
+  }, [
+    isDeactivating,
+    deactivateHash,
+    isDeactivateSuccess,
+    deactivateWriteError,
+    deactivateReceiptError,
+  ]);
+
+  useEffect(() => {
+    if (reactivateWriteError || reactivateReceiptError) {
+      setReactivateTxPhase('failed');
+      return;
+    }
+
+    if (isReactivating && !reactivateHash) {
+      setReactivateTxPhase('awaiting_wallet_confirmation');
+      reactivatePendingStartRef.current = null;
+      return;
+    }
+
+    if (reactivateHash && !isReactivateSuccess) {
+      if (reactivatePendingStartRef.current === null) {
+        reactivatePendingStartRef.current = Date.now();
+      }
+      setReactivateTxPhase('pending_onchain');
+      return;
+    }
+
+    if (isReactivateSuccess && reactivateHash) {
+      const pendingSince = reactivatePendingStartRef.current ?? Date.now();
+      const elapsed = Date.now() - pendingSince;
+      const waitRemaining = Math.max(0, MIN_PENDING_DISPLAY_MS - elapsed);
+      const timer = setTimeout(() => setReactivateTxPhase('confirmed'), waitRemaining);
+      return () => clearTimeout(timer);
+    }
+
+    setReactivateTxPhase('idle');
+    reactivatePendingStartRef.current = null;
+  }, [
+    isReactivating,
+    reactivateHash,
+    isReactivateSuccess,
+    reactivateWriteError,
+    reactivateReceiptError,
+  ]);
 
   // Refetch on success
   useEffect(() => {
@@ -313,6 +415,7 @@ function InstitutionRow({
   };
 
   const handleDeactivate = () => {
+    setDeactivateTxPhase('awaiting_wallet_confirmation');
     deactivate({
       address: INSTITUTION_REGISTRY_ADDRESS!,
       abi: InstitutionRegistryABI.abi,
@@ -322,6 +425,7 @@ function InstitutionRow({
   };
 
   const handleReactivate = () => {
+    setReactivateTxPhase('awaiting_wallet_confirmation');
     reactivate({
       address: INSTITUTION_REGISTRY_ADDRESS!,
       abi: InstitutionRegistryABI.abi,
@@ -331,6 +435,14 @@ function InstitutionRow({
   };
 
   const isLoading = isApproving || isApproveConfirming || isDeactivating || isDeactivateConfirming || isReactivating || isReactivateConfirming;
+  const showDeactivateTxStatus =
+    deactivateTxPhase === 'awaiting_wallet_confirmation'
+    || deactivateTxPhase === 'pending_onchain'
+    || deactivateTxPhase === 'confirmed';
+  const showReactivateTxStatus =
+    reactivateTxPhase === 'awaiting_wallet_confirmation'
+    || reactivateTxPhase === 'pending_onchain'
+    || reactivateTxPhase === 'confirmed';
 
   // Filter logic - check if institution matches search term
   const matchesSearch = () => {
@@ -461,6 +573,26 @@ function InstitutionRow({
               </ButtonWithLoading>
             )}
           </div>
+
+          {showDeactivateTxStatus && (
+            <div className="mt-3 rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-3">
+              <p className="text-sm font-medium text-yellow-300">
+                {deactivateTxPhase === 'awaiting_wallet_confirmation' && 'Waiting to submit deactivation transaction'}
+                {deactivateTxPhase === 'pending_onchain' && 'Deactivation transaction pending'}
+                {deactivateTxPhase === 'confirmed' && 'Deactivation transaction confirmed'}
+              </p>
+            </div>
+          )}
+
+          {showReactivateTxStatus && (
+            <div className="mt-3 rounded-lg border border-green-500/30 bg-green-500/10 p-3">
+              <p className="text-sm font-medium text-green-300">
+                {reactivateTxPhase === 'awaiting_wallet_confirmation' && 'Waiting to submit reactivation transaction'}
+                {reactivateTxPhase === 'pending_onchain' && 'Reactivation transaction pending'}
+                {reactivateTxPhase === 'confirmed' && 'Reactivation transaction confirmed'}
+              </p>
+            </div>
+          )}
         </div>
       )}
     </div>

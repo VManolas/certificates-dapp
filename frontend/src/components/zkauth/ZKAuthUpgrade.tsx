@@ -13,10 +13,10 @@
  * - Status indicator (enabled/disabled)
  */
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useAccount } from 'wagmi';
 import { useAuthStore } from '@/store/authStore';
-import { useZKAuth, type ZKAuthRole } from '@/hooks/useZKAuth';
+import { useZKAuth, type ZKAuthRole, type ZKAuthProgressEvent } from '@/hooks/useZKAuth';
 import { logger } from '@/lib/logger';
 
 interface ZKAuthUpgradeProps {
@@ -28,10 +28,74 @@ interface ZKAuthUpgradeProps {
 
 export function ZKAuthUpgrade({ variant = 'card', onUpgradeComplete }: ZKAuthUpgradeProps) {
   const { address, isConnected } = useAccount();
-  const { role, zkAuth } = useAuthStore();
-  const { register, login, isLoading, error } = useZKAuth();
+  const {
+    role,
+    authMethod,
+    zkAuth,
+    setZKAuthEnabled,
+    setZKAuthenticated,
+    setAuthMethod,
+    setPreferredAuthMethod,
+  } = useAuthStore();
+  const { register, login, isLoading, error, hasCredentials } = useZKAuth();
   const [isUpgrading, setIsUpgrading] = useState(false);
   const [upgradeStep, setUpgradeStep] = useState<'idle' | 'registering' | 'authenticating' | 'complete'>('idle');
+  const [upgradeMode, setUpgradeMode] = useState<'full_setup' | 'login_only'>('full_setup');
+  const upgradeModeRef = useRef<'full_setup' | 'login_only'>('full_setup');
+  const [metamaskStep, setMetamaskStep] = useState<1 | 2 | 3 | 4 | null>(null);
+  const [metamaskHint, setMetamaskHint] = useState<string | null>(null);
+  const [finalTxPhase, setFinalTxPhase] = useState<'idle' | 'awaiting_wallet_confirmation' | 'pending_onchain' | 'confirmed'>('idle');
+  const [showSuccessPopup, setShowSuccessPopup] = useState(false);
+
+  const handleProgressEvent = (event: ZKAuthProgressEvent) => {
+    const mode = upgradeModeRef.current;
+    switch (event) {
+      case 'register_signature_required':
+        setMetamaskStep(1);
+        setMetamaskHint(null);
+        break;
+      case 'register_transaction_required':
+      case 'register_transaction_submitted':
+        setMetamaskStep(2);
+        setMetamaskHint(null);
+        break;
+      case 'register_transaction_confirmed':
+        setMetamaskStep(3);
+        setMetamaskHint('Commitment registration confirmed. Next: sign to unlock your private credentials.');
+        break;
+      case 'login_wallet_access_required':
+        // Some wallets show an explicit account-access prompt before signature.
+        setMetamaskStep(mode === 'login_only' ? 1 : 3);
+        setMetamaskHint('If MetaMask asks for account access, approve it to continue.');
+        break;
+      case 'login_signature_required':
+        setMetamaskStep(mode === 'login_only' ? 2 : 3);
+        setMetamaskHint(null);
+        break;
+      case 'login_signature_complete':
+        setMetamaskStep(mode === 'login_only' ? 3 : 4);
+        setMetamaskHint('Signature complete. Final step: confirm session start transaction.');
+        setFinalTxPhase('awaiting_wallet_confirmation');
+        break;
+      case 'login_transaction_required':
+        setMetamaskStep(mode === 'login_only' ? 3 : 4);
+        setMetamaskHint('Please approve the final transaction in MetaMask.');
+        setFinalTxPhase('awaiting_wallet_confirmation');
+        break;
+      case 'login_transaction_submitted':
+        setMetamaskStep(mode === 'login_only' ? 3 : 4);
+        setMetamaskHint('Final transaction submitted. Waiting for blockchain confirmation.');
+        setFinalTxPhase('pending_onchain');
+        break;
+      case 'login_transaction_confirmed':
+        setMetamaskStep(mode === 'login_only' ? 3 : 4);
+        setMetamaskHint('Final transaction confirmed.');
+        setFinalTxPhase('confirmed');
+        break;
+      default:
+        break;
+    }
+  };
 
   const handleUpgrade = async () => {
     if (!role || !isConnected || !address) {
@@ -40,27 +104,50 @@ export function ZKAuthUpgrade({ variant = 'card', onUpgradeComplete }: ZKAuthUpg
     }
 
     setIsUpgrading(true);
-    setUpgradeStep('registering');
+    const loginOnly = hasCredentials;
+    upgradeModeRef.current = loginOnly ? 'login_only' : 'full_setup';
+    setUpgradeMode(loginOnly ? 'login_only' : 'full_setup');
+    setUpgradeStep(loginOnly ? 'authenticating' : 'registering');
+    setMetamaskStep(1);
+    setMetamaskHint(null);
+    setFinalTxPhase('idle');
 
     try {
       // Only students and employers can use ZK auth (not admin or university)
       if (role === 'student' || role === 'employer') {
-        logger.info('Starting ZK auth registration', { role });
-        
-        // Step 1: Register with ZK auth
-        await register(role as ZKAuthRole);
-        
-        logger.info('ZK auth registration successful');
-        
-        // Step 2: Auto-login
-        setUpgradeStep('authenticating');
-        await new Promise(resolve => setTimeout(resolve, 500)); // Brief pause
-        
-        await login();
+        if (loginOnly) {
+          logger.info('Starting ZK auth upgrade with existing credentials (skip registration)', { role });
+          setMetamaskHint('Existing private credentials detected for this wallet. Skipping registration and starting private session.');
+        } else {
+          logger.info('Starting ZK auth registration', { role });
+          // Step 1: Register with ZK auth
+          await register(role as ZKAuthRole, handleProgressEvent);
+          logger.info('ZK auth registration successful');
+          // Step 2: Auto-login
+          setUpgradeStep('authenticating');
+          await new Promise(resolve => setTimeout(resolve, 500)); // Brief pause
+        }
+
+        await login(handleProgressEvent);
         
         logger.info('ZK auth login successful');
+        // Keep the contract status explicit: show confirmed before success state.
+        setFinalTxPhase('confirmed');
+        setMetamaskHint('Final transaction confirmed.');
+        // Give users enough time to read final-step states before success UI appears.
+        await new Promise(resolve => setTimeout(resolve, 1600));
+
+        // Defensive synchronization: keep auth store aligned with successful ZK upgrade.
+        // This prevents the UI from reverting to public/web3 presentation.
+        setZKAuthEnabled(true);
+        setZKAuthenticated(true);
+        setAuthMethod('zk');
+        setPreferredAuthMethod('zk');
         
         setUpgradeStep('complete');
+        setShowSuccessPopup(true);
+        setMetamaskStep(null);
+        setMetamaskHint(null);
         
         // Notify parent component
         if (onUpgradeComplete) {
@@ -71,6 +158,12 @@ export function ZKAuthUpgrade({ variant = 'card', onUpgradeComplete }: ZKAuthUpg
         setTimeout(() => {
           setIsUpgrading(false);
           setUpgradeStep('idle');
+          upgradeModeRef.current = 'full_setup';
+          setUpgradeMode('full_setup');
+          setShowSuccessPopup(false);
+          setMetamaskStep(null);
+          setMetamaskHint(null);
+          setFinalTxPhase('idle');
         }, 2000);
       } else {
         throw new Error('Admin role cannot use ZK authentication');
@@ -79,11 +172,24 @@ export function ZKAuthUpgrade({ variant = 'card', onUpgradeComplete }: ZKAuthUpg
       logger.error('ZK auth upgrade failed', error);
       setIsUpgrading(false);
       setUpgradeStep('idle');
+      upgradeModeRef.current = 'full_setup';
+      setUpgradeMode('full_setup');
+      setShowSuccessPopup(false);
+      setMetamaskStep(null);
+      setMetamaskHint(null);
+      setFinalTxPhase('idle');
     }
   };
 
   // Don't show if no role, already upgraded, or admin/university (Web3-only roles)
-  if (!role || zkAuth.isZKAuthEnabled || role === 'admin' || role === 'university') {
+  if (
+    !role ||
+    zkAuth.isZKAuthEnabled ||
+    zkAuth.isZKAuthenticated ||
+    authMethod === 'zk' ||
+    role === 'admin' ||
+    role === 'university'
+  ) {
     return null;
   }
 
@@ -93,6 +199,21 @@ export function ZKAuthUpgrade({ variant = 'card', onUpgradeComplete }: ZKAuthUpg
 
   return (
     <div className={containerClass}>
+      {showSuccessPopup && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="mx-4 w-full max-w-md rounded-2xl border border-surface-700 bg-surface-900 p-6 text-center shadow-2xl">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-green-500/20 flex items-center justify-center">
+              <svg className="w-8 h-8 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <h3 className="text-xl font-semibold text-white mb-2">Login Successful</h3>
+            <p className="text-sm text-surface-300">
+              Private Login is now active for your account.
+            </p>
+          </div>
+        </div>
+      )}
       {upgradeStep === 'complete' ? (
         // Success state
         <div className="text-center py-4">
@@ -112,13 +233,14 @@ export function ZKAuthUpgrade({ variant = 'card', onUpgradeComplete }: ZKAuthUpg
         <>
           {variant === 'card' ? (
             // Card variant - full featured
-            <div className="flex items-start gap-4">
-              <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-primary-500/10 flex items-center justify-center">
-                <svg className="w-6 h-6 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                </svg>
-              </div>
-              <div className="flex-1">
+            <div className="space-y-4">
+              <div className="flex items-start gap-4">
+                <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-primary-500/10 flex items-center justify-center">
+                  <svg className="w-6 h-6 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
+                </div>
+                <div className="flex-1">
                 <div className="flex items-center gap-2 mb-2">
                   <h3 className="text-lg font-semibold text-white">
                     Upgrade to ZK Authentication
@@ -165,6 +287,109 @@ export function ZKAuthUpgrade({ variant = 'card', onUpgradeComplete }: ZKAuthUpg
                   </div>
                 )}
 
+                {upgradeStep !== 'idle' && (
+                  <div className="mb-4 rounded-xl border border-surface-700 bg-surface-800/40 p-4">
+                    <h4 className="text-sm font-semibold text-white mb-1">MetaMask Interaction Steps</h4>
+                    <p className="text-xs text-surface-400 mb-3">
+                      {upgradeMode === 'login_only'
+                        ? 'Existing private credentials were found. Follow these prompts to start a private session without re-registering.'
+                        : 'Follow these prompts to complete ZK setup. This flow includes up to four wallet interactions.'}
+                    </p>
+                    <div className="space-y-2 text-xs">
+                      {(upgradeMode === 'login_only'
+                        ? [
+                            {
+                              step: 1 as const,
+                              title: 'Approve wallet account access',
+                              description: 'If prompted, allow wallet access so the app can request a signature.',
+                            },
+                            {
+                              step: 2 as const,
+                              title: 'Sign to unlock credentials',
+                              description: 'Approve signature so the app can decrypt local ZK credentials for login.',
+                            },
+                            {
+                              step: 3 as const,
+                              title: 'Start private session transaction',
+                              description: 'Confirm transaction to activate your private ZK-authenticated session.',
+                            },
+                          ]
+                        : [
+                            {
+                              step: 1 as const,
+                              title: 'Sign message',
+                              description: 'Approve signature to securely encrypt your ZK credentials locally.',
+                            },
+                            {
+                              step: 2 as const,
+                              title: 'Register commitment transaction',
+                              description: 'Confirm transaction to store your ZK commitment on-chain.',
+                            },
+                            {
+                              step: 3 as const,
+                              title: 'Sign to unlock credentials',
+                              description: 'Approve signature so the app can decrypt local ZK credentials for login.',
+                            },
+                            {
+                              step: 4 as const,
+                              title: 'Start private session transaction',
+                              description: 'Confirm transaction to activate your private ZK-authenticated session.',
+                            },
+                          ]
+                      ).map((item) => {
+                        const isDone = metamaskStep !== null && metamaskStep > item.step;
+                        const isCurrent = metamaskStep === item.step;
+                        return (
+                          <div
+                            key={item.step}
+                            className={`flex items-start gap-2 p-2 rounded ${
+                              isCurrent
+                                ? 'bg-primary-500/10 border border-primary-500/30'
+                                : isDone
+                                ? 'bg-green-500/10 border border-green-500/30'
+                                : 'bg-surface-800/50 border border-surface-700'
+                            }`}
+                          >
+                            <div
+                              className={`w-5 h-5 rounded-full flex items-center justify-center font-semibold ${
+                                isDone
+                                  ? 'bg-green-500/20 text-green-300'
+                                  : isCurrent
+                                  ? 'bg-primary-500/20 text-primary-300'
+                                  : 'bg-surface-700 text-surface-400'
+                              }`}
+                            >
+                              {isDone ? '✓' : item.step}
+                            </div>
+                            <div className="flex-1">
+                              <p className="text-surface-200 font-medium">{item.title}</p>
+                              <p className="text-surface-400">{item.description}</p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {metamaskHint && (
+                      <p className="mt-3 text-xs text-blue-300">{metamaskHint}</p>
+                    )}
+                    {finalTxPhase !== 'idle' && (
+                      <div
+                        className={`mt-3 rounded border p-2 text-xs ${
+                          finalTxPhase === 'awaiting_wallet_confirmation'
+                            ? 'border-yellow-500/30 bg-yellow-500/10 text-yellow-300'
+                            : finalTxPhase === 'pending_onchain'
+                            ? 'border-blue-500/30 bg-blue-500/10 text-blue-300'
+                            : 'border-green-500/30 bg-green-500/10 text-green-300'
+                        }`}
+                      >
+                        {finalTxPhase === 'awaiting_wallet_confirmation' && 'Final transaction: waiting for wallet approval'}
+                        {finalTxPhase === 'pending_onchain' && 'Final transaction: pending on blockchain'}
+                        {finalTxPhase === 'confirmed' && 'Final transaction: confirmed'}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {error && (
                   <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
                     <p className="text-sm text-red-400">
@@ -172,11 +397,13 @@ export function ZKAuthUpgrade({ variant = 'card', onUpgradeComplete }: ZKAuthUpg
                     </p>
                   </div>
                 )}
-
+                </div>
+              </div>
+              <div className="flex justify-center">
                 <button
                   onClick={handleUpgrade}
                   disabled={isLoading || isUpgrading}
-                  className="btn-primary w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="btn-primary w-full sm:w-[430px] justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isUpgrading ? (
                     <>

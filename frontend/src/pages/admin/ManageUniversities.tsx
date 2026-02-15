@@ -30,7 +30,14 @@ export default function ManageUniversities() {
   const [validationErrors, setValidationErrors] = useState<Partial<FormData>>({});
   const [successMessage, setSuccessMessage] = useState<string>('');
 
-  const { registerInstitutionByAdmin, isRegistering, isSuccess: isRegisterSuccess, error: registerError, transactionHash } = useRegisterInstitutionByAdmin();
+  const {
+    registerInstitutionByAdmin,
+    isRegistering,
+    isSuccess: isRegisterSuccess,
+    error: registerError,
+    transactionHash,
+    transactionPhase,
+  } = useRegisterInstitutionByAdmin();
   const { isRegistered, isLoading: isCheckingRegistration } = useIsInstitution(
     isAddress(formData.walletAddress) ? formData.walletAddress as `0x${string}` : undefined
   );
@@ -130,6 +137,41 @@ export default function ManageUniversities() {
     }
   };
 
+  const transactionStatusConfig: Record<'awaiting_wallet_confirmation' | 'pending_onchain' | 'confirmed', {
+    title: string;
+    description: string;
+    iconClassName: string;
+    borderClassName: string;
+    textClassName: string;
+  }> = {
+    awaiting_wallet_confirmation: {
+      title: 'Waiting to submit transaction',
+      description: 'Confirm this action in MetaMask to broadcast the registration transaction.',
+      iconClassName: 'text-yellow-400',
+      borderClassName: 'border-yellow-500/30 bg-yellow-500/10',
+      textClassName: 'text-yellow-300',
+    },
+    pending_onchain: {
+      title: 'Transaction pending',
+      description: 'The transaction has been submitted and is waiting for blockchain confirmation.',
+      iconClassName: 'text-blue-400',
+      borderClassName: 'border-blue-500/30 bg-blue-500/10',
+      textClassName: 'text-blue-300',
+    },
+    confirmed: {
+      title: 'Transaction confirmed',
+      description: 'University registration is now confirmed on-chain.',
+      iconClassName: 'text-green-400',
+      borderClassName: 'border-green-500/30 bg-green-500/10',
+      textClassName: 'text-green-300',
+    },
+  };
+
+  const showTransactionStatus =
+    transactionPhase === 'awaiting_wallet_confirmation'
+    || transactionPhase === 'pending_onchain'
+    || transactionPhase === 'confirmed';
+
   if (!isConnected) {
     return (
       <div className="container mx-auto px-4 py-16">
@@ -176,6 +218,26 @@ export default function ManageUniversities() {
               </svg>
               {successMessage}
             </p>
+          </div>
+        )}
+
+        {/* Transaction Status */}
+        {showTransactionStatus && (
+          <div className={`mb-6 rounded-lg border p-4 ${transactionStatusConfig[transactionPhase].borderClassName}`}>
+            <p className={`font-medium flex items-center gap-2 ${transactionStatusConfig[transactionPhase].textClassName}`}>
+              <svg className={`w-5 h-5 ${transactionStatusConfig[transactionPhase].iconClassName}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              {transactionStatusConfig[transactionPhase].title}
+            </p>
+            <p className="mt-1 text-sm text-surface-300">
+              {transactionStatusConfig[transactionPhase].description}
+            </p>
+            {transactionHash && (
+              <p className="mt-2 text-xs text-surface-400 font-mono break-all">
+                Transaction: {transactionHash}
+              </p>
+            )}
           </div>
         )}
 
@@ -316,7 +378,9 @@ export default function ManageUniversities() {
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                     </svg>
-                    Registering...
+                    {transactionPhase === 'awaiting_wallet_confirmation'
+                      ? 'Waiting for wallet confirmation...'
+                      : 'Transaction pending...'}
                   </span>
                 ) : (
                   'Register University'

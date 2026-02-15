@@ -9,7 +9,7 @@ import { logger } from '@/lib/logger';
 const ALL_ROLES: NonNullable<UserRole>[] = ['admin', 'university', 'student', 'employer'];
 
 // Roles that support aspirational selection
-const ASPIRATIONAL_ROLES: Set<NonNullable<UserRole>> = new Set(['university', 'student', 'employer']);
+const ASPIRATIONAL_ROLES: Set<NonNullable<UserRole>> = new Set(['admin', 'university', 'student', 'employer']);
 
 interface RoleSelectorModalProps {
   isOpen: boolean;
@@ -32,9 +32,11 @@ const ROLE_INFO: Record<NonNullable<UserRole>, {
   admin: {
     title: 'Platform Administrator',
     description: 'Manage institutions, approve registrations, and oversee platform operations',
+    aspirationalDescription: 'Admin access requires an on-chain ADMIN_ROLE assignment by platform governance',
     icon: '🛡️',
     color: 'from-red-500 to-orange-500',
     disabledReason: 'Restricted to platform administrators with ADMIN_ROLE',
+    aspirationalAction: 'Proceed as Admin →',
   },
   university: {
     title: 'Educational Institution',
@@ -73,8 +75,10 @@ export const RoleSelectorModal = memo(function RoleSelectorModal({
   studentCertificateCount = 0,
   canRegisterAsEmployer = false,
 }: RoleSelectorModalProps) {
-  const { setRole, setHasSelectedRole, setShowRoleSelector } = useAuthStore();
+  const { setRole, setHasSelectedRole, setShowRoleSelector, setAuthMethod } = useAuthStore();
   const [showAspirational, setShowAspirational] = useState(false);
+  const [selectionWarning, setSelectionWarning] = useState<string | null>(null);
+  const [isRedirectingAfterWarning, setIsRedirectingAfterWarning] = useState(false);
   const navigate = useNavigate();
 
   // Create a Set for O(1) lookup
@@ -87,6 +91,28 @@ export const RoleSelectorModal = memo(function RoleSelectorModal({
     if (!isAspirational && !availableRolesSet.has(role)) return;
     // For aspirational, must be in ASPIRATIONAL_ROLES
     if (isAspirational && !ASPIRATIONAL_ROLES.has(role) && role !== 'employer') return;
+
+    const isUnregisteredWallet = availableRolesSet.size === 0 && canRegisterAsEmployer;
+    const requiresPriorRegistration = role === 'admin' || role === 'university' || role === 'student';
+
+    // Required by UX: unknown wallet selecting restricted roles should be warned,
+    // then redirected to employer dashboard (verify-only path).
+    if (isAspirational && isUnregisteredWallet && requiresPriorRegistration) {
+      const roleLabel = role === 'admin' ? 'Admin' : role === 'university' ? 'Institution' : 'Student';
+      setSelectionWarning(
+        `${roleLabel} requires prior on-chain registration for this wallet. Redirecting you to Employer mode (Verify only).`
+      );
+      setIsRedirectingAfterWarning(true);
+      setTimeout(() => {
+        setRole('employer', true);
+        setAuthMethod('web3');
+        setHasSelectedRole(true);
+        setShowRoleSelector(false);
+        onClose();
+        navigate('/employer/dashboard');
+      }, 1800);
+      return;
+    }
     
     // Special handling for employer aspirational mode
     if (isAspirational && role === 'employer') {
@@ -268,6 +294,17 @@ export const RoleSelectorModal = memo(function RoleSelectorModal({
             </svg>
             <span>Show only verified roles</span>
           </button>
+        )}
+
+        {selectionWarning && (
+          <div className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
+            <p className="text-sm text-amber-300">{selectionWarning}</p>
+            {isRedirectingAfterWarning && (
+              <p className="text-xs text-surface-300 mt-1">
+                Redirecting to Employer dashboard...
+              </p>
+            )}
+          </div>
         )}
 
         <p className="text-xs text-surface-500 mt-6 text-center">

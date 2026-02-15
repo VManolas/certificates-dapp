@@ -65,6 +65,11 @@ export interface DetectedRoles {
 export function useUserRoles(): DetectedRoles {
   const { address, isConnected } = useAccount();
 
+  console.log('🔍 [useUserRoles] Hook called', {
+    address: address ? `${address.slice(0, 6)}...${address.slice(-4)}` : null,
+    isConnected,
+  });
+
   // Batch contract reads for efficiency
   const { data, isLoading, error, refetch } = useReadContracts({
     contracts: [
@@ -106,19 +111,28 @@ export function useUserRoles(): DetectedRoles {
     ],
     query: {
       enabled: isConnected && !!address,
-      // Refetch on window focus (but not too aggressively)
-      refetchOnWindowFocus: false,
-      // Don't always refetch on mount - use cached data if available
-      refetchOnMount: false,
-      // Cache role data for 5 minutes (roles don't change frequently)
-      staleTime: 1000 * 60 * 5, // 5 minutes
-      // Keep in cache for 30 minutes
-      gcTime: 1000 * 60 * 30,
+      // IMPORTANT: Always refetch when component mounts to get fresh data
+      // This ensures we detect role changes after registration
+      refetchOnMount: 'always',
+      // Refetch on window focus to catch any blockchain state changes
+      refetchOnWindowFocus: true,
+      // Cache role data briefly (30 seconds) since roles can change (registration, etc.)
+      staleTime: 1000 * 30, // 30 seconds
+      // Keep in cache for 5 minutes before garbage collection
+      gcTime: 1000 * 60 * 5,
     },
   });
 
   return useMemo(() => {
+    console.log('🔍 [useUserRoles] useMemo triggered', {
+      hasData: !!data,
+      isConnected,
+      address: address ? `${address.slice(0, 6)}...${address.slice(-4)}` : null,
+      dataLength: data?.length,
+    });
+    
     if (!data || !isConnected) {
+      console.log('🔍 [useUserRoles] Returning default (no data or not connected)');
       return {
         isAdmin: false,
         isUniversity: false,
@@ -136,6 +150,15 @@ export function useUserRoles(): DetectedRoles {
       };
     }
 
+    console.log('🔍 [useUserRoles] Processing contract data', {
+      dataLength: data.length,
+      data0Status: data[0]?.status,
+      data1Status: data[1]?.status,
+      data2Status: data[2]?.status,
+      data3Status: data[3]?.status,
+      data4Status: data[4]?.status,
+    });
+
     // Parse results
     const isAdminInstitution = data[0]?.result as boolean ?? false;
     const isAdminCertificate = data[1]?.result as boolean ?? false;
@@ -143,9 +166,24 @@ export function useUserRoles(): DetectedRoles {
 
     // Institution data parsing
     const institutionResult = data[2]?.result as any;
-    const isUniversity = institutionResult?.walletAddress !== '0x0000000000000000000000000000000000000000' 
-                        && institutionResult?.walletAddress !== undefined
+    
+    // DEBUG: Log institution data
+    console.log('🔍 [useUserRoles] Institution Check for:', address);
+    console.log('🔍 [useUserRoles] Raw institution result:', institutionResult);
+    console.log('🔍 [useUserRoles] Wallet address from contract:', institutionResult?.walletAddress);
+    console.log('🔍 [useUserRoles] Connected wallet address:', address);
+    console.log('🔍 [useUserRoles] Name:', institutionResult?.name);
+    console.log('🔍 [useUserRoles] Addresses match?', institutionResult?.walletAddress?.toLowerCase() === address?.toLowerCase());
+    
+    // CRITICAL FIX: Check if the institution wallet matches the CONNECTED wallet
+    // Previously this was checking if walletAddress !== 0x0, which was wrong
+    // because it could return data for ANY institution, not the connected one
+    const isUniversity = institutionResult?.walletAddress !== undefined
+                        && institutionResult?.walletAddress !== '0x0000000000000000000000000000000000000000'
+                        && institutionResult?.walletAddress?.toLowerCase() === address?.toLowerCase()
                         && institutionResult?.name !== '';
+    
+    console.log('🔍 [useUserRoles] ==> isUniversity:', isUniversity);
     
     const universityData = isUniversity ? {
       name: institutionResult.name,
@@ -162,9 +200,13 @@ export function useUserRoles(): DetectedRoles {
     const certificates = data[3]?.result as bigint[] ?? [];
     const isStudent = certificates.length > 0;
     const studentCertificateCount = certificates.length;
+    
+    console.log('🔍 [useUserRoles] Student certificates:', certificates);
+    console.log('🔍 [useUserRoles] ==> isStudent:', isStudent);
 
     // Employer registration
     const isEmployer = data[4]?.result as boolean ?? false;
+    console.log('🔍 [useUserRoles] ==> isEmployer:', isEmployer);
 
     // ============================================
     // Enforce User Hierarchy
@@ -200,6 +242,15 @@ export function useUserRoles(): DetectedRoles {
       primaryRole = null;
       canRegisterAsEmployer = true;
     }
+    
+    console.log('🔍 [useUserRoles] === FINAL ROLE DETECTION ===');
+    console.log('🔍 [useUserRoles] isAdmin:', isAdmin);
+    console.log('🔍 [useUserRoles] isUniversity:', isUniversity);
+    console.log('🔍 [useUserRoles] isStudent:', isStudent);
+    console.log('🔍 [useUserRoles] isEmployer:', isEmployer);
+    console.log('🔍 [useUserRoles] ==> primaryRole:', primaryRole);
+    console.log('🔍 [useUserRoles] ==> availableRoles:', availableRoles);
+    console.log('🔍 [useUserRoles] ==============================');
 
     return {
       isAdmin,
@@ -216,6 +267,6 @@ export function useUserRoles(): DetectedRoles {
       error: error as Error | null,
       refetch,
     };
-  }, [data, isConnected, isLoading, error, refetch]);
+  }, [data, isConnected, isLoading, error, refetch, address]);
 }
 

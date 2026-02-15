@@ -6,6 +6,7 @@ import jsQR from 'jsqr';
 import { decodeQRCodePayload } from '@/lib/qrCode';
 import { useCertificateVerification } from '@/hooks/useCertificateVerification';
 import type { QRCodePayload } from '@/types/certificate';
+import { verifyVerificationToken } from '@/lib/verificationToken';
 
 interface QRScannerProps {
   onClose: () => void;
@@ -51,17 +52,38 @@ export function QRScanner({ onClose }: QRScannerProps) {
       }
     }
     
-    // Check if it's a verification URL (legacy format or cert ID link)
+    // Check if it's a verification URL
     try {
       const url = new URL(result);
       
-      // Extract certificate ID from URL
+      // Preferred format: hash-based verification link
       if (url.pathname.includes('/verify')) {
+        const tokenParam = url.searchParams.get('v');
+        if (tokenParam) {
+          const decodedToken = decodeURIComponent(tokenParam);
+          const tokenResult = verifyVerificationToken(decodedToken);
+          if (!tokenResult.valid) {
+            setError(tokenResult.reason || 'Invalid verification token');
+            return;
+          }
+          console.log('✅ Detected URL format with secure token');
+          navigate(`/verify?v=${encodeURIComponent(decodedToken)}`);
+          onClose();
+          return;
+        }
+
+        const hashParam = url.searchParams.get('hash');
+        if (hashParam) {
+          console.log('✅ Detected URL format with document hash');
+          navigate(`/verify?hash=${hashParam}`);
+          onClose();
+          return;
+        }
+
+        // Legacy cert-id links are intentionally blocked to reduce enumeration risk.
         const certParam = url.searchParams.get('cert');
         if (certParam) {
-          console.log('✅ Detected URL format with cert ID:', certParam);
-          navigate(`/verify?cert=${certParam}`);
-          onClose();
+          setError('Legacy certificate-ID links are no longer supported. Please request a new secure verification link.');
           return;
         }
       }

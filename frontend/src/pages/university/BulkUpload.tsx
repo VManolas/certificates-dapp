@@ -36,10 +36,43 @@ export function BulkUpload() {
     isPending, 
     isConfirming, 
     isSuccess,
+    transactionPhase,
     error: batchError,
+    transactionHash,
     certificateIds,
     reset: resetBatch
   } = useBatchCertificateIssuance();
+
+  const transactionStatusConfig: Record<'awaiting_wallet_confirmation' | 'pending_onchain' | 'confirmed', {
+    title: string;
+    description: string;
+    borderClassName: string;
+    textClassName: string;
+  }> = {
+    awaiting_wallet_confirmation: {
+      title: 'Waiting to submit transaction',
+      description: 'Confirm this bulk issuance transaction in MetaMask to broadcast it.',
+      borderClassName: 'border-yellow-500/30 bg-yellow-500/10',
+      textClassName: 'text-yellow-300',
+    },
+    pending_onchain: {
+      title: 'Transaction pending',
+      description: 'The batch transaction was submitted and is waiting for blockchain confirmation.',
+      borderClassName: 'border-blue-500/30 bg-blue-500/10',
+      textClassName: 'text-blue-300',
+    },
+    confirmed: {
+      title: 'Transaction confirmed',
+      description: 'Bulk certificate issuance is now confirmed on-chain.',
+      borderClassName: 'border-green-500/30 bg-green-500/10',
+      textClassName: 'text-green-300',
+    },
+  };
+
+  const showTransactionStatus =
+    transactionPhase === 'awaiting_wallet_confirmation'
+    || transactionPhase === 'pending_onchain'
+    || transactionPhase === 'confirmed';
 
   const handleCSVUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -197,10 +230,15 @@ export function BulkUpload() {
       // Prepare batch data for valid entries only
       const batchData = validIndexes.map(index => {
         const entry = validEntries[index];
+        const metadata = JSON.stringify({
+          program: entry.program.trim(),
+          timestamp: Date.now(),
+        });
+
         return {
           documentHash: entry.documentHash as `0x${string}`,
           studentWallet: entry.studentWallet as `0x${string}`,
-          metadataURI: '',
+          metadataURI: metadata,
           graduationYear: entry.graduationYear, // Include graduation year
         };
       });
@@ -673,6 +711,25 @@ export function BulkUpload() {
                 </svg>
                 <p className="text-red-400 font-semibold mb-6">Transaction Failed</p>
               </>
+            )}
+
+            {showTransactionStatus && (
+              <div className={`mb-6 rounded-lg border p-4 text-left ${transactionStatusConfig[transactionPhase].borderClassName}`}>
+                <p className={`font-medium flex items-center gap-2 ${transactionStatusConfig[transactionPhase].textClassName}`}>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  {transactionStatusConfig[transactionPhase].title}
+                </p>
+                <p className="mt-1 text-sm text-surface-300">
+                  {transactionStatusConfig[transactionPhase].description}
+                </p>
+                {transactionHash && (
+                  <p className="mt-2 text-xs text-surface-400 font-mono break-all">
+                    Transaction: {transactionHash}
+                  </p>
+                )}
+              </div>
             )}
 
             {/* Progress Stats */}

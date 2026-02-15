@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { useChainId } from 'wagmi';
 import { BlockExplorerLink } from './BlockExplorerLink';
-import { VerificationReport } from './VerificationReport';
+import { VerificationReportWithPrivacy } from './VerificationReportWithPrivacy';
 import { ShareCertificateModal } from './ShareCertificateModal';
 import { Modal, ModalBody } from './ui/Modal';
 import { useClipboard } from '@/hooks/useClipboard';
@@ -28,9 +28,24 @@ export function CertificateDetailModal({
   // Fetch university name from blockchain
   const { institutionData } = useIsInstitution(certificate.issuingInstitution as `0x${string}`);
   const universityName = institutionData?.name || `Institution ${certificate.issuingInstitution.slice(0, 6)}`;
+  
+  // Parse program name from metadata
+  let programName = 'Unknown Program';
+  if (certificate.metadataURI) {
+    try {
+      const metadata = JSON.parse(certificate.metadataURI);
+      programName = metadata.program || certificate.metadataURI;
+    } catch {
+      programName = certificate.metadataURI;
+    }
+  }
 
   const issueDate = new Date(Number(certificate.issueDate) * 1000);
   const chainName = getChainName(chainId);
+  const graduationYear =
+    typeof certificate.graduationYear === 'bigint'
+      ? Number(certificate.graduationYear)
+      : certificate.graduationYear;
 
   return (
     <>
@@ -173,6 +188,26 @@ export function CertificateDetailModal({
                     })}
                   </div>
                 </div>
+
+                {/* Program */}
+                <div>
+                  <label className="block text-sm font-medium text-surface-400 mb-2">
+                    Program
+                  </label>
+                  <div className="bg-surface-900 rounded-lg p-3 text-sm text-surface-200">
+                    {programName}
+                  </div>
+                </div>
+
+                {/* Graduation Year */}
+                <div>
+                  <label className="block text-sm font-medium text-surface-400 mb-2">
+                    Graduation Year
+                  </label>
+                  <div className="bg-surface-900 rounded-lg p-3 text-sm text-surface-200">
+                    {Number.isFinite(graduationYear) ? graduationYear : 'N/A'}
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -212,7 +247,7 @@ export function CertificateDetailModal({
                 </svg>
                 Share Certificate
               </button>
-              <VerificationReport
+              <VerificationReportWithPrivacy
                 certificateId={certificateId}
                 documentHash={certificate.documentHash}
                 studentWallet={certificate.studentWallet}
@@ -220,6 +255,8 @@ export function CertificateDetailModal({
                 issueDate={certificate.issueDate}
                 isValid={!certificate.isRevoked}
                 isRevoked={certificate.isRevoked}
+                universityName={universityName}
+                programName={programName}
               />
             </div>
           </ModalBody>

@@ -4,7 +4,7 @@ import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useAccount } from 'wagmi';
 import type { UserRole } from '@/types/auth';
 import { useAuthStore } from '@/store/authStore';
-import { useEffect, useState, lazy, Suspense } from 'react';
+import { useEffect, useState, useRef, lazy, Suspense } from 'react';
 import { useUnifiedAuth } from '@/hooks/useUnifiedAuth';
 import { SkipToContent } from './SkipToContent';
 import { logger } from '@/lib/logger';
@@ -49,6 +49,7 @@ export function Layout() {
     requested: UserRole;
     detected: UserRole;
   } | null>(null);
+  const previousAddressRef = useRef<string | undefined>(address);
 
   // Use unified auth for both ZK and Web3
   // OPTIMIZATION: Only initialize unified auth when wallet is connected
@@ -61,6 +62,8 @@ export function Layout() {
   const isDetectingRoles = isConnected ? unifiedAuth.isLoading : false;
   const universityData = userRoles.isUniversity ? institutionData : null;
   const canRegisterAsEmployer = userRoles.canRegisterAsEmployer;
+  const effectiveRole = unifiedAuth.role ?? role;
+  const hasStableRoleDetection = isConnected && !isDetectingRoles;
 
   // Set refetch function in auth store for other components
   useEffect(() => {
@@ -74,6 +77,20 @@ export function Layout() {
   useEffect(() => {
     setAddress(isConnected && address ? address : null);
   }, [address, isConnected, setAddress]);
+
+  // Clear conflict modal state when wallet disconnects or account changes.
+  // This prevents stale role conflict data from leaking into a new wallet session.
+  useEffect(() => {
+    const hasAddressChanged = previousAddressRef.current && address && previousAddressRef.current !== address;
+    const hasDisconnected = !isConnected;
+
+    if (hasAddressChanged || hasDisconnected) {
+      setShowRoleConflict(false);
+      setConflictInfo(null);
+    }
+
+    previousAddressRef.current = address;
+  }, [address, isConnected]);
 
   // Sync institution data to auth store
   useEffect(() => {
@@ -107,22 +124,32 @@ export function Layout() {
 
   // Handle role detection completion and synchronization
   useEffect(() => {
+    // Skip role detection during logout cooldown to prevent conflicts with stale data
+    if (unifiedAuth.isLogoutCooldown) {
+      console.log('⏸️ Skipping role detection during logout cooldown');
+      return;
+    }
+    
     if (!isDetectingRoles && isConnected) {
       setDetectedRoles(availableRoles);
       setIsRoleDetectionComplete(true);
 
       // CONFLICT DETECTION: Check if pre-selected role conflicts with detected roles
+      // GUARD: Only check after role detection is FULLY COMPLETE with fresh blockchain data
       const hasPreSelection = preSelectedRole && !role; // User selected role before connecting
       const preSelectionConflict = hasPreSelection && 
                                    availableRoles.length > 0 && 
-                                   !availableRoles.includes(preSelectedRole);
+                                   !availableRoles.includes(preSelectedRole) &&
+                                   userRoles.primaryRole; // Ensure we have fresh data
       
       if (preSelectionConflict && userRoles.primaryRole) {
         // User selected a role that conflicts with their wallet's actual role
-        logger.warn('⚠️ Role conflict detected', {
+        logger.warn('⚠️ Role conflict detected (after fresh blockchain data)', {
           preSelected: preSelectedRole,
           detected: userRoles.primaryRole,
           availableRoles,
+          isDetectingRoles,
+          isConnected,
         });
         
         // Show conflict modal to explain the situation
@@ -134,6 +161,12 @@ export function Layout() {
         
         // Don't auto-select - let user decide via modal
         return;
+      }
+
+      // If no conflict exists for current wallet data, ensure stale modal is closed.
+      if (showRoleConflict && (!preSelectionConflict || !userRoles.primaryRole)) {
+        setShowRoleConflict(false);
+        setConflictInfo(null);
       }
 
       // Check if current role is still valid for this wallet
@@ -161,6 +194,7 @@ export function Layout() {
       else if (!hasSelectedRole && !hasPreSelection) {
         if (availableRoles.length === 1) {
           // Auto-select if only one role
+          logger.info('Auto-selecting only available role', { role: availableRoles[0] });
           setRole(availableRoles[0]);
         } else if (availableRoles.length > 1) {
           // Show modal if multiple roles
@@ -172,7 +206,7 @@ export function Layout() {
         }
       }
     }
-  }, [availableRoles, isDetectingRoles, isConnected, hasSelectedRole, role, preSelectedRole, canRegisterAsEmployer, userRoles.primaryRole, setDetectedRoles, setIsRoleDetectionComplete, setRole, setShowRoleSelector]);
+  }, [availableRoles, isDetectingRoles, isConnected, unifiedAuth.isLogoutCooldown, hasSelectedRole, role, preSelectedRole, canRegisterAsEmployer, userRoles.primaryRole, showRoleConflict, setDetectedRoles, setIsRoleDetectionComplete, setRole, setShowRoleSelector, setPreSelectedRole]);
 
   // Handle role change from dropdown
   const handleRoleChange = (newRole: UserRole) => {
@@ -205,7 +239,7 @@ export function Layout() {
   
   const handleCloseRoleConflict = () => {
     setShowRoleConflict(false);
-    // Keep conflict info in case user wants to see it again
+    setConflictInfo(null);
   };
 
   const isActive = (path: string) => location.pathname === path;
@@ -213,12 +247,37 @@ export function Layout() {
   // Determine if ZK Auth should be shown (hide for admin and university)
   const showZKAuth = preSelectedRole !== 'admin' && 
                      preSelectedRole !== 'university' && 
-                     role !== 'admin' && 
-                     role !== 'university';
+                     effectiveRole !== 'admin' && 
+                     effectiveRole !== 'university';
 
   return (
     <div className="min-h-screen flex flex-col">
       <SkipToContent />
+      
+      {/* Logout Cooldown Overlay */}
+      {unifiedAuth.isLogoutCooldown && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm">
+          <div className="bg-surface-900 rounded-2xl shadow-2xl max-w-md w-full mx-4 p-8 border border-surface-700">
+            <div className="text-center">
+              {/* Loading spinner */}
+              <div className="w-16 h-16 mx-auto mb-6">
+                <div className="w-full h-full border-4 border-surface-700 border-t-primary-500 rounded-full animate-spin"></div>
+              </div>
+              
+              <h3 className="text-xl font-bold text-white mb-2">
+                Clearing Session Data...
+              </h3>
+              <p className="text-surface-400 text-sm mb-4">
+                Please wait while we securely clear your previous session data.
+                This prevents role conflicts when connecting a different wallet.
+              </p>
+              <p className="text-surface-500 text-xs">
+                You'll be able to connect in a moment...
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
       
       {/* Development Mode Banner - Lazy loaded */}
       <Suspense fallback={null}>
@@ -268,7 +327,7 @@ export function Layout() {
             </Link>
             
             {/* Student: My Certificates (show first) */}
-            {isConnected && role === 'student' && (
+            {hasStableRoleDetection && effectiveRole === 'student' && (
               <Link
                 to="/student/certificates"
                 className={`text-sm font-medium transition-colors ${
@@ -282,7 +341,7 @@ export function Layout() {
             )}
             
             {/* University Dashboard Link - Show after Home */}
-            {isConnected && role === 'university' && !isAspirationalRole && (
+            {hasStableRoleDetection && effectiveRole === 'university' && !isAspirationalRole && (
               <Link
                 to="/university/dashboard"
                 className={`text-sm font-medium transition-colors ${
@@ -294,7 +353,7 @@ export function Layout() {
                 University Dashboard
               </Link>
             )}
-            {isConnected && role === 'university' && isAspirationalRole && (
+            {hasStableRoleDetection && effectiveRole === 'university' && isAspirationalRole && (
               <Link
                 to="/university/register"
                 className={`text-sm font-medium transition-colors ${
@@ -308,7 +367,7 @@ export function Layout() {
             )}
             
             {/* Employer Dashboard */}
-            {isConnected && role === 'employer' && (
+            {hasStableRoleDetection && effectiveRole === 'employer' && (
               <Link
                 to="/employer/dashboard"
                 className={`text-sm font-medium transition-colors ${
@@ -322,7 +381,7 @@ export function Layout() {
             )}
             
             {/* Admin Dashboard */}
-            {isConnected && role === 'admin' && (
+            {hasStableRoleDetection && effectiveRole === 'admin' && (
               <Link
                 to="/admin/dashboard"
                 className={`text-sm font-medium transition-colors ${
@@ -336,7 +395,7 @@ export function Layout() {
             )}
             
             {/* Verify Link - Show before ZK Auth for students, after dashboard for others */}
-            {isConnected && role !== 'admin' && (
+            {hasStableRoleDetection && effectiveRole !== 'admin' && (
               <Link
                 to="/verify"
                 className={`text-sm font-medium transition-colors ${
@@ -349,7 +408,7 @@ export function Layout() {
             )}
             
             {/* ZK Auth link - Show last for students */}
-            {showZKAuth && (
+            {hasStableRoleDetection && showZKAuth && (
               <Link
                 to="/zkauth"
                 className={`text-sm font-medium transition-colors ${
@@ -454,7 +513,7 @@ export function Layout() {
                 zkSync Docs
               </a>
               <a
-                href="https://github.com"
+                href="https://github.com/VManolas/zkp-login"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-surface-400 hover:text-white text-sm transition-colors"

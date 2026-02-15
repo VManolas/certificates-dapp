@@ -1,6 +1,6 @@
 // src/hooks/useBatchCertificateIssuance.ts
 import { useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
-import { useMemo, useCallback } from 'react';
+import { useMemo, useCallback, useEffect, useRef, useState } from 'react';
 import { CERTIFICATE_REGISTRY_ADDRESS } from '@/lib/wagmi';
 import CertificateRegistryABI from '@/contracts/abis/CertificateRegistry.json';
 import { decodeContractError } from '@/lib/errorDecoding';
@@ -18,11 +18,14 @@ export interface UseBatchCertificateIssuanceReturn {
   isPending: boolean;
   isConfirming: boolean;
   isSuccess: boolean;
+  transactionPhase: 'idle' | 'awaiting_wallet_confirmation' | 'pending_onchain' | 'confirmed' | 'failed';
   error: string | null;
   transactionHash?: `0x${string}`;
   certificateIds: bigint[];
   reset: () => void;
 }
+
+const MIN_PENDING_DISPLAY_MS = 1200;
 
 /**
  * Hook for batch certificate issuance
@@ -46,20 +49,56 @@ export interface UseBatchCertificateIssuanceReturn {
 export function useBatchCertificateIssuance(): UseBatchCertificateIssuanceReturn {
   const { 
     data: hash, 
-    writeContract, 
-    isPending, 
+    writeContractAsync,
+    isPending: isWritePending,
     error: writeError,
     reset: resetWrite
   } = useWriteContract();
 
   const { 
-    isLoading: isConfirming, 
-    isSuccess,
+    isSuccess: isReceiptConfirmed,
     data: receipt,
     error: confirmError
   } = useWaitForTransactionReceipt({
     hash,
   });
+
+  const [transactionPhase, setTransactionPhase] = useState<
+    'idle' | 'awaiting_wallet_confirmation' | 'pending_onchain' | 'confirmed' | 'failed'
+  >('idle');
+  const pendingStartRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (writeError || confirmError) {
+      setTransactionPhase('failed');
+      return;
+    }
+
+    if (isWritePending && !hash) {
+      setTransactionPhase('awaiting_wallet_confirmation');
+      pendingStartRef.current = null;
+      return;
+    }
+
+    if (hash && !isReceiptConfirmed) {
+      if (pendingStartRef.current === null) {
+        pendingStartRef.current = Date.now();
+      }
+      setTransactionPhase('pending_onchain');
+      return;
+    }
+
+    if (isReceiptConfirmed && hash) {
+      const pendingSince = pendingStartRef.current ?? Date.now();
+      const elapsed = Date.now() - pendingSince;
+      const waitRemaining = Math.max(0, MIN_PENDING_DISPLAY_MS - elapsed);
+      const timer = setTimeout(() => setTransactionPhase('confirmed'), waitRemaining);
+      return () => clearTimeout(timer);
+    }
+
+    setTransactionPhase('idle');
+    pendingStartRef.current = null;
+  }, [isWritePending, hash, isReceiptConfirmed, writeError, confirmError]);
 
   /**
    * Issue multiple certificates in a single transaction
@@ -98,13 +137,13 @@ export function useBatchCertificateIssuance(): UseBatchCertificateIssuanceReturn
     const metadataURIs = certificates.map(c => c.metadataURI || '');
     const graduationYears = certificates.map(c => c.graduationYear);
 
-    writeContract({
+    await writeContractAsync({
       address: CERTIFICATE_REGISTRY_ADDRESS as `0x${string}`,
       abi: CertificateRegistryABI.abi,
       functionName: 'issueCertificatesBatch',
       args: [documentHashes, studentWallets, metadataURIs, graduationYears],
     });
-  }, [writeContract]);
+  }, [writeContractAsync]);
 
   /**
    * Extract certificate IDs from transaction receipt
@@ -153,14 +192,17 @@ export function useBatchCertificateIssuance(): UseBatchCertificateIssuanceReturn
   }, [writeError, confirmError]);
 
   const reset = useCallback(() => {
+    setTransactionPhase('idle');
+    pendingStartRef.current = null;
     resetWrite();
   }, [resetWrite]);
 
   return {
     issueCertificatesBatch,
-    isPending,
-    isConfirming,
-    isSuccess,
+    isPending: transactionPhase === 'awaiting_wallet_confirmation',
+    isConfirming: transactionPhase === 'pending_onchain',
+    isSuccess: transactionPhase === 'confirmed',
+    transactionPhase,
     error,
     transactionHash: hash,
     certificateIds,

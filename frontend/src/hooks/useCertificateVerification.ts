@@ -1,3 +1,4 @@
+import React from 'react';
 import { useReadContract } from 'wagmi';
 import { CERTIFICATE_REGISTRY_ADDRESS } from '@/lib/wagmi';
 import CertificateRegistryABI from '@/contracts/abis/CertificateRegistry.json';
@@ -23,6 +24,8 @@ export interface UseCertificateVerificationReturn {
   isLoading: boolean;
   error: Error | null;
   refetch: () => void;
+  verificationTimestamp: Date | null;
+  verificationId: string;
 }
 
 /**
@@ -49,11 +52,15 @@ export function useCertificateVerification(
   documentHash: `0x${string}` | undefined,
   enabled: boolean = true
 ): UseCertificateVerificationReturn {
+  // Generate unique verification ID for this attempt
+  const [verificationId] = React.useState(() => `verify-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
+  
   const { 
     data, 
     isLoading, 
     error,
-    refetch: refetchQuery
+    refetch: refetchQuery,
+    dataUpdatedAt,
   } = useReadContract({
     address: CERTIFICATE_REGISTRY_ADDRESS,
     abi: CertificateRegistryABI.abi,
@@ -61,10 +68,18 @@ export function useCertificateVerification(
     args: documentHash ? [documentHash] : undefined,
     query: {
       enabled: !!documentHash && !!CERTIFICATE_REGISTRY_ADDRESS && enabled,
+      
+      // Enhanced cache prevention for trustworthy verification
       staleTime: 0,
       gcTime: 0,
       refetchOnMount: 'always',
-      refetchOnWindowFocus: true,
+      refetchOnWindowFocus: false, // Don't auto-refetch on focus
+      refetchOnReconnect: true,
+      retry: 3, // Retry failed queries
+      retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+      
+      // Unique query key to force fresh blockchain query
+      queryKey: ['certificate-verification', documentHash, verificationId] as const,
     },
   });
 
@@ -79,15 +94,31 @@ export function useCertificateVerification(
       }
     : undefined;
 
+  // 🔍 DEBUG LOGGING - Certificate Verification
+  if (documentHash && data !== undefined) {
+    console.log('🔍 VERIFICATION DEBUG:', {
+      documentHash,
+      rawData: data,
+      validatedData,
+      verificationResult,
+      isValid: verificationResult?.isValid,
+      certificateId: verificationResult?.certificateId?.toString(),
+      isRevoked: verificationResult?.isRevoked,
+    });
+  }
+
   // Log validation failures
   if (data && !validatedData) {
     logger.error('Certificate verification data validation failed', undefined, { data });
   }
 
   const refetch = () => {
-    logger.debug('Refetching certificate verification');
+    logger.debug('Refetching certificate verification', { verificationId });
     refetchQuery();
   };
+
+  // Calculate verification timestamp from data update time
+  const verificationTimestamp = dataUpdatedAt ? new Date(dataUpdatedAt) : null;
 
   // Normalize error and provide user-friendly message
   let normalizedError: Error | null = null;
@@ -96,6 +127,7 @@ export function useCertificateVerification(
     normalizedError = new Error(errorResponse.message);
     logger.error('Certificate verification error', error, {
       documentHash,
+      verificationId,
       errorType: errorResponse.type,
       retryable: errorResponse.retryable
     });
@@ -109,6 +141,8 @@ export function useCertificateVerification(
     isLoading,
     error: normalizedError,
     refetch,
+    verificationTimestamp,
+    verificationId,
   };
 }
 

@@ -63,6 +63,8 @@ interface AuthState {
   showAuthMethodSelector: boolean;
   /** User's preferred authentication method (saved preference) */
   preferredAuthMethod: AuthMethod;
+  /** Whether system is in cooldown period after logout */
+  isLogoutCooldown: boolean;
 
   // Actions
   setAddress: (address: string | null) => void;
@@ -82,6 +84,7 @@ interface AuthState {
   setAuthMethod: (method: AuthMethod) => void;
   setShowAuthMethodSelector: (show: boolean) => void;
   setPreferredAuthMethod: (method: AuthMethod) => void;
+  setIsLogoutCooldown: (cooldown: boolean) => void;
   reset: () => void;
 }
 
@@ -114,6 +117,7 @@ export const useAuthStore = create<AuthState>()(
       authMethod: null,
       showAuthMethodSelector: false,
       preferredAuthMethod: null,
+      isLogoutCooldown: false,
 
       setAddress: (address) =>
         set((state) => {
@@ -188,6 +192,8 @@ export const useAuthStore = create<AuthState>()(
 
       setPreferredAuthMethod: (preferredAuthMethod) => set({ preferredAuthMethod }),
 
+      setIsLogoutCooldown: (isLogoutCooldown) => set({ isLogoutCooldown }),
+
       reset: () =>
         set({
           address: null,
@@ -219,7 +225,8 @@ export const useAuthStore = create<AuthState>()(
         role: state.role,
         isAspirationalRole: state.isAspirationalRole,
         hasSelectedRole: state.hasSelectedRole,
-        detectedRoles: state.detectedRoles,
+        // ❌ DON'T persist detectedRoles - they should always be fresh from blockchain
+        // ❌ DON'T persist preSelectedRole - it's only valid for the current session
         zkAuth: state.zkAuth,
         authMethod: state.authMethod,
         preferredAuthMethod: state.preferredAuthMethod,

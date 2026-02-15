@@ -7,6 +7,8 @@ interface PrivacyControlModalProps {
   onClose: () => void;
   onConfirm: (settings: PrivacySettings) => void;
   defaultSettings?: Partial<PrivacySettings>;
+  actionLabel?: string; // Custom label for the confirm button (e.g., "Generate QR Code" or "Download Report")
+  description?: string; // Custom description for what's being generated
 }
 
 /**
@@ -28,7 +30,9 @@ export function PrivacyControlModal({
   isOpen, 
   onClose, 
   onConfirm,
-  defaultSettings
+  defaultSettings,
+  actionLabel = 'Generate QR Code', // Default label
+  description = 'Choose what information to include in your QR code', // Default description
 }: PrivacyControlModalProps) {
   const [includeWallet, setIncludeWallet] = useState(
     defaultSettings?.includeWallet ?? false
@@ -100,7 +104,7 @@ export function PrivacyControlModal({
           <div>
             <h2 className="text-xl font-bold text-white">Privacy Settings</h2>
             <p className="text-surface-400 text-sm mt-1">
-              Choose what information to include in your QR code
+              {description}
             </p>
           </div>
           <button
@@ -253,7 +257,7 @@ export function PrivacyControlModal({
             onClick={handleConfirm}
             className="btn-primary flex-1"
           >
-            Generate QR Code
+            {actionLabel}
           </button>
         </div>
       </div>

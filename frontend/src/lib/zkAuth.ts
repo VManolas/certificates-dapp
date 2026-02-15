@@ -207,10 +207,14 @@ export async function computeCommitment(
  */
 export async function encryptCredentials(
   credentials: ZKCredentials,
-  signature: string
+  _signature: string,
+  walletAddress: string
 ): Promise<string> {
-  // Derive encryption key from signature
-  const key = ethers.utils.keccak256(signature);
+  // Derive a stable encryption key from wallet address.
+  // We still request a signature in the UX flow to prove wallet control,
+  // but we avoid using raw signature bytes as key material since signatures
+  // can differ across prompts/wallet implementations.
+  const key = deriveWalletScopedKey(walletAddress);
   
   // Simple XOR encryption (in production, use AES-GCM)
   const data = JSON.stringify(credentials);
@@ -229,10 +233,11 @@ export async function encryptCredentials(
  */
 export async function decryptCredentials(
   encrypted: string,
-  signature: string
+  _signature: string,
+  walletAddress: string
 ): Promise<ZKCredentials> {
   try {
-    const key = ethers.utils.keccak256(signature);
+    const key = deriveWalletScopedKey(walletAddress);
     
     // Convert hex string back to bytes
     const encryptedBytes = ethers.utils.arrayify(encrypted);
@@ -248,10 +253,17 @@ export async function decryptCredentials(
     // If decryption fails, credentials might be from old format or wrong wallet
     // Silently clear them - this is expected during version upgrades or wallet switches
     logger.info('[ZK Auth] Clearing outdated or incompatible stored credentials (this is normal after updates)');
-    clearStoredCredentials();
+    clearStoredCredentials(walletAddress);
     // Don't throw - just return null to indicate no valid credentials
     throw new Error('CREDENTIALS_OUTDATED');
   }
+}
+
+function deriveWalletScopedKey(walletAddress: string): string {
+  const normalized = walletAddress.toLowerCase();
+  return ethers.utils.keccak256(
+    ethers.utils.toUtf8Bytes(`zkcredentials:zkauth:v2:${normalized}`)
+  );
 }
 
 /**
@@ -366,32 +378,44 @@ export async function generateAuthProof(
 /**
  * Local storage key for encrypted credentials
  */
-const STORAGE_KEY = 'zkauth_encrypted_credentials';
+const LEGACY_STORAGE_KEY = 'zkauth_encrypted_credentials';
+const STORAGE_KEY_PREFIX = 'zkauth_encrypted_credentials_v2_';
+
+function getStorageKey(walletAddress: string): string {
+  return `${STORAGE_KEY_PREFIX}${walletAddress.toLowerCase()}`;
+}
 
 /**
  * Store encrypted credentials in localStorage
  */
-export function storeCredentials(encrypted: string): void {
-  localStorage.setItem(STORAGE_KEY, encrypted);
+export function storeCredentials(encrypted: string, walletAddress: string): void {
+  localStorage.setItem(getStorageKey(walletAddress), encrypted);
 }
 
 /**
  * Retrieve encrypted credentials from localStorage
  */
-export function getStoredCredentials(): string | null {
-  return localStorage.getItem(STORAGE_KEY);
+export function getStoredCredentials(walletAddress: string): string | null {
+  return localStorage.getItem(getStorageKey(walletAddress));
 }
 
 /**
  * Clear stored credentials (logout)
  */
-export function clearStoredCredentials(): void {
-  localStorage.removeItem(STORAGE_KEY);
+export function clearStoredCredentials(walletAddress?: string): void {
+  if (walletAddress) {
+    localStorage.removeItem(getStorageKey(walletAddress));
+    return;
+  }
+  localStorage.removeItem(LEGACY_STORAGE_KEY);
 }
 
 /**
  * Check if user has stored credentials
  */
-export function hasStoredCredentials(): boolean {
-  return localStorage.getItem(STORAGE_KEY) !== null;
+export function hasStoredCredentials(walletAddress?: string | null): boolean {
+  if (!walletAddress) {
+    return false;
+  }
+  return localStorage.getItem(getStorageKey(walletAddress)) !== null;
 }

@@ -24,6 +24,7 @@ import { useState, useEffect } from 'react';
 import { useAccount } from 'wagmi';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useUnifiedAuth } from '@/hooks/useUnifiedAuth';
+import type { ZKAuthProgressEvent } from '@/hooks/useZKAuth';
 import { ProgressSteps } from './ProgressSteps';
 import { getFriendlyError, getErrorAction, logError } from '@/lib/errors/zkAuthErrors';
 import type { UserRole, AuthMethod } from '@/types/auth';
@@ -59,6 +60,11 @@ export function UnifiedAuthFlow({
   const [selectedAuthMethod, setSelectedAuthMethod] = useState<AuthMethod | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [walletInteractionStep, setWalletInteractionStep] = useState<1 | 2 | 3 | 4 | null>(null);
+  const [walletInteractionHint, setWalletInteractionHint] = useState<string | null>(null);
+  const [isOnchainPending, setIsOnchainPending] = useState(false);
+  const [walletInteractionMode, setWalletInteractionMode] = useState<'setup' | 'login' | null>(null);
+  const [contractInteractionStatus, setContractInteractionStatus] = useState<'idle' | 'awaiting_wallet_confirmation' | 'pending_onchain' | 'confirmed'>('idle');
 
   // Initialize with preselected role if provided
   useEffect(() => {
@@ -98,6 +104,11 @@ export function UnifiedAuthFlow({
   const handleAuthMethodSelect = (method: AuthMethod) => {
     setSelectedAuthMethod(method);
     unifiedAuth.selectAuthMethod(method, true);
+    setWalletInteractionStep(null);
+    setWalletInteractionHint(null);
+    setIsOnchainPending(false);
+    setWalletInteractionMode(null);
+    setContractInteractionStatus('idle');
     
     if (method === 'zk') {
       // Check if user has ZK credentials
@@ -115,12 +126,143 @@ export function UnifiedAuthFlow({
   };
 
   // ZK Registration: Generate and register credentials
+  const handleZKSetupProgress = (event: ZKAuthProgressEvent) => {
+    switch (event) {
+      case 'register_signature_required':
+        setWalletInteractionStep(1);
+        setWalletInteractionHint('Approve the signature request to encrypt your private ZK credentials locally.');
+        setIsOnchainPending(false);
+        break;
+      case 'register_signature_complete':
+        setWalletInteractionStep(2);
+        setWalletInteractionHint('Next, approve the commitment registration transaction.');
+        setIsOnchainPending(false);
+        break;
+      case 'register_transaction_required':
+        setWalletInteractionStep(2);
+        setWalletInteractionHint('MetaMask is waiting for your approval to register your commitment on-chain.');
+        setIsOnchainPending(false);
+        setContractInteractionStatus('awaiting_wallet_confirmation');
+        break;
+      case 'register_transaction_submitted':
+        setWalletInteractionStep(2);
+        setWalletInteractionHint('Commitment transaction submitted. Waiting for blockchain confirmation.');
+        setIsOnchainPending(true);
+        setContractInteractionStatus('pending_onchain');
+        break;
+      case 'register_transaction_confirmed':
+        setWalletInteractionStep(3);
+        setWalletInteractionHint('Commitment confirmed. Next, sign to unlock your private credentials.');
+        setIsOnchainPending(false);
+        setContractInteractionStatus('confirmed');
+        break;
+      case 'login_wallet_access_required':
+        setWalletInteractionHint('If MetaMask asks for account access, approve it to continue.');
+        setIsOnchainPending(false);
+        break;
+      case 'login_signature_required':
+        setWalletInteractionStep(3);
+        setWalletInteractionHint('Approve signature to unlock your local ZK credentials.');
+        setIsOnchainPending(false);
+        break;
+      case 'login_signature_complete':
+        setWalletInteractionStep(4);
+        setWalletInteractionHint('Signature accepted. Final step: approve the session-start transaction.');
+        setIsOnchainPending(false);
+        setContractInteractionStatus('awaiting_wallet_confirmation');
+        break;
+      case 'login_transaction_required':
+        setWalletInteractionStep(4);
+        setWalletInteractionHint('Approve the final session-start transaction in MetaMask.');
+        setIsOnchainPending(false);
+        setContractInteractionStatus('awaiting_wallet_confirmation');
+        break;
+      case 'login_transaction_submitted':
+        setWalletInteractionStep(4);
+        setWalletInteractionHint('Session-start transaction submitted. Waiting for blockchain confirmation.');
+        setIsOnchainPending(true);
+        setContractInteractionStatus('pending_onchain');
+        break;
+      case 'login_transaction_confirmed':
+        setWalletInteractionStep(4);
+        setWalletInteractionHint('Final transaction confirmed. Private login is now active.');
+        setIsOnchainPending(false);
+        setContractInteractionStatus('confirmed');
+        break;
+      default:
+        break;
+    }
+  };
+
+  const handleZKLoginProgress = (event: ZKAuthProgressEvent) => {
+    switch (event) {
+      case 'login_wallet_access_required':
+        setWalletInteractionStep(1);
+        setWalletInteractionHint('Approve wallet account access in MetaMask to continue.');
+        setIsOnchainPending(false);
+        break;
+      case 'login_signature_required':
+        setWalletInteractionStep(2);
+        setWalletInteractionHint('Approve the signature request to decrypt your local ZK credentials.');
+        setIsOnchainPending(false);
+        break;
+      case 'login_signature_complete':
+        setWalletInteractionStep(3);
+        setWalletInteractionHint('Signature accepted. Next, approve the on-chain session start transaction.');
+        setIsOnchainPending(false);
+        break;
+      case 'login_transaction_required':
+        setWalletInteractionStep(4);
+        setWalletInteractionHint('MetaMask is waiting for your approval to start a private ZK session on-chain.');
+        setIsOnchainPending(false);
+        setContractInteractionStatus('awaiting_wallet_confirmation');
+        break;
+      case 'login_transaction_submitted':
+        setWalletInteractionStep(4);
+        setWalletInteractionHint('Session start transaction submitted. Waiting for blockchain confirmation.');
+        setIsOnchainPending(true);
+        setContractInteractionStatus('pending_onchain');
+        break;
+      case 'login_transaction_confirmed':
+        setWalletInteractionStep(4);
+        setWalletInteractionHint('Private session transaction confirmed. Login is complete.');
+        setIsOnchainPending(false);
+        setContractInteractionStatus('confirmed');
+        break;
+      default:
+        break;
+    }
+  };
+
   const handleZKRegistration = async () => {
     if (!selectedRole || selectedRole === 'admin') return;
     
     try {
       setIsLoading(true);
       setError(null);
+      // Defensive optimization: if credentials already exist for this wallet,
+      // skip registration and proceed directly to private login.
+      if (unifiedAuth.zkAuth.hasCredentials) {
+        logger.info('Skipping ZK registration because credentials already exist for this wallet');
+        setWalletInteractionMode('login');
+        setWalletInteractionStep(1);
+        setWalletInteractionHint('Existing private credentials detected. Proceeding directly to private login.');
+        setIsOnchainPending(false);
+        setContractInteractionStatus('idle');
+        setCurrentStep('zk-generate-proof');
+        await unifiedAuth.zkAuth.login(handleZKLoginProgress);
+        setCurrentStep('complete');
+        setTimeout(() => {
+          onComplete?.();
+        }, 1500);
+        return;
+      }
+
+      setWalletInteractionMode('setup');
+      setWalletInteractionStep(1);
+      setWalletInteractionHint('One-time setup requires three wallet confirmations for secure enrollment.');
+      setIsOnchainPending(false);
+      setContractInteractionStatus('idle');
       setCurrentStep('zk-register-onchain');
       
       // Only students and employers can use ZK auth
@@ -128,7 +270,7 @@ export function UnifiedAuthFlow({
         throw new Error('Only students and employers can use ZK authentication');
       }
       
-      await unifiedAuth.zkAuth.register(selectedRole);
+      await unifiedAuth.zkAuth.register(selectedRole, handleZKSetupProgress);
       
       // Auto-login after successful registration
       // This matches the behavior of the /zkauth page
@@ -136,7 +278,7 @@ export function UnifiedAuthFlow({
       setCurrentStep('zk-generate-proof');
       
       try {
-        await unifiedAuth.zkAuth.login();
+        await unifiedAuth.zkAuth.login(handleZKSetupProgress);
         logger.info('ZK auto-login successful');
         
         setCurrentStep('complete');
@@ -145,23 +287,27 @@ export function UnifiedAuthFlow({
         }, 1500);
       } catch (loginErr) {
         const err = loginErr as Error;
-        // Silently handle auto-login failures - this is normal after updates or wallet switches
+        // Registration succeeded, but authentication did not.
+        // Do NOT mark flow complete because route guards require authenticated ZK session.
+        logger.warn('ZK registration succeeded but auto-login failed; requiring explicit login', {
+          message: err.message,
+        });
         if (err.message === 'CREDENTIALS_OUTDATED') {
-          console.info('ℹ️ Registration successful! (Auto-login skipped due to outdated credentials - this is normal after updates)');
+          // Credentials were cleared by the decrypt path; require a clean re-registration.
+          setCurrentStep('zk-generate-credentials');
+          setError('Your credentials became invalid during setup. Please generate and register once more to complete private login.');
         } else {
-          console.info('ℹ️ Registration successful! (Auto-login skipped - you can login manually later)');
+          setCurrentStep('zk-load-credentials');
+          setError('Registration succeeded, but private session login was not completed. Please continue below to finish login.');
         }
-        // If auto-login fails, just complete the registration
-        // User can manually login later
-        setCurrentStep('complete');
-        setTimeout(() => {
-          onComplete?.();
-        }, 1500);
       }
     } catch (err) {
       logError(err as Error, 'ZK Registration');
       setError(getFriendlyError(err as Error));
       setCurrentStep('zk-generate-credentials');
+      setWalletInteractionStep(null);
+      setWalletInteractionHint(null);
+      setIsOnchainPending(false);
     } finally {
       setIsLoading(false);
     }
@@ -169,21 +315,51 @@ export function UnifiedAuthFlow({
 
   // ZK Login: Load credentials and authenticate
   const handleZKLogin = async () => {
+    if (!unifiedAuth.zkAuth.hasCredentials) {
+      setError('No private credentials found for this wallet. Please register once to enable private login.');
+      setCurrentStep('zk-connect-wallet');
+      return;
+    }
+
     try {
       setIsLoading(true);
       setError(null);
+      setWalletInteractionMode('login');
+      setWalletInteractionStep(1);
+      setWalletInteractionHint('Private login includes three wallet interaction steps. Follow MetaMask prompts.');
+      setIsOnchainPending(false);
+      setContractInteractionStatus('idle');
       setCurrentStep('zk-generate-proof');
       
-      await unifiedAuth.zkAuth.login();
+      await unifiedAuth.zkAuth.login(handleZKLoginProgress);
       
       setCurrentStep('complete');
       setTimeout(() => {
         onComplete?.();
       }, 1500);
     } catch (err) {
-      logError(err as Error, 'ZK Login');
-      setError(getFriendlyError(err as Error));
-      setCurrentStep('zk-load-credentials');
+      const loginError = err as Error;
+      const message = loginError.message || '';
+
+      // Expected recovery paths: credentials are missing/outdated for this wallet.
+      // Move user to registration flow instead of looping on login errors.
+      if (
+        message === 'CREDENTIALS_OUTDATED' ||
+        message.includes('No stored credentials')
+      ) {
+        setError('Private credentials are not available for this wallet. Please complete one-time registration to continue.');
+        setCurrentStep('zk-connect-wallet');
+      } else {
+        logError(loginError, 'ZK Login');
+        setError(getFriendlyError(loginError));
+        setCurrentStep('zk-load-credentials');
+      }
+
+      setWalletInteractionStep(null);
+      setWalletInteractionHint(null);
+      setIsOnchainPending(false);
+      setWalletInteractionMode(null);
+      setContractInteractionStatus('idle');
     } finally {
       setIsLoading(false);
     }
@@ -262,6 +438,86 @@ export function UnifiedAuthFlow({
     // Default (no method selected yet)
     return baseSteps;
   };
+
+  const walletTransparencyPanel = walletInteractionStep !== null ? (
+    <div className="mt-4 rounded-xl border border-surface-700 bg-surface-900/40 p-4 text-left">
+      <h5 className="text-sm font-semibold text-white mb-2">Wallet Interaction Transparency</h5>
+      <p className="text-xs text-surface-400 mb-3">
+        {walletInteractionMode === 'login'
+          ? 'This private login includes up to four wallet interactions, depending on your wallet prompts.'
+          : 'First-time private setup includes four wallet interactions from enrollment to private session start.'}
+      </p>
+      <div className="space-y-2">
+        {(walletInteractionMode === 'login'
+          ? [
+              { step: 1 as const, title: '1) Approve wallet account access' },
+              { step: 2 as const, title: '2) Sign to decrypt credentials locally' },
+              { step: 3 as const, title: '3) Sign to unlock credentials' },
+              { step: 4 as const, title: '4) Start private session transaction' },
+            ]
+          : [
+              { step: 1 as const, title: '1) Sign message' },
+              { step: 2 as const, title: '2) Register commitment transaction' },
+              { step: 3 as const, title: '3) Sign to unlock credentials' },
+              { step: 4 as const, title: '4) Start private session transaction' },
+            ]
+        ).map((item) => {
+          const isDone = walletInteractionStep > item.step;
+          const isCurrent = walletInteractionStep === item.step;
+          return (
+            <div
+              key={item.step}
+              className={`flex items-center gap-2 rounded border p-2 ${
+                isDone
+                  ? 'border-green-500/30 bg-green-500/10'
+                  : isCurrent
+                  ? 'border-primary-500/30 bg-primary-500/10'
+                  : 'border-surface-700 bg-surface-800/60'
+              }`}
+            >
+              <div
+                className={`h-5 w-5 rounded-full flex items-center justify-center text-xs font-semibold ${
+                  isDone
+                    ? 'bg-green-500/20 text-green-300'
+                    : isCurrent
+                    ? 'bg-primary-500/20 text-primary-300'
+                    : 'bg-surface-700 text-surface-400'
+                }`}
+              >
+                {isDone ? '✓' : item.step}
+              </div>
+              <span className="text-xs text-surface-200">{item.title}</span>
+            </div>
+          );
+        })}
+      </div>
+      {walletInteractionHint && (
+        <p className="mt-3 text-xs text-blue-300">{walletInteractionHint}</p>
+      )}
+      {contractInteractionStatus !== 'idle' && (
+        <div
+          className={`mt-3 rounded border p-2 text-xs ${
+            contractInteractionStatus === 'awaiting_wallet_confirmation'
+              ? 'border-yellow-500/30 bg-yellow-500/10 text-yellow-300'
+              : contractInteractionStatus === 'pending_onchain'
+              ? 'border-blue-500/30 bg-blue-500/10 text-blue-300'
+              : 'border-green-500/30 bg-green-500/10 text-green-300'
+          }`}
+        >
+          {contractInteractionStatus === 'awaiting_wallet_confirmation' && 'Contract interaction: waiting for wallet approval'}
+          {contractInteractionStatus === 'pending_onchain' && 'Contract interaction: pending on blockchain'}
+          {contractInteractionStatus === 'confirmed' && 'Contract interaction: confirmed'}
+        </div>
+      )}
+      {isOnchainPending && (
+        <p className="mt-1 text-xs text-yellow-300">
+          Transaction sent to chain. Confirmation can take a few seconds.
+        </p>
+      )}
+    </div>
+  ) : null;
+
+  const hasExistingCredentials = unifiedAuth.zkAuth.hasCredentials;
 
   return (
     <div className="space-y-6">
@@ -423,7 +679,8 @@ export function UnifiedAuthFlow({
           <div>
             <h4 className="text-white font-semibold mb-2">Step 3: Connect Wallet</h4>
             <p className="text-surface-300 text-sm mb-4">
-              Connect your wallet to register your ZK credentials on-chain. This is a one-time setup.
+              We need your wallet once to anchor your private identity on-chain: your wallet signs to protect local credentials and approves registration/session transactions.
+              After setup, you authenticate privately with ZK proofs instead of exposing your wallet on every login.
             </p>
             <div className="flex justify-center py-4">
               <ConnectButton />
@@ -446,10 +703,13 @@ export function UnifiedAuthFlow({
 
         {currentStep === 'zk-generate-credentials' && (
           <div>
-            <h4 className="text-white font-semibold mb-2">Step 4: Generate ZK Credentials</h4>
+            <h4 className="text-white font-semibold mb-2">
+              {hasExistingCredentials ? 'Step 4: Continue Private Login' : 'Step 4: Generate ZK Credentials'}
+            </h4>
             <p className="text-surface-300 text-sm mb-4">
-              Generate your private ZK credentials and register your commitment on the blockchain.
-              Your private key will be encrypted and stored securely in your browser.
+              {hasExistingCredentials
+                ? 'Private credentials already exist for this wallet. Continue to start a private session without re-registering your commitment.'
+                : 'Generate your private ZK credentials and register your commitment on the blockchain. Your private key will be encrypted and stored securely in your browser.'}
             </p>
             <button
               onClick={handleZKRegistration}
@@ -466,7 +726,7 @@ export function UnifiedAuthFlow({
                   <span>Generating & Registering...</span>
                 </>
               ) : (
-                'Generate & Register Credentials'
+                hasExistingCredentials ? 'Continue Private Login' : 'Generate & Register Credentials'
               )}
             </button>
             {error && (
@@ -475,6 +735,7 @@ export function UnifiedAuthFlow({
                 <p className="text-surface-400 text-xs mt-1">{getErrorAction(error).label}</p>
               </div>
             )}
+            {walletInteractionMode === 'login' && walletTransparencyPanel}
           </div>
         )}
 
@@ -490,6 +751,7 @@ export function UnifiedAuthFlow({
             <p className="text-surface-300 text-sm">
               Please confirm the transaction in your wallet and wait for it to be confirmed on-chain.
             </p>
+            {walletTransparencyPanel}
           </div>
         )}
 
@@ -556,6 +818,7 @@ export function UnifiedAuthFlow({
             <p className="text-surface-300 text-sm">
               Creating your zero-knowledge proof for private authentication.
             </p>
+            {walletTransparencyPanel}
           </div>
         )}
 

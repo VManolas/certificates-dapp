@@ -340,7 +340,7 @@ export function UniversityDashboard() {
             {recentCertificates.map(({ cert, id }) => (
               <button
                 key={id.toString()}
-                onClick={() => navigate(`/verify?cert=${id.toString()}`)}
+                onClick={() => navigate(`/verify?hash=${cert.documentHash}`)}
                 className="w-full p-4 bg-surface-800 rounded-lg border border-surface-700 hover:border-primary-500/50 transition-all cursor-pointer text-left hover:bg-surface-800/80 group"
               >
                 <div className="flex items-start justify-between">
