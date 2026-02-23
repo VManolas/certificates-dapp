@@ -42,7 +42,12 @@ export function VerificationReportWithPrivacy({
   const [shouldGeneratePDF, setShouldGeneratePDF] = useState(false);
   const downloadLinkRef = useRef<HTMLSpanElement>(null);
 
-  const [verificationUrl, setVerificationUrl] = useState(`${window.location.origin}/verify?hash=${documentHash}`);
+  const buildVerificationUrl = (query: string) => `${window.location.origin}/verify?${query}`;
+  const normalizeVerificationUrl = (url: string) => url.replace('/veri-fy?', '/verify?');
+
+  const [verificationUrl, setVerificationUrl] = useState(
+    normalizeVerificationUrl(buildVerificationUrl(`hash=${documentHash}`))
+  );
   const issueDateTime = new Date(Number(issueDate) * 1000);
   
   const handlePrivacyConfirm = async (settings: PrivacySettings) => {
@@ -65,14 +70,20 @@ export function VerificationReportWithPrivacy({
           address as `0x${string}`,
           (message) => signer.signMessage(message)
         );
-        setVerificationUrl(`${window.location.origin}/verify?v=${encodeURIComponent(token)}`);
+        setVerificationUrl(
+          normalizeVerificationUrl(buildVerificationUrl(`v=${encodeURIComponent(token)}`))
+        );
       } else {
-        setVerificationUrl(`${window.location.origin}/verify?hash=${documentHash}`);
+        setVerificationUrl(
+          normalizeVerificationUrl(buildVerificationUrl(`hash=${documentHash}`))
+        );
       }
     } catch (error) {
       // Fallback keeps compatibility if signature is declined.
       logger.warn('Failed to generate signed verification token; falling back to hash link', error);
-      setVerificationUrl(`${window.location.origin}/verify?hash=${documentHash}`);
+      setVerificationUrl(
+        normalizeVerificationUrl(buildVerificationUrl(`hash=${documentHash}`))
+      );
     }
 
     setShouldGeneratePDF(true);
@@ -138,7 +149,7 @@ export function VerificationReportWithPrivacy({
               isValid={isValid}
               isRevoked={isRevoked}
               chainId={chainId}
-              verificationUrl={verificationUrl}
+              verificationUrl={normalizeVerificationUrl(verificationUrl)}
               universityName={universityName}
               programName={programName}
             />

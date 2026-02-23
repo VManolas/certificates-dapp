@@ -65,6 +65,8 @@ interface AuthState {
   preferredAuthMethod: AuthMethod;
   /** Whether system is in cooldown period after logout */
   isLogoutCooldown: boolean;
+  /** Monotonic counter for auth resets/transitions */
+  authEpoch: number;
 
   // Actions
   setAddress: (address: string | null) => void;
@@ -85,6 +87,7 @@ interface AuthState {
   setShowAuthMethodSelector: (show: boolean) => void;
   setPreferredAuthMethod: (method: AuthMethod) => void;
   setIsLogoutCooldown: (cooldown: boolean) => void;
+  bumpAuthEpoch: () => void;
   reset: () => void;
 }
 
@@ -118,6 +121,7 @@ export const useAuthStore = create<AuthState>()(
       showAuthMethodSelector: false,
       preferredAuthMethod: null,
       isLogoutCooldown: false,
+      authEpoch: 0,
 
       setAddress: (address) =>
         set((state) => {
@@ -148,6 +152,7 @@ export const useAuthStore = create<AuthState>()(
               },
               authMethod: null,
               showAuthMethodSelector: false,
+              authEpoch: state.authEpoch + 1,
               // Keep preferredAuthMethod - user's saved preference
             };
           }
@@ -194,6 +199,8 @@ export const useAuthStore = create<AuthState>()(
 
       setIsLogoutCooldown: (isLogoutCooldown) => set({ isLogoutCooldown }),
 
+      bumpAuthEpoch: () => set((state) => ({ authEpoch: state.authEpoch + 1 })),
+
       reset: () =>
         set({
           address: null,
@@ -215,6 +222,7 @@ export const useAuthStore = create<AuthState>()(
           },
           authMethod: null,
           showAuthMethodSelector: false,
+          authEpoch: 0,
           // Keep preferredAuthMethod even on reset
         }),
     }),

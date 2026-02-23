@@ -46,8 +46,17 @@ export function ZKAuthUpgrade({ variant = 'card', onUpgradeComplete }: ZKAuthUpg
   const [metamaskHint, setMetamaskHint] = useState<string | null>(null);
   const [finalTxPhase, setFinalTxPhase] = useState<'idle' | 'awaiting_wallet_confirmation' | 'pending_onchain' | 'confirmed'>('idle');
   const [showSuccessPopup, setShowSuccessPopup] = useState(false);
+  const activeRunIdRef = useRef(0);
 
-  const handleProgressEvent = (event: ZKAuthProgressEvent) => {
+  const beginNewRun = () => {
+    activeRunIdRef.current += 1;
+    return activeRunIdRef.current;
+  };
+
+  const isCurrentRun = (runId: number) => activeRunIdRef.current === runId;
+
+  const handleProgressEvent = (event: ZKAuthProgressEvent, runId: number) => {
+    if (!isCurrentRun(runId)) return;
     const mode = upgradeModeRef.current;
     switch (event) {
       case 'register_signature_required':
@@ -103,6 +112,7 @@ export function ZKAuthUpgrade({ variant = 'card', onUpgradeComplete }: ZKAuthUpg
       return;
     }
 
+    const runId = beginNewRun();
     setIsUpgrading(true);
     const loginOnly = hasCredentials;
     upgradeModeRef.current = loginOnly ? 'login_only' : 'full_setup';
@@ -116,19 +126,24 @@ export function ZKAuthUpgrade({ variant = 'card', onUpgradeComplete }: ZKAuthUpg
       // Only students and employers can use ZK auth (not admin or university)
       if (role === 'student' || role === 'employer') {
         if (loginOnly) {
+          if (!isCurrentRun(runId)) return;
           logger.info('Starting ZK auth upgrade with existing credentials (skip registration)', { role });
           setMetamaskHint('Existing private credentials detected for this wallet. Skipping registration and starting private session.');
         } else {
+          if (!isCurrentRun(runId)) return;
           logger.info('Starting ZK auth registration', { role });
           // Step 1: Register with ZK auth
-          await register(role as ZKAuthRole, handleProgressEvent);
+          await register(role as ZKAuthRole, (event) => handleProgressEvent(event, runId));
+          if (!isCurrentRun(runId)) return;
           logger.info('ZK auth registration successful');
           // Step 2: Auto-login
           setUpgradeStep('authenticating');
           await new Promise(resolve => setTimeout(resolve, 500)); // Brief pause
+          if (!isCurrentRun(runId)) return;
         }
 
-        await login(handleProgressEvent);
+        await login((event) => handleProgressEvent(event, runId));
+        if (!isCurrentRun(runId)) return;
         
         logger.info('ZK auth login successful');
         // Keep the contract status explicit: show confirmed before success state.
@@ -136,6 +151,7 @@ export function ZKAuthUpgrade({ variant = 'card', onUpgradeComplete }: ZKAuthUpg
         setMetamaskHint('Final transaction confirmed.');
         // Give users enough time to read final-step states before success UI appears.
         await new Promise(resolve => setTimeout(resolve, 1600));
+        if (!isCurrentRun(runId)) return;
 
         // Defensive synchronization: keep auth store aligned with successful ZK upgrade.
         // This prevents the UI from reverting to public/web3 presentation.
@@ -156,6 +172,7 @@ export function ZKAuthUpgrade({ variant = 'card', onUpgradeComplete }: ZKAuthUpg
         
         // Auto-close success message after 2 seconds
         setTimeout(() => {
+          if (!isCurrentRun(runId)) return;
           setIsUpgrading(false);
           setUpgradeStep('idle');
           upgradeModeRef.current = 'full_setup';
@@ -169,6 +186,7 @@ export function ZKAuthUpgrade({ variant = 'card', onUpgradeComplete }: ZKAuthUpg
         throw new Error('Admin role cannot use ZK authentication');
       }
     } catch (error: any) {
+      if (!isCurrentRun(runId)) return;
       logger.error('ZK auth upgrade failed', error);
       setIsUpgrading(false);
       setUpgradeStep('idle');

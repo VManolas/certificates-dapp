@@ -63,7 +63,7 @@ export function Layout() {
   const universityData = userRoles.isUniversity ? institutionData : null;
   const canRegisterAsEmployer = userRoles.canRegisterAsEmployer;
   const effectiveRole = unifiedAuth.role ?? role;
-  const hasStableRoleDetection = isConnected && !isDetectingRoles;
+  const hasStableRoleDetection = isConnected && !isDetectingRoles && !unifiedAuth.authContextResolving;
 
   // Set refetch function in auth store for other components
   useEffect(() => {
@@ -125,8 +125,8 @@ export function Layout() {
   // Handle role detection completion and synchronization
   useEffect(() => {
     // Skip role detection during logout cooldown to prevent conflicts with stale data
-    if (unifiedAuth.isLogoutCooldown) {
-      console.log('⏸️ Skipping role detection during logout cooldown');
+    if (unifiedAuth.authContextResolving) {
+      console.log('⏸️ Skipping role detection while auth context resolves');
       return;
     }
     
@@ -206,7 +206,7 @@ export function Layout() {
         }
       }
     }
-  }, [availableRoles, isDetectingRoles, isConnected, unifiedAuth.isLogoutCooldown, hasSelectedRole, role, preSelectedRole, canRegisterAsEmployer, userRoles.primaryRole, showRoleConflict, setDetectedRoles, setIsRoleDetectionComplete, setRole, setShowRoleSelector, setPreSelectedRole]);
+  }, [availableRoles, isDetectingRoles, isConnected, unifiedAuth.authContextResolving, hasSelectedRole, role, preSelectedRole, canRegisterAsEmployer, userRoles.primaryRole, showRoleConflict, setDetectedRoles, setIsRoleDetectionComplete, setRole, setShowRoleSelector, setPreSelectedRole]);
 
   // Handle role change from dropdown
   const handleRoleChange = (newRole: UserRole) => {

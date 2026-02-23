@@ -1,12 +1,14 @@
 // frontend/src/hooks/__tests__/useUnifiedAuth.test.ts
 import { renderHook, waitFor } from '@testing-library/react';
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { useUnifiedAuth } from '../useUnifiedAuth';
 import { useAccount } from 'wagmi';
 import { useAuthStore } from '@/store/authStore';
 import { useZKAuth } from '../useZKAuth';
 import { useUserRoles } from '../useUserRoles';
 import { useInstitutionStatus } from '../useInstitutionStatus';
+import { useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 
 // Mock all dependencies
 vi.mock('wagmi', () => ({
@@ -29,6 +31,14 @@ vi.mock('../useInstitutionStatus', () => ({
   useInstitutionStatus: vi.fn(),
 }));
 
+vi.mock('@tanstack/react-query', () => ({
+  useQueryClient: vi.fn(),
+}));
+
+vi.mock('react-router-dom', () => ({
+  useNavigate: vi.fn(),
+}));
+
 vi.mock('@/lib/logger', () => ({
   logger: {
     info: vi.fn(),
@@ -43,15 +53,20 @@ const mockUseAuthStore = useAuthStore as ReturnType<typeof vi.fn>;
 const mockUseZKAuth = useZKAuth as ReturnType<typeof vi.fn>;
 const mockUseUserRoles = useUserRoles as ReturnType<typeof vi.fn>;
 const mockUseInstitutionStatus = useInstitutionStatus as ReturnType<typeof vi.fn>;
+const mockUseQueryClient = useQueryClient as ReturnType<typeof vi.fn>;
+const mockUseNavigate = useNavigate as ReturnType<typeof vi.fn>;
 
 describe('useUnifiedAuth', () => {
   let mockAuthStore: any;
   let mockZKAuth: any;
   let mockUserRoles: any;
   let mockInstitutionStatus: any;
+  let mockQueryClient: any;
+  let mockNavigate: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.spyOn(console, 'log').mockImplementation(() => {});
 
     // Default mock implementations
     mockAuthStore = {
@@ -60,14 +75,23 @@ describe('useUnifiedAuth', () => {
       authMethod: null,
       showAuthMethodSelector: false,
       preferredAuthMethod: null,
+      isLogoutCooldown: false,
       setAuthMethod: vi.fn(),
       setShowAuthMethodSelector: vi.fn(),
       setPreferredAuthMethod: vi.fn(),
       setRole: vi.fn(),
+      setPreSelectedRole: vi.fn(),
+      setIsLogoutCooldown: vi.fn(),
+      bumpAuthEpoch: vi.fn(),
       zkAuth: {
         isZKAuthenticated: false,
         zkRole: null,
       },
+      setZKAuthEnabled: vi.fn(),
+      setZKAuthenticated: vi.fn(),
+      setZKCommitment: vi.fn(),
+      setZKSessionId: vi.fn(),
+      setZKRole: vi.fn(),
     };
 
     mockZKAuth = {
@@ -99,10 +123,22 @@ describe('useUnifiedAuth', () => {
       isActive: true,
     };
 
+    mockQueryClient = {
+      cancelQueries: vi.fn().mockResolvedValue(undefined),
+      removeQueries: vi.fn(),
+    };
+    mockNavigate = vi.fn();
+
     mockUseAuthStore.mockReturnValue(mockAuthStore);
     mockUseZKAuth.mockReturnValue(mockZKAuth);
     mockUseUserRoles.mockReturnValue(mockUserRoles);
     mockUseInstitutionStatus.mockReturnValue(mockInstitutionStatus);
+    mockUseQueryClient.mockReturnValue(mockQueryClient);
+    mockUseNavigate.mockReturnValue(mockNavigate);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   describe('Initialization and Basic State', () => {
@@ -114,6 +150,7 @@ describe('useUnifiedAuth', () => {
       expect(result.current.isAuthenticated).toBe(false);
       expect(result.current.role).toBeNull();
       expect(result.current.authMethod).toBeNull();
+      expect(result.current.authContextResolving).toBe(false);
     });
 
     it('should return correct loading state', () => {
@@ -380,6 +417,7 @@ describe('useUnifiedAuth', () => {
 
       expect(mockAuthStore.setAuthMethod).toHaveBeenCalledWith(null);
       expect(mockAuthStore.setRole).toHaveBeenCalledWith(null);
+      expect(mockAuthStore.setPreSelectedRole).toHaveBeenCalledWith(null);
     });
 
     it('should logout from ZK auth', async () => {
@@ -413,7 +451,7 @@ describe('useUnifiedAuth', () => {
   });
 
   describe('Suspended University Handling', () => {
-    it('should block authentication for suspended university', () => {
+    it('should block authentication for suspended university', async () => {
       mockUseAccount.mockReturnValue({ address: '0x123', isConnected: true });
       mockUserRoles.primaryRole = 'university';
       mockUserRoles.isUniversity = true;
@@ -424,8 +462,7 @@ describe('useUnifiedAuth', () => {
 
       const { result } = renderHook(() => useUnifiedAuth());
 
-      // Should have cleared auth state
-      waitFor(() => {
+      await waitFor(() => {
         expect(mockAuthStore.setAuthMethod).toHaveBeenCalledWith(null);
         expect(mockAuthStore.setRole).toHaveBeenCalledWith(null);
       });
@@ -448,7 +485,7 @@ describe('useUnifiedAuth', () => {
   });
 
   describe('Role Conflict Handling', () => {
-    it('should detect pre-selected role conflict', () => {
+    it('should detect pre-selected role conflict', async () => {
       mockUseAccount.mockReturnValue({ address: '0x123', isConnected: true });
       mockAuthStore.preSelectedRole = 'employer';
       mockAuthStore.role = null;
@@ -460,14 +497,14 @@ describe('useUnifiedAuth', () => {
       renderHook(() => useUnifiedAuth());
 
       // Should clear auth method when conflict detected
-      waitFor(() => {
+      await waitFor(() => {
         expect(mockAuthStore.setAuthMethod).toHaveBeenCalledWith(null);
       });
     });
   });
 
   describe('Auto-Selection Logic', () => {
-    it('should auto-select Web3 for admin on connection', () => {
+    it('should auto-select Web3 for admin on connection', async () => {
       mockUseAccount.mockReturnValue({ address: '0x123', isConnected: true });
       mockUserRoles.primaryRole = 'admin';
       mockUserRoles.isAdmin = true;
@@ -475,13 +512,13 @@ describe('useUnifiedAuth', () => {
 
       renderHook(() => useUnifiedAuth());
 
-      waitFor(() => {
+      await waitFor(() => {
         expect(mockAuthStore.setAuthMethod).toHaveBeenCalledWith('web3');
         expect(mockAuthStore.setRole).toHaveBeenCalledWith('admin');
       });
     });
 
-    it('should auto-select ZK when credentials exist for student', () => {
+    it('should auto-select ZK when credentials exist for student', async () => {
       mockUseAccount.mockReturnValue({ address: '0x123', isConnected: true });
       mockUserRoles.primaryRole = 'student';
       mockUseUserRoles.mockReturnValue(mockUserRoles);
@@ -490,19 +527,19 @@ describe('useUnifiedAuth', () => {
 
       renderHook(() => useUnifiedAuth());
 
-      waitFor(() => {
+      await waitFor(() => {
         expect(mockAuthStore.setAuthMethod).toHaveBeenCalledWith('zk');
       });
     });
 
-    it('should show auth method selector when user has choice', () => {
+    it('should show auth method selector when user has choice', async () => {
       mockUseAccount.mockReturnValue({ address: '0x123', isConnected: true });
       mockUserRoles.primaryRole = 'student';
       mockUseUserRoles.mockReturnValue(mockUserRoles);
 
       renderHook(() => useUnifiedAuth());
 
-      waitFor(() => {
+      await waitFor(() => {
         expect(mockAuthStore.setShowAuthMethodSelector).toHaveBeenCalledWith(true);
       });
     });

@@ -20,7 +20,7 @@
  * - Ability to go back to previous steps (where applicable)
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAccount } from 'wagmi';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useUnifiedAuth } from '@/hooks/useUnifiedAuth';
@@ -65,6 +65,14 @@ export function UnifiedAuthFlow({
   const [isOnchainPending, setIsOnchainPending] = useState(false);
   const [walletInteractionMode, setWalletInteractionMode] = useState<'setup' | 'login' | null>(null);
   const [contractInteractionStatus, setContractInteractionStatus] = useState<'idle' | 'awaiting_wallet_confirmation' | 'pending_onchain' | 'confirmed'>('idle');
+  const activeRunIdRef = useRef(0);
+
+  const beginNewRun = () => {
+    activeRunIdRef.current += 1;
+    return activeRunIdRef.current;
+  };
+
+  const isCurrentRun = (runId: number) => activeRunIdRef.current === runId;
 
   // Initialize with preselected role if provided
   useEffect(() => {
@@ -102,6 +110,7 @@ export function UnifiedAuthFlow({
 
   // Handle auth method selection
   const handleAuthMethodSelect = (method: AuthMethod) => {
+    beginNewRun();
     setSelectedAuthMethod(method);
     unifiedAuth.selectAuthMethod(method, true);
     setWalletInteractionStep(null);
@@ -126,7 +135,8 @@ export function UnifiedAuthFlow({
   };
 
   // ZK Registration: Generate and register credentials
-  const handleZKSetupProgress = (event: ZKAuthProgressEvent) => {
+  const handleZKSetupProgress = (event: ZKAuthProgressEvent, runId: number) => {
+    if (!isCurrentRun(runId)) return;
     switch (event) {
       case 'register_signature_required':
         setWalletInteractionStep(1);
@@ -194,7 +204,8 @@ export function UnifiedAuthFlow({
     }
   };
 
-  const handleZKLoginProgress = (event: ZKAuthProgressEvent) => {
+  const handleZKLoginProgress = (event: ZKAuthProgressEvent, runId: number) => {
+    if (!isCurrentRun(runId)) return;
     switch (event) {
       case 'login_wallet_access_required':
         setWalletInteractionStep(1);
@@ -237,12 +248,16 @@ export function UnifiedAuthFlow({
   const handleZKRegistration = async () => {
     if (!selectedRole || selectedRole === 'admin') return;
     
+    const runId = beginNewRun();
+
     try {
+      if (!isCurrentRun(runId)) return;
       setIsLoading(true);
       setError(null);
       // Defensive optimization: if credentials already exist for this wallet,
       // skip registration and proceed directly to private login.
       if (unifiedAuth.zkAuth.hasCredentials) {
+        if (!isCurrentRun(runId)) return;
         logger.info('Skipping ZK registration because credentials already exist for this wallet');
         setWalletInteractionMode('login');
         setWalletInteractionStep(1);
@@ -250,7 +265,8 @@ export function UnifiedAuthFlow({
         setIsOnchainPending(false);
         setContractInteractionStatus('idle');
         setCurrentStep('zk-generate-proof');
-        await unifiedAuth.zkAuth.login(handleZKLoginProgress);
+        await unifiedAuth.zkAuth.login((event) => handleZKLoginProgress(event, runId));
+        if (!isCurrentRun(runId)) return;
         setCurrentStep('complete');
         setTimeout(() => {
           onComplete?.();
@@ -270,7 +286,8 @@ export function UnifiedAuthFlow({
         throw new Error('Only students and employers can use ZK authentication');
       }
       
-      await unifiedAuth.zkAuth.register(selectedRole, handleZKSetupProgress);
+      await unifiedAuth.zkAuth.register(selectedRole, (event) => handleZKSetupProgress(event, runId));
+      if (!isCurrentRun(runId)) return;
       
       // Auto-login after successful registration
       // This matches the behavior of the /zkauth page
@@ -278,7 +295,8 @@ export function UnifiedAuthFlow({
       setCurrentStep('zk-generate-proof');
       
       try {
-        await unifiedAuth.zkAuth.login(handleZKSetupProgress);
+        await unifiedAuth.zkAuth.login((event) => handleZKSetupProgress(event, runId));
+        if (!isCurrentRun(runId)) return;
         logger.info('ZK auto-login successful');
         
         setCurrentStep('complete');
@@ -286,6 +304,7 @@ export function UnifiedAuthFlow({
           onComplete?.();
         }, 1500);
       } catch (loginErr) {
+        if (!isCurrentRun(runId)) return;
         const err = loginErr as Error;
         // Registration succeeded, but authentication did not.
         // Do NOT mark flow complete because route guards require authenticated ZK session.
@@ -302,6 +321,7 @@ export function UnifiedAuthFlow({
         }
       }
     } catch (err) {
+      if (!isCurrentRun(runId)) return;
       logError(err as Error, 'ZK Registration');
       setError(getFriendlyError(err as Error));
       setCurrentStep('zk-generate-credentials');
@@ -309,19 +329,24 @@ export function UnifiedAuthFlow({
       setWalletInteractionHint(null);
       setIsOnchainPending(false);
     } finally {
+      if (!isCurrentRun(runId)) return;
       setIsLoading(false);
     }
   };
 
   // ZK Login: Load credentials and authenticate
   const handleZKLogin = async () => {
+    const runId = beginNewRun();
+
     if (!unifiedAuth.zkAuth.hasCredentials) {
+      if (!isCurrentRun(runId)) return;
       setError('No private credentials found for this wallet. Please register once to enable private login.');
       setCurrentStep('zk-connect-wallet');
       return;
     }
 
     try {
+      if (!isCurrentRun(runId)) return;
       setIsLoading(true);
       setError(null);
       setWalletInteractionMode('login');
@@ -331,13 +356,15 @@ export function UnifiedAuthFlow({
       setContractInteractionStatus('idle');
       setCurrentStep('zk-generate-proof');
       
-      await unifiedAuth.zkAuth.login(handleZKLoginProgress);
+      await unifiedAuth.zkAuth.login((event) => handleZKLoginProgress(event, runId));
+      if (!isCurrentRun(runId)) return;
       
       setCurrentStep('complete');
       setTimeout(() => {
         onComplete?.();
       }, 1500);
     } catch (err) {
+      if (!isCurrentRun(runId)) return;
       const loginError = err as Error;
       const message = loginError.message || '';
 
@@ -361,6 +388,7 @@ export function UnifiedAuthFlow({
       setWalletInteractionMode(null);
       setContractInteractionStatus('idle');
     } finally {
+      if (!isCurrentRun(runId)) return;
       setIsLoading(false);
     }
   };

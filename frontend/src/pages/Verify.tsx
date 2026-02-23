@@ -41,6 +41,7 @@ export function Verify() {
   const [showQRScanner, setShowQRScanner] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [showLinkInput, setShowLinkInput] = useState(false);
+  const [isSecurityUpdateExpanded, setIsSecurityUpdateExpanded] = useState(false);
   const [linkInput, setLinkInput] = useState('');
   const [verificationTokenSigner, setVerificationTokenSigner] = useState<string | null>(null);
   const [verificationTokenAuthError, setVerificationTokenAuthError] = useState<string | null>(null);
@@ -682,29 +683,43 @@ export function Verify() {
             Upload a PDF certificate to verify its authenticity. The document is processed 
             locally - only the hash is checked against the blockchain.
           </p>
-          <div className="max-w-2xl mx-auto mb-6 rounded-lg border border-blue-500/30 bg-blue-500/10 p-4 text-left">
+          <button
+            type="button"
+            onClick={() => setIsSecurityUpdateExpanded((prev) => !prev)}
+            aria-expanded={isSecurityUpdateExpanded}
+            className="max-w-2xl w-full mx-auto mb-6 rounded-lg border border-blue-500/30 bg-blue-500/10 p-4 text-left transition-colors hover:bg-blue-500/15"
+          >
             <div className="flex items-start gap-3">
               <svg className="w-5 h-5 text-blue-300 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              <div>
-                <p className="text-sm text-blue-200">
-                  <strong className="text-white">Security update:</strong> public verification links now require a secure token
-                  (<span className="font-mono">v=...</span>) to protect against certificate enumeration.
-                </p>
-                {!canUseInternalHashMode && (
-                  <p className="text-xs text-surface-300 mt-1">
-                    If you received an older link format, request a new secure verification link from the certificate holder or issuer.
+              <div className="flex-1">
+                {!isSecurityUpdateExpanded ? (
+                  <p className="text-sm text-blue-200">
+                    <strong className="text-white">Security update:</strong> public verification links now require a secure token
                   </p>
-                )}
-                {canUseInternalHashMode && (
-                  <p className="text-xs text-surface-300 mt-1">
-                    Internal authenticated users can still use hash-based links for operational workflows.
-                  </p>
+                ) : (
+                  <>
+                    <p className="text-sm text-blue-200">
+                      <strong className="text-white">Security update:</strong> public verification links now require a secure token
+                      (<span className="font-mono">verify?hash=...</span>) to protect against certificate enumeration.
+                    </p>
+                    <p className="text-xs text-surface-300 mt-1">
+                      Internal authenticated users can still use hash-based links for operational workflows.
+                    </p>
+                  </>
                 )}
               </div>
+              <svg
+                className={`w-4 h-4 text-blue-300 mt-1 transition-transform ${isSecurityUpdateExpanded ? 'rotate-180' : ''}`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
             </div>
-          </div>
+          </button>
           <div className="flex items-center justify-center gap-3">
             <button
               onClick={() => setShowQRScanner(true)}

@@ -30,13 +30,12 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { logger } from '@/lib/logger';
 import type { UserRole } from '@/types/auth';
-import { useAuthStore } from '@/store/authStore';
 import { useUnifiedAuth } from '@/hooks/useUnifiedAuth';
 import { UnifiedAuthFlow } from '@/components/UnifiedAuthFlow';
 import { DevModeBanner } from '@/components/DevModeBanner';
 import { ZKAuthUpgrade } from '@/components/zkauth/ZKAuthUpgrade';
-
-type SwitchTxPhase = 'idle' | 'awaiting_wallet_confirmation' | 'pending_onchain' | 'confirmed' | 'failed';
+import { getSwitchTxProgressFromEvent, type SwitchTxPhase } from '@/lib/authSwitchStatus';
+import { SwitchTxStatusPanel, getSwitchToStandardButtonLabel, isSwitchInFlight } from '@/components/SwitchTxStatusPanel';
 
 // Role options for inline display
 interface RoleOption {
@@ -105,12 +104,11 @@ const roleOptions: RoleOption[] = [
 
 export default function ZKAuthPage() {
   const navigate = useNavigate();
-  const { role: authenticatedRole } = useAuthStore();
   const unifiedAuth = useUnifiedAuth();
   
   const [showAuthFlow, setShowAuthFlow] = useState(false);
   const [preSelectedRole, setPreSelectedRole] = useState<UserRole | null>(null);
-  const effectiveRole = unifiedAuth.role || authenticatedRole || preSelectedRole;
+  const effectiveRole = unifiedAuth.isAuthenticated ? unifiedAuth.role : preSelectedRole;
   const [showEducationalContent, setShowEducationalContent] = useState(true);
   const [switchTxPhase, setSwitchTxPhase] = useState<SwitchTxPhase>('idle');
   const [switchError, setSwitchError] = useState<string | null>(null);
@@ -133,15 +131,10 @@ export default function ZKAuthPage() {
       setShowSwitchResultNotice(false);
       setSwitchTxPhase('awaiting_wallet_confirmation');
       await unifiedAuth.switchAuthMethod('web3', (event) => {
-        if (event === 'logout_no_active_session') {
-          setSwitchSkippedOnchainTx(true);
-          setSwitchTxPhase('confirmed');
-        } else if (event === 'logout_transaction_required') {
-          setSwitchTxPhase('awaiting_wallet_confirmation');
-        } else if (event === 'logout_transaction_submitted') {
-          setSwitchTxPhase('pending_onchain');
-        } else if (event === 'logout_transaction_confirmed') {
-          setSwitchTxPhase('confirmed');
+        const progress = getSwitchTxProgressFromEvent(event);
+        if (progress) {
+          setSwitchSkippedOnchainTx(progress.skippedOnchainTx);
+          setSwitchTxPhase(progress.phase);
         }
       });
       // Keep the switch result visible briefly before showing other Web3 UI cards.
@@ -169,9 +162,9 @@ export default function ZKAuthPage() {
 
   // Handle successful authentication
   const handleAuthSuccess = () => {
-    logger.info('ZK authentication successful', { role: effectiveRole });
+    logger.info('ZK authentication successful', { role: unifiedAuth.role });
     // Navigate to appropriate dashboard based on role
-    const role = effectiveRole;
+    const role = unifiedAuth.role;
     if (role === 'student') {
       navigate('/student/certificates');
     } else if (role === 'university') {
@@ -191,7 +184,7 @@ export default function ZKAuthPage() {
   };
 
   // If already authenticated, show welcome screen
-  if (unifiedAuth.isAuthenticated && effectiveRole) {
+  if (unifiedAuth.isAuthenticated && unifiedAuth.role) {
     return (
       <div className="relative overflow-hidden min-h-screen">
         {/* Background gradient */}
@@ -348,50 +341,13 @@ export default function ZKAuthPage() {
                       </div>
                     </div>
 
-                    {(switchTxPhase === 'awaiting_wallet_confirmation'
-                      || switchTxPhase === 'pending_onchain'
-                      || switchTxPhase === 'confirmed'
-                      || switchTxPhase === 'failed') && (
-                      <div
-                        className={`mb-4 rounded-lg border p-3 ${
-                          switchTxPhase === 'awaiting_wallet_confirmation'
-                            ? 'border-yellow-500/30 bg-yellow-500/10'
-                            : switchTxPhase === 'pending_onchain'
-                            ? 'border-blue-500/30 bg-blue-500/10'
-                            : switchTxPhase === 'confirmed'
-                            ? 'border-green-500/30 bg-green-500/10'
-                            : 'border-red-500/30 bg-red-500/10'
-                        }`}
-                      >
-                        <p
-                          className={`text-sm font-medium ${
-                            switchTxPhase === 'awaiting_wallet_confirmation'
-                              ? 'text-yellow-300'
-                              : switchTxPhase === 'pending_onchain'
-                              ? 'text-blue-300'
-                              : switchTxPhase === 'confirmed'
-                              ? 'text-green-300'
-                              : 'text-red-300'
-                          }`}
-                        >
-                          {switchTxPhase === 'awaiting_wallet_confirmation' && 'Waiting to submit transaction'}
-                          {switchTxPhase === 'pending_onchain' && 'Transaction pending'}
-                          {switchTxPhase === 'confirmed' && 'Transaction confirmed'}
-                          {switchTxPhase === 'failed' && 'Transaction failed'}
-                        </p>
-                        <p className="text-xs text-surface-300 mt-1">
-                          {switchTxPhase === 'awaiting_wallet_confirmation' &&
-                            'Approve the MetaMask transaction to end your private session and switch to standard login.'}
-                          {switchTxPhase === 'pending_onchain' &&
-                            'Your transaction was submitted. Waiting for blockchain confirmation.'}
-                          {switchTxPhase === 'confirmed' && switchSkippedOnchainTx &&
-                            'No active private session found on-chain. Switched locally to standard login.'}
-                          {switchTxPhase === 'confirmed' && !switchSkippedOnchainTx &&
-                            'Session closure confirmed. Switching to standard login...'}
-                          {switchTxPhase === 'failed' && (switchError || 'Unable to switch authentication method.')}
-                        </p>
-                      </div>
-                    )}
+                    <div className="mb-4">
+                      <SwitchTxStatusPanel
+                        phase={switchTxPhase}
+                        skippedOnchainTx={switchSkippedOnchainTx}
+                        error={switchError}
+                      />
+                    </div>
                     <div className="mb-3 rounded-lg border border-surface-700 bg-surface-900/40 p-3">
                       <h6 className="text-xs font-semibold text-white mb-1">When to switch to Standard login</h6>
                       <p className="text-xs text-surface-400 leading-relaxed">
@@ -401,14 +357,10 @@ export default function ZKAuthPage() {
                     </div>
                     <button
                       onClick={handleSwitchToStandard}
-                      disabled={switchTxPhase === 'awaiting_wallet_confirmation' || switchTxPhase === 'pending_onchain'}
+                      disabled={isSwitchInFlight(switchTxPhase)}
                       className="btn-secondary text-sm disabled:opacity-50"
                     >
-                      {switchTxPhase === 'awaiting_wallet_confirmation'
-                        ? 'Waiting for wallet confirmation...'
-                        : switchTxPhase === 'pending_onchain'
-                        ? 'Transaction pending...'
-                        : 'Switch to Standard'}
+                      {getSwitchToStandardButtonLabel(switchTxPhase)}
                     </button>
                   </div>
                 </div>

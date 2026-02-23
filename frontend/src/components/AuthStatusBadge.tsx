@@ -69,11 +69,12 @@ export const AuthStatusBadge = () => {
     role,
     isAuthenticated: unifiedAuth.isAuthenticated,
     authMethod: unifiedAuth.authMethod,
+    authContextResolving: unifiedAuth.authContextResolving,
     shouldShow: unifiedAuth.isAuthenticated && role !== null,
   });
 
-  // Don't show if not authenticated
-  if (!unifiedAuth.isAuthenticated || !role) {
+  // Don't show if auth context is resolving or user is not authenticated.
+  if (unifiedAuth.authContextResolving || !unifiedAuth.isAuthenticated || !role) {
     return null;
   }
 

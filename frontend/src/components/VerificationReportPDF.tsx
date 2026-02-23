@@ -67,6 +67,15 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: '#1f2937',
   },
+  urlBlock: {
+    marginBottom: 8,
+  },
+  urlLine: {
+    fontSize: 9,
+    color: '#1f2937',
+    fontFamily: 'Courier',
+    marginTop: 2,
+  },
   statusBadge: {
     marginTop: 10,
     marginBottom: 20,
@@ -131,6 +140,12 @@ export function VerificationReportPDF({
 }: VerificationReportPDFProps) {
   const now = new Date();
   const chainName = getChainName(chainId);
+  const normalizedVerificationUrl = verificationUrl.replace('/veri-fy?', '/verify?');
+  const [verificationBaseUrl, verificationQuery = ''] = normalizedVerificationUrl.split('?');
+  const verificationQueryWithPrefix = verificationQuery ? `?${verificationQuery}` : '';
+  const verificationQueryChunks = verificationQueryWithPrefix
+    ? verificationQueryWithPrefix.match(/.{1,56}/g) || [verificationQueryWithPrefix]
+    : [];
   
   // Only show student section if at least one piece of student info is provided
   const hasStudentInfo = Boolean(studentWallet) || Boolean(studentInitials);
@@ -252,9 +267,14 @@ export function VerificationReportPDF({
             <Text style={styles.value}>CertificateRegistry</Text>
           </View>
 
-          <View style={styles.row}>
+          <View style={styles.urlBlock}>
             <Text style={styles.label}>Verify Online:</Text>
-            <Text style={styles.value}>{verificationUrl}</Text>
+            <Text style={styles.urlLine}>{verificationBaseUrl}</Text>
+            {verificationQueryChunks.map((chunk, index) => (
+              <Text key={`verification-url-chunk-${index}`} style={styles.urlLine}>
+                {chunk}
+              </Text>
+            ))}
           </View>
         </View>
 
