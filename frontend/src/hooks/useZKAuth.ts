@@ -182,9 +182,7 @@ export function useZKAuth() {
         address
       );
 
-      storeCredentials(encrypted, address);
-
-      logger.info('Credentials encrypted and stored');
+      logger.info('Credentials encrypted and ready for local persistence');
 
       // Step 5: Register commitment on-chain
       // Map role to enum: None=0, Student=1, Employer=2
@@ -203,6 +201,10 @@ export function useZKAuth() {
       emitProgress('register_transaction_submitted');
       await provider.waitForTransaction(registrationTxHash);
       emitProgress('register_transaction_confirmed');
+
+      // Persist credentials only after on-chain registration succeeds.
+      storeCredentials(encrypted, address);
+      logger.info('Credentials encrypted and stored');
 
       updateStateIfCurrent(s => ({ ...s, commitment, isLoading: false }));
       
@@ -300,6 +302,22 @@ export function useZKAuth() {
       const credentials = await decryptCredentials(encrypted, signature, accounts[0]);
       logger.debug('Credentials decrypted successfully');
 
+      // Validate that commitment exists on-chain before attempting startSession.
+      // This protects against stale local credentials after local chain resets/redeploys.
+      const registryReader = new ethers.Contract(
+        ZK_AUTH_REGISTRY_ADDRESS,
+        ZKAuthRegistryABI.abi,
+        provider
+      );
+      const isRegistered = await registryReader.isRegistered(credentials.commitment);
+      if (!isRegistered) {
+        clearStoredCredentials(accounts[0]);
+        setZKCommitment(null);
+        setZKAuthenticated(false);
+        setZKSessionId(null);
+        throw new Error('COMMITMENT_NOT_REGISTERED');
+      }
+
       // Restore role from credentials to auth store
       setZKRole(credentials.role);
       logger.debug(`Role restored from credentials: ${credentials.role}`);
@@ -342,6 +360,18 @@ export function useZKAuth() {
       logger.info('Session creation transaction submitted, waiting for confirmation...');
     } catch (error) {
       const err = error as Error;
+
+      if (err.message.includes('CommitmentNotFound')) {
+        const activeAddress = address ?? null;
+        if (activeAddress) {
+          clearStoredCredentials(activeAddress);
+        }
+        setZKCommitment(null);
+        setZKAuthenticated(false);
+        setZKSessionId(null);
+        updateStateIfCurrent(s => ({ ...s, isLoading: false }));
+        throw new Error('COMMITMENT_NOT_REGISTERED');
+      }
       
       // Outdated credentials are recoverable, but login did NOT succeed.
       // Propagate the error so UI flows don't falsely mark authentication complete.
@@ -350,12 +380,18 @@ export function useZKAuth() {
         updateStateIfCurrent(s => ({ ...s, isLoading: false }));
         throw err;
       }
+
+      if (err.message === 'COMMITMENT_NOT_REGISTERED') {
+        logger.info('ℹ️ Stored credentials commitment is not registered on-chain. Re-registration required.');
+        updateStateIfCurrent(s => ({ ...s, isLoading: false }));
+        throw err;
+      }
       
       logger.error('Login failed', error);
       updateStateIfCurrent(s => ({ ...s, isLoading: false, error: err }));
       throw error;
     }
-  }, [writeContractAsync, setZKRole, setZKAuthEnabled, setZKAuthenticated, setZKSessionId, setAuthMethod, beginFlowAttempt, isCurrentFlowAttempt]);
+  }, [address, writeContractAsync, setZKRole, setZKAuthEnabled, setZKAuthenticated, setZKSessionId, setZKCommitment, setAuthMethod, beginFlowAttempt, isCurrentFlowAttempt]);
 
   /**
    * Logout (end session)

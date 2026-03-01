@@ -10,6 +10,7 @@ import { useEmployerRegistration, useEmployerInfo, useIsVatAvailable } from '@/h
 import { useAuthStore } from '@/store/authStore';
 import { EMPLOYER_VALIDATION, type EmployerRegistrationForm } from '@/types/employer';
 import { debounce } from '@/lib/utils';
+import { ADMIN_CONTACT_EMAIL } from '@/lib/adminContact';
 
 export default function EmployerRegister() {
   const navigate = useNavigate();
@@ -29,6 +30,8 @@ export default function EmployerRegister() {
   
   // Check VAT availability (debounced)
   const { isAvailable: vatAvailable, isLoading: isCheckingVat } = useIsVatAvailable(vatCheckValue);
+  const vatCheckMatchesInput = vatCheckValue && vatCheckValue === formData.vatNumber;
+  const isVatAlreadyRegistered = vatCheckMatchesInput && !isCheckingVat && vatAvailable === false;
 
   // Debounced VAT check
   const debouncedVatCheck = useCallback(
@@ -72,7 +75,7 @@ export default function EmployerRegister() {
     } else if (!EMPLOYER_VALIDATION.vatNumber.pattern.test(formData.vatNumber)) {
       errors.vatNumber = 'VAT number can only contain letters, numbers, and hyphens';
     } else if (vatAvailable === false) {
-      errors.vatNumber = 'This VAT number is already registered';
+      errors.vatNumber = `This VAT number is already registered. VAT numbers are unique. Please contact the admin at ${ADMIN_CONTACT_EMAIL}.`;
     }
 
     setValidationErrors(errors);
@@ -195,7 +198,7 @@ export default function EmployerRegister() {
                   name="vatNumber"
                   value={formData.vatNumber}
                   onChange={handleInputChange}
-                  className={`input ${validationErrors.vatNumber ? 'border-red-500' : ''} ${
+                  className={`input ${validationErrors.vatNumber || isVatAlreadyRegistered ? 'border-red-500' : ''} ${
                     vatCheckValue && isCheckingVat ? 'pr-10' : ''
                   } ${vatCheckValue && !isCheckingVat && vatAvailable === true ? 'border-green-500' : ''}`}
                   placeholder="e.g., GB123456789"
@@ -230,25 +233,22 @@ export default function EmployerRegister() {
                   {validationErrors.vatNumber}
                 </p>
               )}
-              {!validationErrors.vatNumber && vatCheckValue && vatCheckValue === formData.vatNumber && !isCheckingVat && (
-                <p className={`mt-2 text-sm flex items-center gap-1 ${
-                  vatAvailable === true ? 'text-green-400' : 'text-surface-500'
-                }`}>
-                  {vatAvailable === true ? (
-                    <>
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      VAT number is available
-                    </>
-                  ) : (
-                    'Your company\'s VAT identification number'
-                  )}
+              {!validationErrors.vatNumber && vatCheckMatchesInput && !isCheckingVat && vatAvailable === true && (
+                <p className="mt-2 text-sm text-green-400 flex items-center gap-1">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  VAT number is available
+                </p>
+              )}
+              {!validationErrors.vatNumber && isVatAlreadyRegistered && (
+                <p className="mt-2 text-sm text-red-400">
+                  This VAT number is already registered. VAT numbers are unique. Please contact admin at {ADMIN_CONTACT_EMAIL}.
                 </p>
               )}
               {!vatCheckValue && (
                 <p className="mt-2 text-sm text-surface-500">
-                  Your company's VAT identification number
+                  Your company's VAT identification number. VAT numbers are unique and can only be used once.
                 </p>
               )}
             </div>

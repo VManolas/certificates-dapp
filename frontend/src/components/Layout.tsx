@@ -30,7 +30,6 @@ export function Layout() {
     role, 
     preSelectedRole,
     setPreSelectedRole,
-    isAspirationalRole,
     setRole,
     hasSelectedRole, 
     detectedRoles,
@@ -64,6 +63,7 @@ export function Layout() {
   const canRegisterAsEmployer = userRoles.canRegisterAsEmployer;
   const effectiveRole = unifiedAuth.role ?? role;
   const hasStableRoleDetection = isConnected && !isDetectingRoles && !unifiedAuth.authContextResolving;
+  const suppressRoleSelectorModal = location.pathname === '/employer/register';
 
   // Set refetch function in auth store for other components
   useEffect(() => {
@@ -129,6 +129,34 @@ export function Layout() {
       console.log('⏸️ Skipping role detection while auth context resolves');
       return;
     }
+
+    // Critical loop guard:
+    // Suspended universities are blocked by useUnifiedAuth/SuspensionGuard.
+    // Do not auto-select or re-assert the university role here, otherwise
+    // this effect can fight with the suspended-state cleanup and loop.
+    const isSuspendedUniversity =
+      isConnected &&
+      userRoles.isUniversity &&
+      !!userRoles.universityData &&
+      userRoles.universityData.isVerified &&
+      !userRoles.universityData.isActive;
+
+    if (isSuspendedUniversity) {
+      if (showRoleSelector) {
+        setShowRoleSelector(false);
+      }
+      return;
+    }
+
+    // When a private ZK session is already authenticated, keep the global
+    // role-explorer modal closed. Web3 role detection may still report
+    // "no roles" for fresh wallets, but that should not interrupt active ZK auth.
+    if (isConnected && unifiedAuth.isAuthenticated && unifiedAuth.authMethod === 'zk') {
+      if (showRoleSelector) {
+        setShowRoleSelector(false);
+      }
+      return;
+    }
     
     if (!isDetectingRoles && isConnected) {
       setDetectedRoles(availableRoles);
@@ -187,7 +215,9 @@ export function Layout() {
           // Show modal if multiple roles
           logger.info('Multiple roles available, showing selector');
           setRole(null); // Clear invalid role
-          setShowRoleSelector(true);
+          if (!suppressRoleSelectorModal) {
+            setShowRoleSelector(true);
+          }
         }
       }
       // If user hasn't selected a role yet (fresh connection)
@@ -198,15 +228,19 @@ export function Layout() {
           setRole(availableRoles[0]);
         } else if (availableRoles.length > 1) {
           // Show modal if multiple roles
-          setShowRoleSelector(true);
+          if (!suppressRoleSelectorModal) {
+            setShowRoleSelector(true);
+          }
         } else if (availableRoles.length === 0 && canRegisterAsEmployer) {
-          // New user with no roles yet - show modal to allow aspirational role selection
-          logger.info('New user with no roles, showing selector for aspirational role selection');
-          setShowRoleSelector(true);
+          // New user with no on-chain roles: do not auto-open global role selector.
+          // Home starts the explicit employer-first auth flow when user clicks login.
+          if (showRoleSelector) {
+            setShowRoleSelector(false);
+          }
         }
       }
     }
-  }, [availableRoles, isDetectingRoles, isConnected, unifiedAuth.authContextResolving, hasSelectedRole, role, preSelectedRole, canRegisterAsEmployer, userRoles.primaryRole, showRoleConflict, setDetectedRoles, setIsRoleDetectionComplete, setRole, setShowRoleSelector, setPreSelectedRole]);
+  }, [availableRoles, isDetectingRoles, isConnected, unifiedAuth.authContextResolving, unifiedAuth.isAuthenticated, unifiedAuth.authMethod, hasSelectedRole, role, preSelectedRole, canRegisterAsEmployer, userRoles.primaryRole, showRoleConflict, showRoleSelector, suppressRoleSelectorModal, setDetectedRoles, setIsRoleDetectionComplete, setRole, setShowRoleSelector, setPreSelectedRole]);
 
   // Handle role change from dropdown
   const handleRoleChange = (newRole: UserRole) => {
@@ -341,7 +375,7 @@ export function Layout() {
             )}
             
             {/* University Dashboard Link - Show after Home */}
-            {hasStableRoleDetection && effectiveRole === 'university' && !isAspirationalRole && (
+            {hasStableRoleDetection && effectiveRole === 'university' && (
               <Link
                 to="/university/dashboard"
                 className={`text-sm font-medium transition-colors ${
@@ -351,18 +385,6 @@ export function Layout() {
                 }`}
               >
                 University Dashboard
-              </Link>
-            )}
-            {hasStableRoleDetection && effectiveRole === 'university' && isAspirationalRole && (
-              <Link
-                to="/university/register"
-                className={`text-sm font-medium transition-colors ${
-                  location.pathname === '/university/register'
-                    ? 'text-white'
-                    : 'text-surface-400 hover:text-white'
-                }`}
-              >
-                Register Institution
               </Link>
             )}
             
@@ -469,7 +491,7 @@ export function Layout() {
       {/* Role Selector Modal - Lazy loaded */}
       <Suspense fallback={null}>
         <RoleSelectorModal
-          isOpen={showRoleSelector}
+          isOpen={showRoleSelector && !suppressRoleSelectorModal}
           onClose={() => setShowRoleSelector(false)}
           availableRoles={detectedRoles}
           universityData={universityData}

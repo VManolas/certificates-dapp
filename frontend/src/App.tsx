@@ -12,7 +12,6 @@ const Home = lazy(() => import('./pages/Home'));
 const Verify = lazy(() => import('./pages/Verify'));
 const AccessDenied = lazy(() => import('./pages/AccessDenied'));
 const UniversityDashboard = lazy(() => import('./pages/university/Dashboard'));
-const UniversityRegister = lazy(() => import('./pages/university/Register'));
 const UniversityCertificates = lazy(() => import('./pages/university/Certificates'));
 const BulkUpload = lazy(() => import('./pages/university/BulkUpload'));
 const IssueCertificate = lazy(() => import('./pages/university/IssueCertificate'));
@@ -63,9 +62,6 @@ function App() {
             <Route path="verify" element={<Verify />} />
             <Route path="zkauth" element={<ZKAuthPage />} />
             <Route path="access-denied" element={<AccessDenied />} />
-          
-          {/* University registration - PUBLIC (no protection) */}
-          <Route path="university/register" element={<UniversityRegister />} />
           
           {/* University routes - ALL other routes under /university/* are protected */}
           {/* Any URL like /university/login, /university/xyz will be blocked for non-university roles */}

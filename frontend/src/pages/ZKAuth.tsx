@@ -114,6 +114,12 @@ export default function ZKAuthPage() {
   const [switchError, setSwitchError] = useState<string | null>(null);
   const [switchSkippedOnchainTx, setSwitchSkippedOnchainTx] = useState(false);
   const [showSwitchResultNotice, setShowSwitchResultNotice] = useState(false);
+  const showEmployerRegistrationCta =
+    unifiedAuth.authMethod === 'web3' &&
+    !unifiedAuth.isAuthenticated &&
+    !showAuthFlow &&
+    !preSelectedRole &&
+    unifiedAuth.web3Auth.canRegisterAsEmployer;
 
   // Prevent stale switch status from leaking between auth-mode transitions.
   useEffect(() => {
@@ -410,6 +416,27 @@ export default function ZKAuthPage() {
           </div>
 
           {/* Main Content Area */}
+          {showEmployerRegistrationCta && (
+            <div className="mb-6 card bg-blue-500/10 border border-blue-500/30">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div>
+                  <h3 className="text-lg font-semibold text-white mb-1">
+                    Public login is active, but this wallet has no on-chain role yet
+                  </h3>
+                  <p className="text-sm text-surface-300">
+                    To use standard Web3 employer access, complete one-time employer registration.
+                  </p>
+                </div>
+                <button
+                  onClick={() => navigate('/employer/register')}
+                  className="btn-primary whitespace-nowrap"
+                >
+                  Register as Employer
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="flex flex-col lg:flex-row gap-6">
             {/* Left/Main Column - Auth Flow or Role Selection */}
             <div className="flex-1 lg:max-w-3xl animate-fade-in">

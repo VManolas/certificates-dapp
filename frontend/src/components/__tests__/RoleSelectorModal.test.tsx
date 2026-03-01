@@ -96,7 +96,7 @@ describe('RoleSelectorModal', () => {
     );
 
     expect(screen.getByText('Restricted to platform administrators with ADMIN_ROLE')).toBeInTheDocument();
-    expect(screen.getByText('Register your institution first to access this role')).toBeInTheDocument();
+    expect(screen.getByText('Only admin-registered institutions can access this role')).toBeInTheDocument();
   });
 
   it('shows lock icon for disabled roles', () => {
@@ -240,6 +240,59 @@ describe('RoleSelectorModal', () => {
     );
 
     expect(screen.getByText('You can switch roles anytime from the header menu.')).toBeInTheDocument();
+  });
+
+  it('does not show university registration aspirational action', () => {
+    renderWithRouter(
+      <RoleSelectorModal
+        isOpen={true}
+        onClose={mockOnClose}
+        availableRoles={['student', 'employer']}
+        canRegisterAsEmployer={true}
+      />
+    );
+
+    expect(screen.queryByText('Register Institution →')).not.toBeInTheDocument();
+  });
+
+  it('does not show admin aspirational action', () => {
+    renderWithRouter(
+      <RoleSelectorModal
+        isOpen={true}
+        onClose={mockOnClose}
+        availableRoles={['student', 'employer']}
+        canRegisterAsEmployer={true}
+      />
+    );
+
+    expect(screen.queryByText('Proceed as Admin →')).not.toBeInTheDocument();
+  });
+
+  it('does not show student aspirational action', () => {
+    renderWithRouter(
+      <RoleSelectorModal
+        isOpen={true}
+        onClose={mockOnClose}
+        availableRoles={['employer']}
+        canRegisterAsEmployer={true}
+      />
+    );
+
+    expect(screen.queryByText('Explore as Student →')).not.toBeInTheDocument();
+  });
+
+  it('does not show role exploration toggle', () => {
+    renderWithRouter(
+      <RoleSelectorModal
+        isOpen={true}
+        onClose={mockOnClose}
+        availableRoles={['employer']}
+        canRegisterAsEmployer={true}
+      />
+    );
+
+    expect(screen.queryByText('I want to explore a different role')).not.toBeInTheDocument();
+    expect(screen.queryByText('Show only verified roles')).not.toBeInTheDocument();
   });
 
   it('applies correct styling to available roles', () => {

@@ -2,7 +2,7 @@
 import { renderHook, waitFor } from '@testing-library/react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { useUnifiedAuth } from '../useUnifiedAuth';
-import { useAccount } from 'wagmi';
+import { useAccount, useDisconnect } from 'wagmi';
 import { useAuthStore } from '@/store/authStore';
 import { useZKAuth } from '../useZKAuth';
 import { useUserRoles } from '../useUserRoles';
@@ -13,6 +13,7 @@ import { useNavigate } from 'react-router-dom';
 // Mock all dependencies
 vi.mock('wagmi', () => ({
   useAccount: vi.fn(),
+  useDisconnect: vi.fn(),
 }));
 
 vi.mock('@/store/authStore', () => ({
@@ -49,6 +50,7 @@ vi.mock('@/lib/logger', () => ({
 }));
 
 const mockUseAccount = useAccount as ReturnType<typeof vi.fn>;
+const mockUseDisconnect = useDisconnect as ReturnType<typeof vi.fn>;
 const mockUseAuthStore = useAuthStore as ReturnType<typeof vi.fn>;
 const mockUseZKAuth = useZKAuth as ReturnType<typeof vi.fn>;
 const mockUseUserRoles = useUserRoles as ReturnType<typeof vi.fn>;
@@ -63,6 +65,7 @@ describe('useUnifiedAuth', () => {
   let mockInstitutionStatus: any;
   let mockQueryClient: any;
   let mockNavigate: ReturnType<typeof vi.fn>;
+  let mockDisconnect: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -76,12 +79,14 @@ describe('useUnifiedAuth', () => {
       showAuthMethodSelector: false,
       preferredAuthMethod: null,
       isLogoutCooldown: false,
+      requiresManualAuthSelection: false,
       setAuthMethod: vi.fn(),
       setShowAuthMethodSelector: vi.fn(),
       setPreferredAuthMethod: vi.fn(),
       setRole: vi.fn(),
       setPreSelectedRole: vi.fn(),
       setIsLogoutCooldown: vi.fn(),
+      setRequiresManualAuthSelection: vi.fn(),
       bumpAuthEpoch: vi.fn(),
       zkAuth: {
         isZKAuthenticated: false,
@@ -128,6 +133,7 @@ describe('useUnifiedAuth', () => {
       removeQueries: vi.fn(),
     };
     mockNavigate = vi.fn();
+    mockDisconnect = vi.fn();
 
     mockUseAuthStore.mockReturnValue(mockAuthStore);
     mockUseZKAuth.mockReturnValue(mockZKAuth);
@@ -135,6 +141,7 @@ describe('useUnifiedAuth', () => {
     mockUseInstitutionStatus.mockReturnValue(mockInstitutionStatus);
     mockUseQueryClient.mockReturnValue(mockQueryClient);
     mockUseNavigate.mockReturnValue(mockNavigate);
+    mockUseDisconnect.mockReturnValue({ disconnect: mockDisconnect });
   });
 
   afterEach(() => {
@@ -387,6 +394,7 @@ describe('useUnifiedAuth', () => {
       await result.current.switchAuthMethod('web3');
 
       expect(mockZKAuth.logout).toHaveBeenCalled();
+      expect(mockZKAuth.clearCredentials).not.toHaveBeenCalled();
       expect(mockAuthStore.setRole).toHaveBeenCalledWith(null);
       expect(mockAuthStore.setAuthMethod).toHaveBeenCalledWith('web3');
     });
@@ -415,9 +423,16 @@ describe('useUnifiedAuth', () => {
 
       await result.current.logout();
 
+      expect(mockAuthStore.setZKAuthEnabled).toHaveBeenCalledWith(false);
+      expect(mockAuthStore.setZKAuthenticated).toHaveBeenCalledWith(false);
+      expect(mockAuthStore.setZKCommitment).toHaveBeenCalledWith(null);
+      expect(mockAuthStore.setZKSessionId).toHaveBeenCalledWith(null);
+      expect(mockAuthStore.setZKRole).toHaveBeenCalledWith(null);
       expect(mockAuthStore.setAuthMethod).toHaveBeenCalledWith(null);
       expect(mockAuthStore.setRole).toHaveBeenCalledWith(null);
       expect(mockAuthStore.setPreSelectedRole).toHaveBeenCalledWith(null);
+      expect(mockAuthStore.setRequiresManualAuthSelection).toHaveBeenCalledWith(true);
+      expect(mockDisconnect).toHaveBeenCalledTimes(1);
     });
 
     it('should logout from ZK auth', async () => {
@@ -433,6 +448,7 @@ describe('useUnifiedAuth', () => {
       expect(mockZKAuth.logout).toHaveBeenCalled();
       expect(mockAuthStore.setAuthMethod).toHaveBeenCalledWith(null);
       expect(mockAuthStore.setRole).toHaveBeenCalledWith(null);
+      expect(mockDisconnect).toHaveBeenCalledTimes(1);
     });
 
     it('should preserve preferred auth method after logout', async () => {
@@ -463,8 +479,8 @@ describe('useUnifiedAuth', () => {
       const { result } = renderHook(() => useUnifiedAuth());
 
       await waitFor(() => {
-        expect(mockAuthStore.setAuthMethod).toHaveBeenCalledWith(null);
-        expect(mockAuthStore.setRole).toHaveBeenCalledWith(null);
+        expect(result.current.allowedAuthMethods).toEqual(['web3']);
+        expect(mockAuthStore.setAuthMethod).not.toHaveBeenCalledWith('web3');
       });
     });
 
@@ -504,6 +520,38 @@ describe('useUnifiedAuth', () => {
   });
 
   describe('Auto-Selection Logic', () => {
+    it('should not auto-select auth method when manual selection is required', async () => {
+      mockUseAccount.mockReturnValue({ address: '0x123', isConnected: true });
+      mockAuthStore.requiresManualAuthSelection = true;
+      mockUseAuthStore.mockReturnValue(mockAuthStore);
+      mockUserRoles.primaryRole = 'employer';
+      mockUserRoles.isEmployer = true;
+      mockUseUserRoles.mockReturnValue(mockUserRoles);
+
+      renderHook(() => useUnifiedAuth());
+
+      await waitFor(() => {
+        expect(mockAuthStore.setAuthMethod).not.toHaveBeenCalledWith('web3');
+        expect(mockAuthStore.setRole).not.toHaveBeenCalledWith('employer');
+      });
+    });
+
+    it('should not auto-select auth method during logout cooldown', async () => {
+      mockUseAccount.mockReturnValue({ address: '0x123', isConnected: true });
+      mockAuthStore.isLogoutCooldown = true;
+      mockUseAuthStore.mockReturnValue(mockAuthStore);
+      mockUserRoles.primaryRole = 'employer';
+      mockUserRoles.isEmployer = true;
+      mockUseUserRoles.mockReturnValue(mockUserRoles);
+
+      renderHook(() => useUnifiedAuth());
+
+      await waitFor(() => {
+        expect(mockAuthStore.setAuthMethod).not.toHaveBeenCalledWith('web3');
+        expect(mockAuthStore.setRole).not.toHaveBeenCalledWith('employer');
+      });
+    });
+
     it('should auto-select Web3 for admin on connection', async () => {
       mockUseAccount.mockReturnValue({ address: '0x123', isConnected: true });
       mockUserRoles.primaryRole = 'admin';

@@ -9,6 +9,7 @@ import { logger } from '@/lib/logger';
 import { sanitizeAddress, validatePdfFile, globalRateLimiter } from '@/lib/sanitization';
 import { parseError, withRetry } from '@/lib/errorHandling';
 import { decodeContractError } from '@/lib/errorDecoding';
+import { withAdminContact } from '@/lib/adminContact';
 import CertificateRegistryABI from '@/contracts/abis/CertificateRegistry.json';
 
 const CERTIFICATE_REGISTRY_ADDRESS = import.meta.env.VITE_CERTIFICATE_REGISTRY_ADDRESS as `0x${string}`;
@@ -278,7 +279,7 @@ export function IssueCertificate() {
 
     // CRITICAL: Real-time authorization check before submission
     if (!canIssue) {
-      setError(reason || 'Your institution cannot issue certificates at this time. Please contact an administrator.');
+      setError(reason || withAdminContact('Your institution cannot issue certificates at this time.'));
       logger.warn('Certificate issuance blocked: institution cannot issue', { reason });
       return;
     }

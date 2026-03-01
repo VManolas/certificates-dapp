@@ -3,6 +3,7 @@ import { useReadContract } from 'wagmi';
 import { useAccount } from 'wagmi';
 import { INSTITUTION_REGISTRY_ADDRESS } from '@/lib/wagmi';
 import InstitutionRegistryABI from '@/contracts/abis/InstitutionRegistry.json';
+import { withAdminContact } from '@/lib/adminContact';
 import type { Institution } from '@/types';
 
 export interface InstitutionStatus {
@@ -130,7 +131,7 @@ export function useCanIssueCertificates() {
   } else if (!status.isVerified) {
     reason = 'Your institution is pending verification. Please wait for admin approval.';
   } else if (!status.isActive) {
-    reason = 'Your institution has been suspended. Please contact an administrator.';
+    reason = withAdminContact('Your institution has been suspended.');
   }
 
   return {

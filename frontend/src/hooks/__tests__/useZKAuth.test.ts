@@ -5,6 +5,7 @@ import { useZKAuth } from '../useZKAuth';
 import { useAccount, useWriteContract } from 'wagmi';
 import { useAuthStore } from '@/store/authStore';
 import * as zkAuthLib from '@/lib/zkAuth';
+import { ethers } from 'ethers';
 
 vi.mock('wagmi', () => ({
   useAccount: vi.fn(),
@@ -51,6 +52,7 @@ vi.mock('ethers', () => ({
     Contract: vi.fn(function () {
       return {
         getSession: vi.fn(() => Promise.resolve({ active: false })),
+        isRegistered: vi.fn(() => Promise.resolve(true)),
       };
     }),
   },
@@ -148,7 +150,22 @@ describe('useZKAuth', () => {
       );
       expect(mockAuthStore.setZKCommitment).toHaveBeenCalledWith('0xcommitment');
       expect(mockAuthStore.setZKRole).toHaveBeenCalledWith('student');
+      expect(zkAuthLib.storeCredentials).toHaveBeenCalledWith(
+        '0xencrypted',
+        '0x1234567890abcdef1234567890abcdef12345678'
+      );
     });
+  });
+
+  it('does not persist credentials when registration transaction fails', async () => {
+    mockWriteContractAsync.mockRejectedValue(new Error('registration failed'));
+    const { result } = renderHook(() => useZKAuth());
+
+    await act(async () => {
+      await expect(result.current.register('student')).rejects.toThrow('registration failed');
+    });
+
+    expect(zkAuthLib.storeCredentials).not.toHaveBeenCalled();
   });
 
   it('logs in with credentials and activates zk auth', async () => {
@@ -184,6 +201,30 @@ describe('useZKAuth', () => {
     await act(async () => {
       await expect(result.current.login()).rejects.toThrow('CREDENTIALS_OUTDATED');
     });
+  });
+
+  it('clears stale credentials when commitment is not registered on-chain', async () => {
+    (ethers.Contract as any).mockImplementationOnce(function () {
+      return {
+        isRegistered: vi.fn().mockResolvedValue(false),
+        getSession: vi.fn().mockResolvedValue({ active: false }),
+      };
+    });
+    const { result } = renderHook(() => useZKAuth());
+
+    await act(async () => {
+      await expect(result.current.login()).rejects.toThrow('COMMITMENT_NOT_REGISTERED');
+    });
+
+    expect(mockWriteContractAsync).not.toHaveBeenCalledWith(
+      expect.objectContaining({ functionName: 'startSession' })
+    );
+    expect(zkAuthLib.clearStoredCredentials).toHaveBeenCalledWith(
+      '0x1234567890abcdef1234567890abcdef12345678'
+    );
+    expect(mockAuthStore.setZKCommitment).toHaveBeenCalledWith(null);
+    expect(mockAuthStore.setZKAuthenticated).toHaveBeenCalledWith(false);
+    expect(mockAuthStore.setZKSessionId).toHaveBeenCalledWith(null);
   });
 
   it('logout without active session clears local zk session state', async () => {

@@ -1,5 +1,5 @@
 // src/pages/employer/Dashboard.tsx
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAccount } from 'wagmi';
 import { useVerificationHistory } from '@/hooks/useVerificationHistory';
@@ -17,17 +17,43 @@ export function EmployerDashboard() {
   const { isConnected } = useAccount();
   const { history, clearHistory, exportToCSV, getStats } = useVerificationHistory();
   const stats = getStats();
+
+  type HistoryFilter = 'all' | 'valid' | 'invalid' | 'revoked';
+  const isHistoryFilter = (value: string | null): value is HistoryFilter =>
+    value === 'all' || value === 'valid' || value === 'invalid' || value === 'revoked';
   
   // Read search parameter from URL
   const [searchParams, setSearchParams] = useSearchParams();
   const searchFromUrl = searchParams.get('search');
   const from = searchParams.get('from');
+  const statusFromUrl = searchParams.get('status');
   const isFromBatch = from === 'batch';
 
   const [walletAddress, setWalletAddress] = useState('');
   const [searchError, setSearchError] = useState<string | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [batchWallets, setBatchWallets] = useState<Array<{ walletAddress: string; certificateCount: number }>>([]);
+  const [historyFilter, setHistoryFilter] = useState<HistoryFilter>(
+    isHistoryFilter(statusFromUrl) ? statusFromUrl : 'all'
+  );
+
+  const filteredHistory = useMemo(() => {
+    if (historyFilter === 'all') {
+      return history;
+    }
+
+    return history.filter((entry) => {
+      if (historyFilter === 'valid') {
+        return entry.isValid && !entry.isRevoked;
+      }
+      if (historyFilter === 'invalid') {
+        return !entry.isValid && !entry.isRevoked;
+      }
+      return entry.isRevoked;
+    });
+  }, [history, historyFilter]);
+
+  const visibleHistory = filteredHistory.slice(0, 10);
 
   // Fetch certificates for the searched wallet
   const {
@@ -56,6 +82,11 @@ export function EmployerDashboard() {
       setIsSearching(true);
     }
   }, [searchFromUrl]);
+
+  // Keep history filter synchronized with URL `status` query parameter.
+  useEffect(() => {
+    setHistoryFilter(isHistoryFilter(statusFromUrl) ? statusFromUrl : 'all');
+  }, [statusFromUrl]);
 
   // Load previous batch wallets when coming from batch flow.
   useEffect(() => {
@@ -140,6 +171,18 @@ export function EmployerDashboard() {
     }
   };
 
+  const handleHistoryFilterChange = (filter: HistoryFilter) => {
+    setHistoryFilter(filter);
+
+    const nextParams = new URLSearchParams(searchParams);
+    if (filter === 'all') {
+      nextParams.delete('status');
+    } else {
+      nextParams.set('status', filter);
+    }
+    setSearchParams(nextParams);
+  };
+
   if (!isConnected) {
     return (
       <div className="container mx-auto px-4 py-16 text-center">
@@ -179,22 +222,58 @@ export function EmployerDashboard() {
 
       {/* Statistics Cards */}
       <div className="grid md:grid-cols-4 gap-6 mb-8">
-        <div className="card">
+        <button
+          type="button"
+          onClick={() => handleHistoryFilterChange('all')}
+          aria-pressed={historyFilter === 'all'}
+          className={`card text-left transition-colors ${
+            historyFilter === 'all'
+              ? 'border-primary-500/40 bg-primary-500/10'
+              : 'hover:border-surface-500'
+          }`}
+        >
           <div className="text-sm text-surface-400 mb-1">Total Verifications</div>
           <div className="text-3xl font-bold text-white">{stats.total}</div>
-        </div>
-        <div className="card border-accent-500/30">
+        </button>
+        <button
+          type="button"
+          onClick={() => handleHistoryFilterChange('valid')}
+          aria-pressed={historyFilter === 'valid'}
+          className={`card text-left border-accent-500/30 transition-colors ${
+            historyFilter === 'valid'
+              ? 'bg-accent-500/10 ring-1 ring-accent-500/40'
+              : 'hover:border-accent-400/50'
+          }`}
+        >
           <div className="text-sm text-surface-400 mb-1">Valid Certificates</div>
           <div className="text-3xl font-bold text-accent-400">{stats.valid}</div>
-        </div>
-        <div className="card border-red-500/30">
+        </button>
+        <button
+          type="button"
+          onClick={() => handleHistoryFilterChange('invalid')}
+          aria-pressed={historyFilter === 'invalid'}
+          className={`card text-left border-red-500/30 transition-colors ${
+            historyFilter === 'invalid'
+              ? 'bg-red-500/10 ring-1 ring-red-500/40'
+              : 'hover:border-red-400/50'
+          }`}
+        >
           <div className="text-sm text-surface-400 mb-1">Invalid</div>
           <div className="text-3xl font-bold text-red-400">{stats.invalid}</div>
-        </div>
-        <div className="card border-yellow-500/30">
+        </button>
+        <button
+          type="button"
+          onClick={() => handleHistoryFilterChange('revoked')}
+          aria-pressed={historyFilter === 'revoked'}
+          className={`card text-left border-yellow-500/30 transition-colors ${
+            historyFilter === 'revoked'
+              ? 'bg-yellow-500/10 ring-1 ring-yellow-500/40'
+              : 'hover:border-yellow-400/50'
+          }`}
+        >
           <div className="text-sm text-surface-400 mb-1">Revoked</div>
           <div className="text-3xl font-bold text-yellow-400">{stats.revoked}</div>
-        </div>
+        </button>
       </div>
 
       {/* Wallet Verification Section */}
@@ -354,7 +433,17 @@ export function EmployerDashboard() {
       {/* Recent Verifications */}
       <div className="card">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-bold text-white">Recent Verifications</h2>
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-xl font-bold text-white">Recent Verifications</h2>
+              <span className="inline-flex items-center rounded-full border border-surface-600 bg-surface-800 px-2 py-0.5 text-xs text-surface-300">
+                {filteredHistory.length}/{history.length}
+              </span>
+            </div>
+            <p className="text-xs text-surface-400 mt-1">
+              Filter: <span className="text-white capitalize">{historyFilter}</span>
+            </p>
+          </div>
           <div className="flex gap-2">
             {history.length > 0 && (
               <>
@@ -395,9 +484,23 @@ export function EmployerDashboard() {
               Verify a Certificate
             </Link>
           </div>
+        ) : filteredHistory.length === 0 ? (
+          <div className="text-center py-10">
+            <h3 className="text-lg font-semibold text-white mb-2">No Matching Verifications</h3>
+            <p className="text-surface-400 mb-4">
+              There are no verification records in the <span className="capitalize">{historyFilter}</span> category.
+            </p>
+            <button
+              type="button"
+              onClick={() => handleHistoryFilterChange('all')}
+              className="btn-secondary"
+            >
+              Show All Verifications
+            </button>
+          </div>
         ) : (
           <div className="space-y-3">
-            {history.slice(0, 10).map((entry) => (
+            {visibleHistory.map((entry) => (
               <div
                 key={entry.id}
                 className="rounded-lg bg-surface-800/50 p-4 border border-surface-700 hover:border-surface-600 transition-colors"
@@ -448,9 +551,9 @@ export function EmployerDashboard() {
                 </div>
               </div>
             ))}
-            {history.length > 10 && (
+            {filteredHistory.length > 10 && (
               <p className="text-center text-sm text-surface-500 pt-2">
-                Showing 10 of {history.length} verifications
+                Showing 10 of {filteredHistory.length} verifications
               </p>
             )}
           </div>

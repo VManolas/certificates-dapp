@@ -26,7 +26,7 @@
  */
 
 import { useEffect, useCallback, useMemo, useRef } from 'react';
-import { useAccount } from 'wagmi';
+import { useAccount, useDisconnect } from 'wagmi';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import type { AuthMethod, UserRole } from '@/types/auth';
@@ -132,6 +132,7 @@ function getAllowedAuthMethods(role: UserRole | null): {
 
 export function useUnifiedAuth(): UnifiedAuthState {
   const { address, isConnected } = useAccount();
+  const { disconnect } = useDisconnect();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   
@@ -143,12 +144,14 @@ export function useUnifiedAuth(): UnifiedAuthState {
     showAuthMethodSelector,
     preferredAuthMethod,
     isLogoutCooldown,
+    requiresManualAuthSelection,
     setAuthMethod,
     setShowAuthMethodSelector,
     setPreferredAuthMethod,
     setPreSelectedRole,
     setRole,
     setIsLogoutCooldown,
+    setRequiresManualAuthSelection,
     zkAuth: zkAuthState,
     setZKAuthEnabled,
     setZKAuthenticated,
@@ -173,12 +176,33 @@ export function useUnifiedAuth(): UnifiedAuthState {
     await queryClient.cancelQueries({ queryKey: ['readContract'] });
     queryClient.removeQueries({ queryKey: ['userRoles'] });
     queryClient.removeQueries({ queryKey: ['readContract'] });
+    // Always clear in-memory ZK auth session flags on logout/account changes.
+    // Credentials remain in local storage for optional future private re-login.
+    setZKAuthEnabled(false);
+    setZKAuthenticated(false);
+    setZKCommitment(null);
+    setZKSessionId(null);
+    setZKRole(null);
     setAuthMethod(null);
     setRole(null);
     setPreSelectedRole(null);
     setShowAuthMethodSelector(false);
+    setRequiresManualAuthSelection(false);
     bumpAuthEpoch();
-  }, [queryClient, setAuthMethod, setRole, setPreSelectedRole, setShowAuthMethodSelector, bumpAuthEpoch]);
+  }, [
+    queryClient,
+    setZKAuthEnabled,
+    setZKAuthenticated,
+    setZKCommitment,
+    setZKSessionId,
+    setZKRole,
+    setAuthMethod,
+    setRole,
+    setPreSelectedRole,
+    setShowAuthMethodSelector,
+    setRequiresManualAuthSelection,
+    bumpAuthEpoch,
+  ]);
   
   // CRITICAL: Clear query cache when wallet disconnects and redirect to home
   // This ensures the next wallet that connects gets fresh data
@@ -269,6 +293,17 @@ export function useUnifiedAuth(): UnifiedAuthState {
       console.log('⏳ [useUnifiedAuth] Waiting for role detection to complete...');
       return;
     }
+
+    // Prevent immediate re-login after explicit logout while wallet remains connected.
+    if (isLogoutCooldown) {
+      console.log('⏸️ [useUnifiedAuth] Logout cooldown active, skipping auto-select');
+      return;
+    }
+
+    if (requiresManualAuthSelection) {
+      console.log('⏸️ [useUnifiedAuth] Manual auth selection required, skipping auto-select');
+      return;
+    }
     
     console.log('✅ [useUnifiedAuth] Role detection complete, proceeding with auto-select logic');
     
@@ -281,10 +316,18 @@ export function useUnifiedAuth(): UnifiedAuthState {
         isVerified: institutionStatus.isVerified,
         isActive: institutionStatus.isActive,
       });
-      
-      // Clear any auth state to prevent automatic auth attempts
-      setAuthMethod(null);
-      setRole(null);
+
+      // Prevent loops by only mutating store when there is actually state to clear.
+      // SuspensionGuard handles disconnect + modal UX for this case.
+      if (showAuthMethodSelector) {
+        setShowAuthMethodSelector(false);
+      }
+      if (authMethod !== null) {
+        setAuthMethod(null);
+      }
+      if (role !== null) {
+        setRole(null);
+      }
       
       // Don't proceed with any authentication logic
       // SuspensionGuard will handle disconnection and show modal
@@ -410,6 +453,8 @@ export function useUnifiedAuth(): UnifiedAuthState {
     preSelectedRole,
     zkAuth.hasCredentials,
     userRoles.primaryRole,
+    isLogoutCooldown,
+    requiresManualAuthSelection,
     userRoles.isUniversity,
     userRoles.availableRoles,
     institutionStatus.isRegistered,
@@ -446,12 +491,13 @@ export function useUnifiedAuth(): UnifiedAuthState {
     if (remember) {
       setPreferredAuthMethod(method);
     }
+    setRequiresManualAuthSelection(false);
     
     // If Web3 selected and user has role, auto-set it
     if (method === 'web3' && userRoles.primaryRole) {
       setRole(userRoles.primaryRole);
     }
-  }, [setAuthMethod, setShowAuthMethodSelector, setPreferredAuthMethod, setRole, userRoles.primaryRole, allowedAuthMethods]);
+  }, [setAuthMethod, setShowAuthMethodSelector, setPreferredAuthMethod, setRole, setRequiresManualAuthSelection, userRoles.primaryRole, allowedAuthMethods]);
   
   /**
    * Switch authentication method (with role-based validation)
@@ -483,13 +529,10 @@ export function useUnifiedAuth(): UnifiedAuthState {
       setZKCommitment(null);
       setZKSessionId(null);
       setZKRole(null);
-      
-      // CRITICAL: Also clear stored credentials from localStorage
-      // This prevents auto-selection of ZK auth on page reload
-      // User made an explicit choice to switch to Web3 - respect that
-      zkAuth.clearCredentials();
-      
-      logger.info('✅ Cleared ZK auth state AND credentials after switching to Web3');
+
+      // Keep encrypted credentials in local storage so users can return to
+      // private login without repeating one-time enrollment.
+      logger.info('✅ Cleared active ZK session state after switching to Web3 (credentials retained)');
     }
     
     // Clear current role
@@ -497,6 +540,7 @@ export function useUnifiedAuth(): UnifiedAuthState {
     
     // Set new method
     setAuthMethod(newMethod);
+    setRequiresManualAuthSelection(false);
     
     // If switching to Web3 and user has role, auto-set it
     if (newMethod === 'web3' && userRoles.primaryRole) {
@@ -508,6 +552,7 @@ export function useUnifiedAuth(): UnifiedAuthState {
     zkAuth, 
     setRole, 
     setAuthMethod, 
+    setRequiresManualAuthSelection,
     userRoles.primaryRole, 
     allowedAuthMethods,
     setZKAuthEnabled,
@@ -532,6 +577,10 @@ export function useUnifiedAuth(): UnifiedAuthState {
     
     // Clear ALL auth state (including pre-selected role)
     await clearWalletScopedAuthState();
+    setRequiresManualAuthSelection(true);
+
+    // Explicitly disconnect wallet to guarantee a clean post-logout state.
+    disconnect();
     
     // IMPORTANT: Redirect to home page to prevent stale dashboard access
     navigate('/', { replace: true });
@@ -544,7 +593,7 @@ export function useUnifiedAuth(): UnifiedAuthState {
     }, 3000);
     
     // Don't clear preferred method - user can reuse it
-  }, [authMethod, zkAuth, setIsLogoutCooldown, navigate, clearWalletScopedAuthState]);
+  }, [authMethod, zkAuth, setIsLogoutCooldown, setRequiresManualAuthSelection, disconnect, navigate, clearWalletScopedAuthState]);
   
   return {
     // Authentication status

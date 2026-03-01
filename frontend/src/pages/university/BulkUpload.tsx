@@ -15,6 +15,7 @@ import {
 import { generatePDFHash } from '@/lib/pdfHash';
 import { CERTIFICATE_REGISTRY_ADDRESS, config } from '@/lib/wagmi';
 import CertificateRegistryABI from '@/contracts/abis/CertificateRegistry.json';
+import { withAdminContact } from '@/lib/adminContact';
 import { logger } from '@/lib/logger';
 
 export function BulkUpload() {
@@ -151,19 +152,19 @@ export function BulkUpload() {
 
     // CRITICAL: Real-time authorization check before bulk issuance
     if (!canIssue) {
-      alert(reason || 'Your institution cannot issue certificates. Please contact an administrator.');
+      alert(reason || withAdminContact('Your institution cannot issue certificates.'));
       logger.error('Bulk issuance blocked:', reason);
       return;
     }
 
     // Legacy check (kept for backward compatibility with cached data)
     if (!institutionData?.isVerified) {
-      alert('Your institution must be verified before issuing certificates. Please contact an administrator.');
+      alert(withAdminContact('Your institution must be verified before issuing certificates.'));
       return;
     }
 
     if (!institutionData?.isActive) {
-      alert('Your institution account is not active. Please contact an administrator.');
+      alert(withAdminContact('Your institution account is not active.'));
       return;
     }
 
@@ -256,7 +257,9 @@ export function BulkUpload() {
         const errStr = error.message.toLowerCase();
         
         if (errStr.includes('unauthorizedissuer') || errStr.includes('unauthorized')) {
-          errorMsg = 'Your institution is not authorized to issue certificates. Please ensure your institution is verified and active.';
+          errorMsg = withAdminContact(
+            'Your institution is not authorized to issue certificates. Please ensure your institution is verified and active,'
+          );
         } else if (errStr.includes('user rejected') || errStr.includes('user denied')) {
           errorMsg = 'Transaction was rejected by user.';
         } else {

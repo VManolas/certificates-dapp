@@ -1,8 +1,7 @@
 // src/pages/Home.tsx
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { useAccount } from 'wagmi';
-import { ConnectButton } from '@rainbow-me/rainbowkit';
 import type { UserRole } from '@/types/auth';
 import { useAuthStore } from '@/store/authStore';
 import { useUnifiedAuth } from '@/hooks/useUnifiedAuth';
@@ -14,10 +13,9 @@ import { SwitchTxStatusPanel, getSwitchToStandardButtonLabel, isSwitchInFlight }
 import { logger } from '@/lib/logger';
 
 export function Home() {
-  const navigate = useNavigate();
   const { isConnected } = useAccount();
   const { preSelectedRole, setPreSelectedRole } = useAuthStore();
-  const [showRoleSelector, setShowRoleSelector] = useState(!isConnected && !preSelectedRole);
+  const [showRoleSelector, setShowRoleSelector] = useState(true);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [switchTxPhase, setSwitchTxPhase] = useState<'idle' | 'awaiting_wallet_confirmation' | 'pending_onchain' | 'confirmed' | 'failed'>('idle');
   const [switchError, setSwitchError] = useState<string | null>(null);
@@ -28,6 +26,17 @@ export function Home() {
   // This avoids unnecessary blockchain queries for anonymous visitors browsing the home page
   const shouldInitializeAuth = isConnected || showLoginModal;
   const unifiedAuth = useUnifiedAuth();
+
+  // Always show role selector when user is not authenticated, including right
+  // after disconnect. Keep it hidden while login modal is active.
+  useEffect(() => {
+    if (!unifiedAuth.isAuthenticated && !showLoginModal) {
+      setShowRoleSelector(true);
+      return;
+    }
+
+    setShowRoleSelector(false);
+  }, [isConnected, unifiedAuth.isAuthenticated, showLoginModal, preSelectedRole]);
 
   // Effective authenticated role must always come from unified auth.
   const role = unifiedAuth.isAuthenticated ? unifiedAuth.role : null;
@@ -51,16 +60,16 @@ export function Home() {
     }
   }, [unifiedAuth.authMethod, switchTxPhase, showSwitchResultNotice]);
 
-  // Handle role selection (Step 1)
   const handleRoleSelection = (selectedRole: UserRole) => {
     setPreSelectedRole(selectedRole);
     setShowRoleSelector(false);
-    
-    // Open the unified login modal which handles the complete flow
-    // (auth method selection, ZK registration/login, Web3 connection, etc.)
-    setTimeout(() => {
-      setShowLoginModal(true);
-    }, 300);
+    setShowLoginModal(true);
+  };
+
+  const openRoleSelector = () => {
+    if (!unifiedAuth.isAuthenticated) {
+      setShowRoleSelector(true);
+    }
   };
 
   // Handle successful login
@@ -112,7 +121,7 @@ export function Home() {
         isOpen={showRoleSelector}
         onSelectRole={handleRoleSelection}
       />
-      
+
       {/* Unified Login Modal - Handles complete auth flow */}
       <UnifiedLoginModal
         isOpen={showLoginModal}
@@ -180,16 +189,12 @@ export function Home() {
           {/* CTA Buttons */}
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             {!isConnected ? (
-              <ConnectButton.Custom>
-                {({ openConnectModal }) => (
-                  <button onClick={openConnectModal} className="btn-primary text-lg px-8 py-4">
-                    <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                    </svg>
-                    Connect Wallet
-                  </button>
-                )}
-              </ConnectButton.Custom>
+              <button onClick={openRoleSelector} className="btn-primary text-lg px-8 py-4">
+                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                </svg>
+                Connect Wallet
+              </button>
             ) : null}
           </div>
         </div>
@@ -321,7 +326,6 @@ export function Home() {
                 onUpgradeComplete={() => {
                   // Keep Home page modal state aligned after upgrade completion.
                   setShowLoginModal(false);
-                  setShowRoleSelector(false);
                   logger.info('ZK auth upgrade completed from Home page');
                   logger.debug('Current auth state after upgrade:', {
                     authMethod: unifiedAuth.authMethod,
@@ -410,16 +414,12 @@ export function Home() {
               Verify Certificate
             </Link>
             {!isConnected ? (
-              <ConnectButton.Custom>
-                {({ openConnectModal }) => (
-                  <button onClick={openConnectModal} className="btn-primary text-lg px-8 py-4 inline-flex">
-                    <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                    </svg>
-                    Connect Wallet to Get Started
-                  </button>
-                )}
-              </ConnectButton.Custom>
+              <button onClick={openRoleSelector} className="btn-primary text-lg px-8 py-4 inline-flex">
+                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                </svg>
+                Connect Wallet to Get Started
+              </button>
             ) : null}
           </div>
         </div>

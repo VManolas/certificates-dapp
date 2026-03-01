@@ -32,6 +32,7 @@ import { useEffect, useState } from 'react';
 import { useAccount, useDisconnect } from 'wagmi';
 import { useNavigate } from 'react-router-dom';
 import { useInstitutionStatus } from '@/hooks/useInstitutionStatus';
+import { ADMIN_CONTACT_EMAIL, withAdminContact } from '@/lib/adminContact';
 import { logger } from '@/lib/logger';
 
 export function SuspensionGuard() {
@@ -40,6 +41,8 @@ export function SuspensionGuard() {
   const navigate = useNavigate();
   const [showSuspendedModal, setShowSuspendedModal] = useState(false);
   const [suspensionReason, setSuspensionReason] = useState('');
+  const [suspendedWalletAddress, setSuspendedWalletAddress] = useState<string | null>(null);
+  const [isValidatingCurrentWallet, setIsValidatingCurrentWallet] = useState(false);
   
   // Check wallet status in real-time
   // Only query when connected to avoid unnecessary calls
@@ -49,6 +52,7 @@ export function SuspensionGuard() {
     isActive, 
     canIssue,
     isLoading,
+    institutionData,
     refetch 
   } = useInstitutionStatus(
     address,
@@ -56,9 +60,50 @@ export function SuspensionGuard() {
     60000 // refetchInterval: check every 60 seconds (suspension is rare)
   );
 
+  // Force a fresh blockchain status check whenever the connected wallet changes.
+  // This avoids acting on stale cached status from a previous session.
+  useEffect(() => {
+    if (!isConnected || !address) {
+      setIsValidatingCurrentWallet(false);
+      return;
+    }
+
+    let isCancelled = false;
+    setIsValidatingCurrentWallet(true);
+
+    Promise.resolve(refetch())
+      .catch(() => {
+        // Keep existing error handling behavior in useInstitutionStatus consumers.
+      })
+      .finally(() => {
+        if (!isCancelled) {
+          setIsValidatingCurrentWallet(false);
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [isConnected, address, refetch]);
+
   useEffect(() => {
     // Skip checks if not connected or still loading initial data
-    if (!isConnected || isLoading) {
+    if (!isConnected || isLoading || isValidatingCurrentWallet) {
+      return;
+    }
+
+    // Safety guard: ignore data that does not correspond to the currently connected wallet.
+    // This prevents false suspensions when query cache transitions between addresses.
+    const normalizedAddress = address?.toLowerCase();
+    const dataWalletAddress = institutionData?.walletAddress?.toLowerCase();
+    const isDataForConnectedWallet =
+      !!normalizedAddress && !!dataWalletAddress && dataWalletAddress === normalizedAddress;
+
+    if (institutionData && !isDataForConnectedWallet) {
+      logger.info('⏳ Institution status not yet aligned with connected wallet, waiting for fresh data', {
+        connectedAddress: address,
+        dataWalletAddress: institutionData.walletAddress,
+      });
       return;
     }
 
@@ -75,6 +120,12 @@ export function SuspensionGuard() {
         address,
         note: 'Likely admin, student, or employer wallet'
       });
+      // Clear any stale suspension modal from a previous wallet session.
+      if (showSuspendedModal) {
+        setShowSuspendedModal(false);
+        setSuspensionReason('');
+        setSuspendedWalletAddress(null);
+      }
       return;
     }
 
@@ -98,7 +149,9 @@ export function SuspensionGuard() {
     } else if (!isActive) {
       // SUSPENDED - this is the critical case
       // University is verified but suspended by admin
-      reason = 'Your institution has been suspended by an administrator. Please contact support for assistance.';
+      reason = withAdminContact(
+        '🚫 Suspended university detected - blocking authentication flow. Your university account has been suspended.'
+      );
       isSuspended = true;
     }
 
@@ -114,6 +167,7 @@ export function SuspensionGuard() {
       
       // Set reason for modal
       setSuspensionReason(reason);
+      setSuspendedWalletAddress(address ?? null);
       
       // Immediately disconnect the wallet
       disconnect();
@@ -125,6 +179,12 @@ export function SuspensionGuard() {
       navigate('/', { replace: true });
     } else {
       logger.info('✅ University active - allowing connection', { address });
+      // Connected wallet is active (or pending verification) -> clear stale suspension modal.
+      if (showSuspendedModal) {
+        setShowSuspendedModal(false);
+        setSuspensionReason('');
+        setSuspendedWalletAddress(null);
+      }
     }
   }, [
     isConnected, 
@@ -133,14 +193,19 @@ export function SuspensionGuard() {
     isActive, 
     canIssue, 
     isLoading, 
+    isValidatingCurrentWallet,
+    institutionData,
     address, 
     disconnect, 
-    navigate
+    navigate,
+    showSuspendedModal,
   ]);
 
   // Handle closing the modal
   const handleClose = () => {
     setShowSuspendedModal(false);
+    setSuspensionReason('');
+    setSuspendedWalletAddress(null);
   };
 
   // Handle checking status (refetch from blockchain)
@@ -151,7 +216,7 @@ export function SuspensionGuard() {
     // Give user feedback
     setTimeout(() => {
       if (!isActive) {
-        alert('❌ Your institution is still suspended. Please contact an administrator.');
+        alert(`❌ ${withAdminContact('Your institution is still suspended.')}`);
       } else {
         alert('✅ Your institution is now active! You can connect your wallet.');
         setShowSuspendedModal(false);
@@ -160,13 +225,16 @@ export function SuspensionGuard() {
   };
 
   // Don't render anything if modal shouldn't be shown
-  if (!showSuspendedModal) {
+  const shouldRenderModal =
+    showSuspendedModal && (!isConnected || !address || address === suspendedWalletAddress);
+
+  if (!shouldRenderModal) {
     return null;
   }
 
   return (
     <div 
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fadeIn"
+      className="fixed inset-0 z-[60] flex items-center justify-center p-4 animate-fadeIn"
       role="dialog"
       aria-modal="true"
       aria-labelledby="suspension-modal-title"
@@ -280,7 +348,7 @@ export function SuspensionGuard() {
                   Need Help?
                 </p>
                 <p className="text-xs text-blue-200">
-                  Contact an administrator to reactivate your institution account.
+                  Contact the admin at: {ADMIN_CONTACT_EMAIL}
                 </p>
               </div>
             </div>

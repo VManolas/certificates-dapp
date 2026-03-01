@@ -2,13 +2,16 @@
 import { decodeErrorResult, type Abi } from 'viem';
 import CertificateRegistryABI from '@/contracts/abis/CertificateRegistry.json';
 import InstitutionRegistryABI from '@/contracts/abis/InstitutionRegistry.json';
+import { withAdminContact } from './adminContact';
 
 /**
  * Maps of custom error names to user-friendly messages
  */
 const ERROR_MESSAGES: Record<string, string> = {
   // CertificateRegistry errors
-  'UnauthorizedIssuer': 'Your institution is not authorized to issue certificates. Please ensure your institution is verified and active, or contact an administrator.',
+  'UnauthorizedIssuer': withAdminContact(
+    'Your institution is not authorized to issue certificates. Please ensure your institution is verified and active,'
+  ),
   'CertificateAlreadyExists': 'This PDF certificate has already been issued. Each certificate must use a unique PDF document. Please upload a different PDF file for this student.',
   'CertificateNotFound': 'Certificate not found in the registry.',
   'CertificateAlreadyRevoked': 'This certificate has already been revoked.',
@@ -22,7 +25,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   'InstitutionNotFound': 'Institution not found in the registry.',
   'InstitutionNotVerified': 'Your institution has not been verified yet. Please wait for admin approval.',
   'InstitutionAlreadyVerified': 'This institution has already been verified.',
-  'InstitutionNotActive': 'Your institution is currently suspended. Please contact an administrator.',
+  'InstitutionNotActive': withAdminContact('Your institution is currently suspended.'),
   'InstitutionAlreadyActive': 'This institution is already active.',
   'EmailDomainAlreadyRegistered': 'This email domain is already registered to another institution.',
   'InvalidEmailDomain': 'The email domain provided is invalid (cannot be empty).',

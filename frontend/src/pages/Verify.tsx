@@ -1,17 +1,16 @@
 // src/pages/Verify.tsx
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAccount } from 'wagmi';
 import { generatePDFHash, formatFileSize, truncateHash, type HashResult } from '@/lib/pdfHash';
 import { useCertificateVerification, useHashExists, useCertificateDetails } from '@/hooks';
 import { useVerificationHistory } from '@/hooks/useVerificationHistory';
-import { useAuthStore } from '@/store/authStore';
+import { useAuthStore, useEffectiveRole, useIsAuthenticated } from '@/store/authStore';
 import { CERTIFICATE_REGISTRY_ADDRESS } from '@/lib/wagmi';
 import { QRScanner } from '@/components/QRScanner';
 import { VerificationReport } from '@/components/VerificationReport';
 import { CertificateDetailModal } from '@/components/CertificateDetailModal';
-import { RoleSelector } from '@/components/RoleSelector';
 import { UnifiedLoginModal } from '@/components/UnifiedLoginModal';
 import { validatePdfFile, globalRateLimiter } from '@/lib/sanitization';
 import { parseError, withRetry } from '@/lib/errorHandling';
@@ -28,7 +27,9 @@ export function Verify() {
   const hashParam = searchParams.get('hash');
   const verificationTokenParam = searchParams.get('v');
   const { isConnected } = useAccount();
-  const { role, preSelectedRole, setPreSelectedRole } = useAuthStore();
+  const { preSelectedRole, setPreSelectedRole } = useAuthStore();
+  const effectiveRole = useEffectiveRole();
+  const isAuthenticated = useIsAuthenticated();
   const { addEntry } = useVerificationHistory();
   const queryClient = useQueryClient();
   
@@ -46,28 +47,14 @@ export function Verify() {
   const [verificationTokenSigner, setVerificationTokenSigner] = useState<string | null>(null);
   const [verificationTokenAuthError, setVerificationTokenAuthError] = useState<string | null>(null);
   
-  // Role selection modal state (for non-connected users)
-  const [showRoleSelector, setShowRoleSelector] = useState(!isConnected && !preSelectedRole);
+  // Start login directly from employer role for disconnected/unknown wallets.
   const [showLoginModal, setShowLoginModal] = useState(false);
 
-  // Show role selector when user is not connected and hasn't pre-selected a role
-  useEffect(() => {
-    if (!isConnected && !preSelectedRole) {
-      setShowRoleSelector(true);
-    } else {
-      setShowRoleSelector(false);
-    }
-  }, [isConnected, preSelectedRole]);
-
-  // Handle role selection (opens login modal)
-  const handleRoleSelection = (selectedRole: UserRole) => {
-    setPreSelectedRole(selectedRole);
-    setShowRoleSelector(false);
-    
-    // Open the unified login modal
-    setTimeout(() => {
+  const openEmployerLogin = () => {
+    if (!isConnected) {
+      setPreSelectedRole('employer' as UserRole);
       setShowLoginModal(true);
-    }, 300);
+    }
   };
 
   // Handle successful login
@@ -84,10 +71,13 @@ export function Verify() {
     hashParam && /^0x[a-fA-F0-9]{64}$/.test(hashParam)
       ? (hashParam.toLowerCase() as `0x${string}`)
       : undefined;
-  const tokenValidation = verificationTokenParam ? verifyVerificationToken(verificationTokenParam) : null;
+  const tokenValidation = useMemo(
+    () => (verificationTokenParam ? verifyVerificationToken(verificationTokenParam) : null),
+    [verificationTokenParam]
+  );
   const hashFromToken = tokenValidation?.valid ? tokenValidation.payload?.h : undefined;
   const hasLegacyCertParam = !!certIdParam;
-  const canUseInternalHashMode = isConnected && !!role;
+  const canUseInternalHashMode = isConnected && isAuthenticated && !!effectiveRole;
 
   // Legacy cert-id link verification is intentionally disabled.
   const certificateIdFromUrl: bigint | undefined = undefined;
@@ -97,27 +87,37 @@ export function Verify() {
     error: certByIdError,
   } = useCertificateDetails(certificateIdFromUrl, !!certificateIdFromUrl);
 
-  // Initialize state based on URL parameters
+  // Initialize state from secure token links (`?v=...`).
+  // Keep this effect independent from auth/role state so token verification
+  // does not reset when auth state updates in the background.
+  useEffect(() => {
+    if (!verificationTokenParam) {
+      return;
+    }
+
+    if (!tokenValidation?.valid || !hashFromToken) {
+      setError(tokenValidation?.reason || 'Invalid verification token');
+      setState('idle');
+      setHashResult(null);
+      return;
+    }
+
+    setVerificationTokenSigner(tokenValidation.signer || null);
+    setVerificationTokenAuthError(null);
+    setError(null);
+    setHashResult({
+      hash: hashFromToken,
+      fileName: 'Secure Verification Link',
+      fileSize: 0,
+      pageCount: 0,
+    });
+    setHasLoggedVerification(false);
+    setState('verifying');
+  }, [verificationTokenParam, tokenValidation, hashFromToken]);
+
+  // Initialize state from hash/legacy URL params when no token param exists.
   useEffect(() => {
     if (verificationTokenParam) {
-      if (!tokenValidation?.valid || !hashFromToken) {
-        setError(tokenValidation?.reason || 'Invalid verification token');
-        setState('idle');
-        setHashResult(null);
-        return;
-      }
-
-      setVerificationTokenSigner(tokenValidation.signer || null);
-      setVerificationTokenAuthError(null);
-      setError(null);
-      setHashResult({
-        hash: hashFromToken,
-        fileName: 'Secure Verification Link',
-        fileSize: 0,
-        pageCount: 0,
-      });
-      setHasLoggedVerification(false);
-      setState('verifying');
       return;
     }
 
@@ -152,7 +152,7 @@ export function Verify() {
       setError('Legacy certificate-ID links are no longer supported. Please request a new secure verification link.');
       setState('idle');
     }
-  }, [verificationTokenParam, tokenValidation, hashFromToken, hashFromUrl, hashParam, hasLegacyCertParam, canUseInternalHashMode]);
+  }, [verificationTokenParam, hashFromUrl, hashParam, hasLegacyCertParam, canUseInternalHashMode]);
 
   // Use the new hash exists helper hook for optimized duplicate check
   const {
@@ -234,7 +234,7 @@ export function Verify() {
 
   // Log verification to history (for employer role only)
   useEffect(() => {
-    if (role === 'employer' && state === 'complete' && !hasLoggedVerification && hashResult) {
+    if (effectiveRole === 'employer' && state === 'complete' && !hasLoggedVerification && hashResult) {
       if (isValid !== undefined) {
         addEntry({
           verificationType: 'pdf',
@@ -246,11 +246,11 @@ export function Verify() {
         setHasLoggedVerification(true);
       }
     }
-  }, [role, state, isValid, isRevoked, certificateId, hashResult, hasLoggedVerification, addEntry]);
+  }, [effectiveRole, state, isValid, isRevoked, certificateId, hashResult, hasLoggedVerification, addEntry]);
 
   // Log certificate ID verification to history
   useEffect(() => {
-    if (role === 'employer' && state === 'verifying-id' && !hasLoggedVerification && certFromId && !isLoadingCertById) {
+    if (effectiveRole === 'employer' && state === 'verifying-id' && !hasLoggedVerification && certFromId && !isLoadingCertById) {
       addEntry({
         verificationType: 'link',
         isValid: true,
@@ -261,7 +261,7 @@ export function Verify() {
       });
       setHasLoggedVerification(true);
     }
-  }, [role, state, certFromId, certificateIdFromUrl, isLoadingCertById, hasLoggedVerification, addEntry]);
+  }, [effectiveRole, state, certFromId, certificateIdFromUrl, isLoadingCertById, hasLoggedVerification, addEntry]);
 
   const handleFile = useCallback(async (selectedFile: File) => {
     // Clear any existing verification data first
@@ -515,7 +515,7 @@ export function Verify() {
                 </svg>
                 Back
               </button>
-              {role === 'university' && (
+              {effectiveRole === 'university' && (
                 <button
                   onClick={() => navigate('/university/dashboard')}
                   className="btn-primary flex items-center gap-2"
@@ -661,12 +661,6 @@ export function Verify() {
 
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-gradient-to-br from-surface-950 via-primary-950/20 to-surface-950">
-      {/* Role Selector Modal */}
-      <RoleSelector
-        isOpen={showRoleSelector}
-        onSelectRole={handleRoleSelection}
-      />
-      
       {/* Unified Login Modal */}
       <UnifiedLoginModal
         isOpen={showLoginModal}
@@ -721,6 +715,17 @@ export function Verify() {
             </div>
           </button>
           <div className="flex items-center justify-center gap-3">
+            {!isConnected && (
+              <button
+                onClick={openEmployerLogin}
+                className="btn-primary inline-flex items-center gap-2"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                </svg>
+                Login
+              </button>
+            )}
             <button
               onClick={() => setShowQRScanner(true)}
               className="btn-secondary inline-flex items-center gap-2"
@@ -967,7 +972,7 @@ export function Verify() {
                   </svg>
                   Back
                 </button>
-                {role === 'university' && (
+                {effectiveRole === 'university' && (
                   <button
                     onClick={() => navigate('/university/dashboard')}
                     className="btn-primary flex items-center gap-2"

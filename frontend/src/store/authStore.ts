@@ -65,6 +65,8 @@ interface AuthState {
   preferredAuthMethod: AuthMethod;
   /** Whether system is in cooldown period after logout */
   isLogoutCooldown: boolean;
+  /** Blocks auto-auth after explicit logout until user initiates auth again */
+  requiresManualAuthSelection: boolean;
   /** Monotonic counter for auth resets/transitions */
   authEpoch: number;
 
@@ -87,6 +89,7 @@ interface AuthState {
   setShowAuthMethodSelector: (show: boolean) => void;
   setPreferredAuthMethod: (method: AuthMethod) => void;
   setIsLogoutCooldown: (cooldown: boolean) => void;
+  setRequiresManualAuthSelection: (required: boolean) => void;
   bumpAuthEpoch: () => void;
   reset: () => void;
 }
@@ -121,6 +124,7 @@ export const useAuthStore = create<AuthState>()(
       showAuthMethodSelector: false,
       preferredAuthMethod: null,
       isLogoutCooldown: false,
+      requiresManualAuthSelection: false,
       authEpoch: 0,
 
       setAddress: (address) =>
@@ -152,6 +156,7 @@ export const useAuthStore = create<AuthState>()(
               },
               authMethod: null,
               showAuthMethodSelector: false,
+              requiresManualAuthSelection: false,
               authEpoch: state.authEpoch + 1,
               // Keep preferredAuthMethod - user's saved preference
             };
@@ -199,6 +204,8 @@ export const useAuthStore = create<AuthState>()(
 
       setIsLogoutCooldown: (isLogoutCooldown) => set({ isLogoutCooldown }),
 
+      setRequiresManualAuthSelection: (requiresManualAuthSelection) => set({ requiresManualAuthSelection }),
+
       bumpAuthEpoch: () => set((state) => ({ authEpoch: state.authEpoch + 1 })),
 
       reset: () =>
@@ -222,6 +229,7 @@ export const useAuthStore = create<AuthState>()(
           },
           authMethod: null,
           showAuthMethodSelector: false,
+          requiresManualAuthSelection: false,
           authEpoch: 0,
           // Keep preferredAuthMethod even on reset
         }),

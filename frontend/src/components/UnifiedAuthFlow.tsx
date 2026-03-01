@@ -20,14 +20,17 @@
  * - Ability to go back to previous steps (where applicable)
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAccount } from 'wagmi';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useUnifiedAuth } from '@/hooks/useUnifiedAuth';
 import type { ZKAuthProgressEvent } from '@/hooks/useZKAuth';
+import { useAuthStore } from '@/store/authStore';
 import { ProgressSteps } from './ProgressSteps';
 import { getFriendlyError, getErrorAction, logError } from '@/lib/errors/zkAuthErrors';
 import type { UserRole, AuthMethod } from '@/types/auth';
+import { ADMIN_CONTACT_EMAIL } from '@/lib/adminContact';
 import { logger } from '@/lib/logger';
 
 interface UnifiedAuthFlowProps {
@@ -52,8 +55,10 @@ export function UnifiedAuthFlow({
   onCancel,
   preSelectedRole = null,
 }: UnifiedAuthFlowProps) {
+  const navigate = useNavigate();
   const { isConnected } = useAccount();
   const unifiedAuth = useUnifiedAuth();
+  const { setAuthMethod, setPreSelectedRole, setShowAuthMethodSelector } = useAuthStore();
   
   const [currentStep, setCurrentStep] = useState<FlowStep>('select-role');
   const [selectedRole, setSelectedRole] = useState<UserRole | null>(preSelectedRole);
@@ -66,13 +71,24 @@ export function UnifiedAuthFlow({
   const [walletInteractionMode, setWalletInteractionMode] = useState<'setup' | 'login' | null>(null);
   const [contractInteractionStatus, setContractInteractionStatus] = useState<'idle' | 'awaiting_wallet_confirmation' | 'pending_onchain' | 'confirmed'>('idle');
   const activeRunIdRef = useRef(0);
+  const completionTriggeredRef = useRef(false);
 
   const beginNewRun = () => {
     activeRunIdRef.current += 1;
+    completionTriggeredRef.current = false;
     return activeRunIdRef.current;
   };
 
   const isCurrentRun = (runId: number) => activeRunIdRef.current === runId;
+
+  const completeFlow = useCallback(() => {
+    if (completionTriggeredRef.current) return;
+    completionTriggeredRef.current = true;
+    setCurrentStep('complete');
+    setTimeout(() => {
+      onComplete?.();
+    }, 1500);
+  }, [onComplete]);
 
   // Initialize with preselected role if provided
   useEffect(() => {
@@ -84,23 +100,51 @@ export function UnifiedAuthFlow({
 
   // Auto-progress when wallet connects for Web3
   useEffect(() => {
-    if (currentStep === 'web3-connect-wallet' && isConnected && selectedAuthMethod === 'web3') {
-      setCurrentStep('complete');
-      setTimeout(() => {
-        onComplete?.();
-      }, 1500);
+    if (
+      currentStep === 'web3-connect-wallet' &&
+      isConnected &&
+      selectedAuthMethod === 'web3' &&
+      unifiedAuth.authMethod === 'web3' &&
+      unifiedAuth.isAuthenticated &&
+      !!unifiedAuth.role &&
+      !!selectedRole &&
+      unifiedAuth.role === selectedRole
+    ) {
+      completeFlow();
     }
-  }, [isConnected, currentStep, selectedAuthMethod, onComplete]);
+  }, [
+    isConnected,
+    currentStep,
+    selectedAuthMethod,
+    selectedRole,
+    unifiedAuth.authMethod,
+    unifiedAuth.isAuthenticated,
+    unifiedAuth.role,
+    completeFlow,
+  ]);
 
   // Auto-progress when ZK authentication is detected
   useEffect(() => {
-    if (unifiedAuth.isAuthenticated && unifiedAuth.authMethod === 'zk') {
-      setCurrentStep('complete');
-      setTimeout(() => {
-        onComplete?.();
-      }, 1500);
+    const zkRoleMatchesSelection =
+      !selectedRole || !unifiedAuth.role || unifiedAuth.role === selectedRole;
+    const isInZkFlowStep = [
+      'zk-connect-wallet',
+      'zk-generate-credentials',
+      'zk-register-onchain',
+      'zk-load-credentials',
+      'zk-generate-proof',
+    ].includes(currentStep);
+
+    if (
+      unifiedAuth.isAuthenticated &&
+      unifiedAuth.authMethod === 'zk' &&
+      selectedAuthMethod === 'zk' &&
+      isInZkFlowStep &&
+      zkRoleMatchesSelection
+    ) {
+      completeFlow();
     }
-  }, [unifiedAuth.isAuthenticated, unifiedAuth.authMethod, onComplete]);
+  }, [unifiedAuth.isAuthenticated, unifiedAuth.authMethod, unifiedAuth.role, selectedRole, selectedAuthMethod, currentStep, completeFlow]);
 
   // Handle role selection
   const handleRoleSelect = (role: UserRole) => {
@@ -267,10 +311,7 @@ export function UnifiedAuthFlow({
         setCurrentStep('zk-generate-proof');
         await unifiedAuth.zkAuth.login((event) => handleZKLoginProgress(event, runId));
         if (!isCurrentRun(runId)) return;
-        setCurrentStep('complete');
-        setTimeout(() => {
-          onComplete?.();
-        }, 1500);
+        completeFlow();
         return;
       }
 
@@ -298,11 +339,8 @@ export function UnifiedAuthFlow({
         await unifiedAuth.zkAuth.login((event) => handleZKSetupProgress(event, runId));
         if (!isCurrentRun(runId)) return;
         logger.info('ZK auto-login successful');
-        
-        setCurrentStep('complete');
-        setTimeout(() => {
-          onComplete?.();
-        }, 1500);
+
+        completeFlow();
       } catch (loginErr) {
         if (!isCurrentRun(runId)) return;
         const err = loginErr as Error;
@@ -315,6 +353,9 @@ export function UnifiedAuthFlow({
           // Credentials were cleared by the decrypt path; require a clean re-registration.
           setCurrentStep('zk-generate-credentials');
           setError('Your credentials became invalid during setup. Please generate and register once more to complete private login.');
+        } else if (err.message === 'COMMITMENT_NOT_REGISTERED') {
+          setCurrentStep('zk-connect-wallet');
+          setError('Registration state was not found on-chain for this wallet. Please re-run one-time private registration.');
         } else {
           setCurrentStep('zk-load-credentials');
           setError('Registration succeeded, but private session login was not completed. Please continue below to finish login.');
@@ -358,11 +399,8 @@ export function UnifiedAuthFlow({
       
       await unifiedAuth.zkAuth.login((event) => handleZKLoginProgress(event, runId));
       if (!isCurrentRun(runId)) return;
-      
-      setCurrentStep('complete');
-      setTimeout(() => {
-        onComplete?.();
-      }, 1500);
+
+      completeFlow();
     } catch (err) {
       if (!isCurrentRun(runId)) return;
       const loginError = err as Error;
@@ -372,9 +410,14 @@ export function UnifiedAuthFlow({
       // Move user to registration flow instead of looping on login errors.
       if (
         message === 'CREDENTIALS_OUTDATED' ||
+        message === 'COMMITMENT_NOT_REGISTERED' ||
         message.includes('No stored credentials')
       ) {
-        setError('Private credentials are not available for this wallet. Please complete one-time registration to continue.');
+        setError(
+          message === 'COMMITMENT_NOT_REGISTERED'
+            ? 'Your private credentials are out of sync with blockchain state. Please complete one-time registration again.'
+            : 'Private credentials are not available for this wallet. Please complete one-time registration to continue.'
+        );
         setCurrentStep('zk-connect-wallet');
       } else {
         logError(loginError, 'ZK Login');
@@ -387,6 +430,7 @@ export function UnifiedAuthFlow({
       setIsOnchainPending(false);
       setWalletInteractionMode(null);
       setContractInteractionStatus('idle');
+      completionTriggeredRef.current = false;
     } finally {
       if (!isCurrentRun(runId)) return;
       setIsLoading(false);
@@ -546,6 +590,81 @@ export function UnifiedAuthFlow({
   ) : null;
 
   const hasExistingCredentials = unifiedAuth.zkAuth.hasCredentials;
+  const detectedWeb3Role = unifiedAuth.web3Auth.primaryRole;
+  const isWeb3RoleMismatch =
+    currentStep === 'web3-connect-wallet' &&
+    selectedAuthMethod === 'web3' &&
+    !!selectedRole &&
+    !!detectedWeb3Role &&
+    selectedRole !== detectedWeb3Role &&
+    !unifiedAuth.authContextResolving &&
+    !unifiedAuth.isLoading;
+
+  const isZkRoleMismatch =
+    selectedAuthMethod === 'zk' &&
+    ['zk-connect-wallet', 'zk-generate-credentials', 'zk-register-onchain', 'zk-load-credentials', 'zk-generate-proof'].includes(currentStep) &&
+    !!selectedRole &&
+    !!detectedWeb3Role &&
+    selectedRole !== detectedWeb3Role &&
+    !unifiedAuth.authContextResolving &&
+    !unifiedAuth.isLoading;
+
+  const isUnregisteredUniversityWallet =
+    currentStep === 'web3-connect-wallet' &&
+    selectedRole === 'university' &&
+    selectedAuthMethod === 'web3' &&
+    isConnected &&
+    unifiedAuth.authMethod === 'web3' &&
+    !unifiedAuth.isAuthenticated &&
+    !unifiedAuth.authContextResolving &&
+    !unifiedAuth.isLoading &&
+    !unifiedAuth.web3Auth.isUniversity &&
+    unifiedAuth.web3Auth.primaryRole === null &&
+    unifiedAuth.web3Auth.availableRoles.length === 0;
+
+  const isUnregisteredEmployerWallet =
+    currentStep === 'web3-connect-wallet' &&
+    selectedRole === 'employer' &&
+    selectedAuthMethod === 'web3' &&
+    isConnected &&
+    !unifiedAuth.isAuthenticated &&
+    !unifiedAuth.authContextResolving &&
+    !unifiedAuth.isLoading &&
+    unifiedAuth.web3Auth.primaryRole === null &&
+    unifiedAuth.web3Auth.availableRoles.length === 0;
+
+  const handleProceedAsEmployer = () => {
+    // Keep user in this flow and let them explicitly choose private/public employer login.
+    // Avoid completing early, which can conflict with global auth auto-selection timing.
+    beginNewRun();
+    setPreSelectedRole('employer');
+    setAuthMethod(null);
+    setShowAuthMethodSelector(false);
+    setSelectedRole('employer');
+    setSelectedAuthMethod(null);
+    setError(null);
+    setCurrentStep('choose-method');
+  };
+
+  const handleProceedAsDetectedRole = () => {
+    if (!detectedWeb3Role) return;
+
+    beginNewRun();
+    setPreSelectedRole(detectedWeb3Role);
+    setAuthMethod(null);
+    setShowAuthMethodSelector(false);
+    setSelectedRole(detectedWeb3Role);
+    setSelectedAuthMethod(null);
+    setError(null);
+    setCurrentStep('choose-method');
+  };
+
+  const handleRegisterAsEmployer = () => {
+    setPreSelectedRole('employer');
+    setShowAuthMethodSelector(false);
+    onCancel?.();
+    navigate('/employer/register');
+  };
 
   return (
     <div className="space-y-6">
@@ -726,6 +845,16 @@ export function UnifiedAuthFlow({
                 Continue
               </button>
             )}
+            {isZkRoleMismatch && (
+              <div className="mt-4 p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                <p className="text-amber-300 text-sm font-medium">
+                  This wallet is registered as <span className="capitalize">{detectedWeb3Role}</span>, not <span className="capitalize">{selectedRole}</span>.
+                </p>
+                <p className="text-surface-300 text-sm mt-2">
+                  For private login, your wallet role context must match the selected role.
+                </p>
+              </div>
+            )}
           </div>
         )}
 
@@ -831,6 +960,16 @@ export function UnifiedAuthFlow({
                 <p className="text-surface-400 text-xs mt-1">{getErrorAction(error).label}</p>
               </div>
             )}
+            {isZkRoleMismatch && (
+              <div className="mt-4 p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                <p className="text-amber-300 text-sm font-medium">
+                  This wallet is registered as <span className="capitalize">{detectedWeb3Role}</span>, not <span className="capitalize">{selectedRole}</span>.
+                </p>
+                <p className="text-surface-300 text-sm mt-2">
+                  Continue with the detected role to avoid private-login role mismatch.
+                </p>
+              </div>
+            )}
           </div>
         )}
 
@@ -860,6 +999,41 @@ export function UnifiedAuthFlow({
             <div className="flex justify-center py-4">
               <ConnectButton />
             </div>
+            {isUnregisteredUniversityWallet && (
+              <div className="mt-4 p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
+                <p className="text-red-300 text-sm font-medium">
+                  This wallet is not registered as a university by an admin.
+                </p>
+                <p className="text-surface-300 text-sm mt-2">
+                  Ask the admin to register and verify this institution wallet before attempting university login.
+                </p>
+                <p className="text-surface-400 text-xs mt-3">
+                  Contact admin: {ADMIN_CONTACT_EMAIL}
+                </p>
+              </div>
+            )}
+            {isWeb3RoleMismatch && (
+              <div className="mt-4 p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                <p className="text-amber-300 text-sm font-medium">
+                  This wallet is registered as <span className="capitalize">{detectedWeb3Role}</span>, not <span className="capitalize">{selectedRole}</span>.
+                </p>
+                <p className="text-surface-300 text-sm mt-2">
+                  For public Web3 login, your on-chain wallet role must match the selected role.
+                </p>
+              </div>
+            )}
+            {isUnregisteredEmployerWallet && (
+              <div className="mt-4 p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                <p className="text-blue-300 text-sm font-medium">
+                  This wallet is not registered as an employer yet.
+                </p>
+                <p className="text-surface-300 text-sm mt-2">
+                  {unifiedAuth.web3Auth.canRegisterAsEmployer
+                    ? 'Complete one-time employer registration to use standard Web3 login.'
+                    : 'Role detection returned no on-chain role. Continue to employer registration to complete public login setup.'}
+                </p>
+              </div>
+            )}
           </div>
         )}
 
@@ -882,10 +1056,30 @@ export function UnifiedAuthFlow({
       {/* Cancel Button (except on complete step) */}
       {currentStep !== 'complete' && onCancel && (
         <button
-          onClick={onCancel}
+          onClick={
+            isZkRoleMismatch || isWeb3RoleMismatch
+              ? handleProceedAsDetectedRole
+              : isUnregisteredUniversityWallet
+              ? handleProceedAsEmployer
+              : isUnregisteredEmployerWallet
+              ? handleRegisterAsEmployer
+              : onCancel
+          }
           className="w-full py-2 text-sm text-surface-400 hover:text-white transition-colors"
         >
-          Cancel
+          {isZkRoleMismatch || isWeb3RoleMismatch
+            ? `Continue as ${detectedWeb3Role === 'admin'
+                ? 'Admin'
+                : detectedWeb3Role === 'university'
+                ? 'University'
+                : detectedWeb3Role === 'student'
+                ? 'Student'
+                : 'Employer'} Role`
+            : isUnregisteredUniversityWallet
+            ? 'Proceed with Employer Role'
+            : isUnregisteredEmployerWallet
+            ? 'Register as Employer'
+            : 'Cancel'}
         </button>
       )}
     </div>

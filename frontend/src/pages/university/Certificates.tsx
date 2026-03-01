@@ -228,11 +228,11 @@ export function UniversityCertificates() {
       <div className="container mx-auto px-4 py-16 text-center">
         <h1 className="text-2xl font-bold text-white mb-4">Institution Not Registered</h1>
         <p className="text-surface-400 mb-6">
-          You must be a registered institution to view certificates.
+          This wallet is not an active admin-approved institution. Contact the platform admin for institution onboarding.
         </p>
-        <Link to="/university/register" className="btn-primary">
-          Register Institution
-        </Link>
+        <button onClick={() => navigate('/')} className="btn-secondary">
+          Back to Home
+        </button>
       </div>
     );
   }
