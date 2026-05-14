@@ -58,31 +58,4 @@ export interface RegisterInstitutionFormData {
  */
 export type TransactionStatus = 'idle' | 'pending' | 'confirming' | 'success' | 'error';
 
-/**
- * Generic API response wrapper
- */
-export interface ApiResponse<T> {
-  data: T | null;
-  error: string | null;
-  isLoading: boolean;
-}
-
-/**
- * Pagination parameters
- */
-export interface PaginationParams {
-  offset: number;
-  limit: number;
-}
-
-/**
- * Paginated response
- */
-export interface PaginatedResponse<T> {
-  items: T[];
-  total: number;
-  offset: number;
-  limit: number;
-  hasMore: boolean;
-}
 

@@ -31,9 +31,7 @@ export function ShareCertificateModal({
 
   // Show privacy modal when component opens
   useEffect(() => {
-    console.log('📂 ShareCertificateModal useEffect - isOpen:', isOpen, 'qrCodeData:', qrCodeData);
     if (isOpen && !qrCodeData) {
-      console.log('🔓 Opening privacy modal');
       setShowPrivacyModal(true);
     }
   }, [isOpen, qrCodeData]);
@@ -49,32 +47,23 @@ export function ShareCertificateModal({
   }, [isOpen]);
 
   const handlePrivacyConfirm = (settings: PrivacySettings) => {
-    console.log('🔐 Privacy settings confirmed:', settings);
-    console.log('📄 Certificate data:', certificate);
-    console.log('🏛️ University name:', universityName);
     
     setPrivacySettings(settings);
     
     // Generate QR code payload with privacy settings
     try {
       const payload = generateQRCodePayload(certificate, universityName, settings);
-      console.log('✅ QR payload generated:', payload);
       
       // Parse the payload for display
       const base64Part = payload.substring(3);
       const jsonString = atob(base64Part);
       const parsedPayload = JSON.parse(jsonString) as QRCodePayload;
-      console.log('📊 Parsed QR payload:', parsedPayload);
       
       // Set both states together
       setQRCodeData(payload);
       setQRPayload(parsedPayload);
       setQRCodeGenerated(true); // Mark as successfully generated
       
-      console.log('✅ QR code data set successfully');
-      console.log('📋 QR code string (first 100 chars):', payload.substring(0, 100));
-      console.log('📏 QR code length:', payload.length);
-      console.log('🔍 QR code full data:', payload);
     } catch (error) {
       console.error('❌ Failed to generate/parse QR payload:', error);
       console.error('Certificate:', certificate);
@@ -104,14 +93,12 @@ export function ShareCertificateModal({
     const svg = qrRef.current?.querySelector('svg');
     if (!svg) return;
 
-    console.log('📥 Downloading QR code...');
     
     // Get the actual QR code size
     const svgWidth = svg.getAttribute('width') || qrSize.toString();
     const svgHeight = svg.getAttribute('height') || qrSize.toString();
     const size = parseInt(svgWidth);
     
-    console.log('🔍 QR Code size:', { width: svgWidth, height: svgHeight, size });
 
     // Convert SVG to canvas with high resolution
     const canvas = document.createElement('canvas');
@@ -123,7 +110,6 @@ export function ShareCertificateModal({
     canvas.width = size * scale;
     canvas.height = size * scale;
     
-    console.log('🖼️ Canvas dimensions:', { width: canvas.width, height: canvas.height });
 
     const svgData = new XMLSerializer().serializeToString(svg);
     const img = new Image();
@@ -136,7 +122,6 @@ export function ShareCertificateModal({
       // Draw QR code at high resolution
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-      console.log('✅ QR code rendered to canvas');
 
       // Download as PNG with high quality
       canvas.toBlob((blob) => {
@@ -144,7 +129,6 @@ export function ShareCertificateModal({
           console.error('❌ Failed to create blob');
           return;
         }
-        console.log('💾 Blob created, size:', blob.size, 'bytes');
         
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -155,7 +139,6 @@ export function ShareCertificateModal({
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
         
-        console.log('✅ QR code downloaded successfully');
       }, 'image/png', 1.0); // Maximum quality
     };
 

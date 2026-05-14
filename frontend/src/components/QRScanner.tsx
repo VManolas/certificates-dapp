@@ -34,14 +34,11 @@ export function QRScanner({ onClose }: QRScannerProps) {
   );
 
   const handleScan = (result: string) => {
-    console.log('📱 QR code scanned:', result.substring(0, 50) + '...');
     
     // Check if it's a V1 data payload format
     if (result.startsWith('V1:')) {
       try {
-        console.log('🔍 Detected V1 payload format, decoding...');
         const payload = decodeQRCodePayload(result);
-        console.log('✅ Successfully decoded payload:', payload);
         setDecodedPayload(payload);
         setError(null);
         return;
@@ -66,7 +63,6 @@ export function QRScanner({ onClose }: QRScannerProps) {
             setError(tokenResult.reason || 'Invalid verification token');
             return;
           }
-          console.log('✅ Detected URL format with secure token');
           navigate(`/verify?v=${encodeURIComponent(decodedToken)}`);
           onClose();
           return;
@@ -74,7 +70,6 @@ export function QRScanner({ onClose }: QRScannerProps) {
 
         const hashParam = url.searchParams.get('hash');
         if (hashParam) {
-          console.log('✅ Detected URL format with document hash');
           navigate(`/verify?hash=${hashParam}`);
           onClose();
           return;
@@ -150,11 +145,6 @@ export function QRScanner({ onClose }: QRScannerProps) {
           // Get image data
           const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
           
-          console.log('🔍 QR Scanner: Processing image', {
-            width: canvas.width,
-            height: canvas.height,
-            fileName: file.name,
-          });
           
           // Try multiple decoding strategies for better success rate
           let code = null;
@@ -166,7 +156,6 @@ export function QRScanner({ onClose }: QRScannerProps) {
           
           // Strategy 2: Try inverted if first attempt failed
           if (!code) {
-            console.log('🔍 QR Scanner: Trying with inversion...');
             code = jsQR(imageData.data, imageData.width, imageData.height, {
               inversionAttempts: 'attemptBoth',
             });
@@ -174,14 +163,12 @@ export function QRScanner({ onClose }: QRScannerProps) {
           
           // Strategy 3: Try with only invert if still failed
           if (!code) {
-            console.log('🔍 QR Scanner: Trying inverted only...');
             code = jsQR(imageData.data, imageData.width, imageData.height, {
               inversionAttempts: 'invertFirst',
             });
           }
 
           if (code) {
-            console.log('✅ QR Scanner: QR code decoded successfully');
             handleScan(code.data);
           } else {
             console.error('❌ QR Scanner: No QR code found in image');

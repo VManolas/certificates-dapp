@@ -210,33 +210,4 @@ export function useBatchCertificateIssuance(): UseBatchCertificateIssuanceReturn
   };
 }
 
-/**
- * Hook for batch certificate issuance with success/error callbacks
- * 
- * @param onSuccess Callback when batch issuance succeeds
- * @param onError Callback when batch issuance fails
- * @returns {UseBatchCertificateIssuanceReturn} Batch issuance functions and state
- */
-export function useBatchCertificateIssuanceWithCallback(
-  onSuccess?: (transactionHash: `0x${string}`, certificateIds: bigint[]) => void,
-  onError?: (error: Error) => void
-): UseBatchCertificateIssuanceReturn {
-  const batchIssuance = useBatchCertificateIssuance();
-
-  // Call onSuccess when successful
-  useMemo(() => {
-    if (batchIssuance.isSuccess && batchIssuance.transactionHash && onSuccess) {
-      onSuccess(batchIssuance.transactionHash, batchIssuance.certificateIds);
-    }
-  }, [batchIssuance.isSuccess, batchIssuance.transactionHash, batchIssuance.certificateIds, onSuccess]);
-
-  // Call onError when failed
-  useMemo(() => {
-    if (batchIssuance.error && onError) {
-      onError(new Error(batchIssuance.error));
-    }
-  }, [batchIssuance.error, onError]);
-
-  return batchIssuance;
-}
 

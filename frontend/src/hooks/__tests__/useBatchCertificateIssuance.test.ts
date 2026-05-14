@@ -3,7 +3,6 @@ import { act, renderHook } from '@testing-library/react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   useBatchCertificateIssuance,
-  useBatchCertificateIssuanceWithCallback,
   type BatchCertificateData,
 } from '@/hooks/useBatchCertificateIssuance';
 import { useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
@@ -344,105 +343,5 @@ describe('useBatchCertificateIssuance', () => {
 
     expect(result.current.transactionPhase).toBe('idle');
     expect(writeState.reset).toHaveBeenCalledTimes(1);
-  });
-});
-
-// ─────────────────────────────────────────────────────────────
-// useBatchCertificateIssuanceWithCallback
-// ─────────────────────────────────────────────────────────────
-
-describe('useBatchCertificateIssuanceWithCallback', () => {
-  let writeState: {
-    data: `0x${string}` | undefined;
-    writeContractAsync: ReturnType<typeof vi.fn>;
-    isPending: boolean;
-    error: Error | null;
-    reset: ReturnType<typeof vi.fn>;
-  };
-  let receiptState: {
-    isSuccess: boolean;
-    data: { logs: { topics: string[] }[] } | undefined;
-    error: Error | null;
-  };
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.useFakeTimers();
-
-    writeState = {
-      data: '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' as `0x${string}`,
-      writeContractAsync: vi.fn(),
-      isPending: false,
-      error: null,
-      reset: vi.fn(),
-    };
-
-    receiptState = {
-      isSuccess: true,
-      data: {
-        logs: [
-          {
-            topics: [
-              '0xevent_sig',
-              '0x0000000000000000000000000000000000000000000000000000000000000003',
-            ],
-          },
-        ],
-      },
-      error: null,
-    };
-
-    mockUseWriteContract.mockImplementation(() => writeState);
-    mockUseWaitForTransactionReceipt.mockImplementation(() => receiptState);
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  it('fires onSuccess with transaction hash and extracted certificateIds', () => {
-    const onSuccess = vi.fn();
-    renderHook(() => useBatchCertificateIssuanceWithCallback(onSuccess));
-
-    act(() => { vi.advanceTimersByTime(1200); });
-
-    expect(onSuccess).toHaveBeenCalledWith(
-      '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
-      [3n]
-    );
-  });
-
-  it('does not fire onSuccess when transaction has not yet confirmed', () => {
-    receiptState.isSuccess = false;
-    receiptState.data = undefined;
-    mockUseWaitForTransactionReceipt.mockImplementation(() => receiptState);
-
-    const onSuccess = vi.fn();
-    renderHook(() => useBatchCertificateIssuanceWithCallback(onSuccess));
-
-    act(() => { vi.advanceTimersByTime(2000); });
-
-    expect(onSuccess).not.toHaveBeenCalled();
-  });
-
-  it('fires onError callback when writeError occurs', () => {
-    writeState.data = undefined;
-    writeState.error = new Error('execution reverted');
-    receiptState.isSuccess = false;
-    receiptState.data = undefined;
-    mockUseWriteContract.mockImplementation(() => writeState);
-    mockUseWaitForTransactionReceipt.mockImplementation(() => receiptState);
-
-    const onError = vi.fn();
-    renderHook(() => useBatchCertificateIssuanceWithCallback(undefined, onError));
-
-    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: 'execution reverted' }));
-  });
-
-  it('does not require either callback to be provided', () => {
-    expect(() => {
-      renderHook(() => useBatchCertificateIssuanceWithCallback());
-      act(() => { vi.advanceTimersByTime(1200); });
-    }).not.toThrow();
   });
 });

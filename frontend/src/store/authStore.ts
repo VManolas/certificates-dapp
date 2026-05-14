@@ -132,11 +132,6 @@ export const useAuthStore = create<AuthState>()(
         set((state) => {
           // If address changes (including disconnect), reset ALL auth state
           if (address !== state.address) {
-            console.log('🔄 Address changed in store, resetting auth state', {
-              from: state.address,
-              to: address,
-              previousRole: state.role,
-            });
             return {
               address,
               role: null,

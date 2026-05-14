@@ -1,7 +1,6 @@
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  useCertificateByHash,
   useCertificateDetails,
   useCertificateVerification,
 } from '@/hooks/useCertificateVerification';
@@ -164,18 +163,4 @@ describe('certificate detail hooks', () => {
     expect(result.current.certificate).toEqual(certificate);
   });
 
-  it('returns certificate details by hash', () => {
-    const certificate = { certificateId: 9n, studentWallet: '0x2' };
-    mockUseReadContract.mockReturnValue({
-      data: certificate,
-      isLoading: false,
-      error: null,
-      refetch: vi.fn(),
-    });
-
-    const { result } = renderHook(() =>
-      useCertificateByHash('0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
-    );
-    expect(result.current.certificate).toEqual(certificate);
-  });
 });

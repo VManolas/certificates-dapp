@@ -126,7 +126,6 @@ export function Layout() {
   useEffect(() => {
     // Skip role detection during logout cooldown to prevent conflicts with stale data
     if (unifiedAuth.authContextResolving) {
-      console.log('⏸️ Skipping role detection while auth context resolves');
       return;
     }
 

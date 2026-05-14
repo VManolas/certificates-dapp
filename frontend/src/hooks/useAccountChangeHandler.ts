@@ -28,12 +28,6 @@ export function useAccountChangeHandler() {
 
   // Log connection state changes for debugging
   useEffect(() => {
-    console.log('🔌 Connection state:', {
-      isConnected,
-      address,
-      connector: connector?.name,
-      previousAddress: previousAddressRef.current,
-    });
   }, [isConnected, address, connector]);
 
   useEffect(() => {
@@ -51,11 +45,6 @@ export function useAccountChangeHandler() {
       previousAddressRef.current &&
       previousAddressRef.current !== address
     ) {
-      console.log('🔄 Account changed detected:', {
-        from: previousAddressRef.current,
-        to: address,
-        connector: connector?.name,
-      });
 
       // Clear auth store
       resetAuthStore();
@@ -63,13 +52,10 @@ export function useAccountChangeHandler() {
       // Clear React Query cache
       if (window.queryClient) {
         window.queryClient.clear();
-        console.log('🧹 React Query cache cleared');
       }
 
       localStorage.removeItem(ZKCREDENTIALS_AUTH_STORAGE_KEY);
-      console.log('🧹 localStorage cleared');
 
-      console.log('🔄 Redirecting to home page and reloading...');
 
       // Navigate to home page
       navigate('/', { replace: true });
@@ -91,10 +77,8 @@ export function useAccountChangeHandler() {
   // Handle disconnection
   useEffect(() => {
     if (!isConnected && previousAddressRef.current) {
-      console.log('👋 Wallet disconnected');
       
       localStorage.removeItem(ZKCREDENTIALS_AUTH_STORAGE_KEY);
-      console.log('🧹 localStorage cleared on disconnect');
       
       // Clear auth store (after localStorage to prevent re-persist)
       resetAuthStore();
@@ -102,7 +86,6 @@ export function useAccountChangeHandler() {
       // Clear React Query cache
       if (window.queryClient) {
         window.queryClient.clear();
-        console.log('🧹 React Query cache cleared on disconnect');
       }
       
       previousAddressRef.current = undefined;

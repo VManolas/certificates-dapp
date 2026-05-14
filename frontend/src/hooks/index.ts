@@ -14,7 +14,6 @@
 export {
   useCertificateIssuance,
   useCertificateIssuanceWithCallback,
-  useCertificateIssuanceWithDuplicateCheck,
   type IssueCertificateParams,
   type UseCertificateIssuanceReturn,
 } from './useCertificateIssuance';
@@ -22,7 +21,6 @@ export {
 // Batch Certificate Issuance
 export {
   useBatchCertificateIssuance,
-  useBatchCertificateIssuanceWithCallback,
   type BatchCertificateData,
   type UseBatchCertificateIssuanceReturn,
 } from './useBatchCertificateIssuance';
@@ -31,9 +29,7 @@ export {
 export {
   useCertificateVerification,
   useCertificateDetails,
-  useCertificateByHash,
   useStudentCertificates,
-  useCertificateExists,
   useHashExists,
   useCertificatesBatch,
   type UseCertificateVerificationReturn,
@@ -49,24 +45,12 @@ export type { ContractVerificationResult as CertificateVerificationResult } from
 export {
   useRegisterUniversity,
   useIsInstitution,
-  useApproveInstitution,
-  useDeactivateInstitution,
 } from './useInstitutionRegistry';
 
 // Contract Versioning
 export {
-  useCertificateRegistryVersion,
-  useInstitutionRegistryVersion,
-  useCertificateRegistryUpgradeHistory,
-  useInstitutionRegistryUpgradeHistory,
   useContractVersions,
 } from './useContractVersion';
-
-// User Role Detection
-export {
-  useUserRoles,
-  type DetectedRoles,
-} from './useUserRoles';
 
 // Certificate Revocation
 export {

@@ -48,12 +48,6 @@ export async function generatePDFHash(file: File): Promise<HashResult> {
   const wordArray = CryptoJS.lib.WordArray.create(arrayBuffer as unknown as number[]);
   const hash = CryptoJS.SHA256(wordArray).toString();
 
-  console.log('🔐 PDF HASH GENERATION:', {
-    fileName: file.name,
-    fileSize: file.size,
-    hashGenerated: `0x${hash}`,
-    arrayBufferSize: arrayBuffer.byteLength,
-  });
 
   // Get page count using PDF.js
   let pageCount = 0;

@@ -1,4 +1,4 @@
-import { useWriteContract, useWaitForTransactionReceipt, useReadContract } from 'wagmi';
+import { useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { decodeEventLog } from 'viem';
 import { useMemo, useEffect, useRef, useState } from 'react';
 import { CERTIFICATE_REGISTRY_ADDRESS } from '@/lib/wagmi';
@@ -315,73 +315,4 @@ export function useCertificateIssuanceWithCallback(
   return hook;
 }
 
-/**
- * Hook with duplicate check support for certificate issuance
- * Uses the hashExists helper function for client-side validation
- * 
- * @param documentHash - The document hash to check for duplicates
- * @param enabled - Whether duplicate checking should be enabled
- * 
- * @example
- * ```tsx
- * const [pdfHash, setPdfHash] = useState<`0x${string}`>();
- * const { 
- *   issueCertificate, 
- *   isPending, 
- *   isDuplicate, 
- *   isCheckingDuplicate,
- *   error 
- * } = useCertificateIssuanceWithDuplicateCheck(pdfHash);
- * 
- * if (isDuplicate) {
- *   return <Alert variant="warning">This certificate has already been issued!</Alert>;
- * }
- * 
- * return (
- *   <Button 
- *     onClick={() => issueCertificate({ documentHash: pdfHash!, studentWallet, metadataURI })}
- *     disabled={isPending || isCheckingDuplicate || isDuplicate}
- *   >
- *     {isCheckingDuplicate ? 'Checking...' : 'Issue Certificate'}
- *   </Button>
- * );
- * ```
- */
-export function useCertificateIssuanceWithDuplicateCheck(
-  documentHash: `0x${string}` | undefined,
-  enabled: boolean = true
-): UseCertificateIssuanceReturn & {
-  isDuplicate: boolean | undefined;
-  isCheckingDuplicate: boolean;
-  duplicateCheckError: Error | null;
-} {
-  const hook = useCertificateIssuance();
-  
-  // Check for duplicate hash
-  const { 
-    data: exists, 
-    isLoading: isCheckingDuplicate, 
-    error: duplicateCheckError,
-  } = useReadContract({
-    address: CERTIFICATE_REGISTRY_ADDRESS,
-    abi: CertificateRegistryABI.abi,
-    functionName: 'hashExists',
-    args: documentHash ? [documentHash] : undefined,
-    query: {
-      enabled: !!documentHash && !!CERTIFICATE_REGISTRY_ADDRESS && enabled,
-    },
-  });
-
-  // Normalize duplicate check error
-  const normalizedDuplicateError = duplicateCheckError 
-    ? (duplicateCheckError instanceof Error ? duplicateCheckError : new Error(String(duplicateCheckError)))
-    : null;
-
-  return {
-    ...hook,
-    isDuplicate: exists as boolean | undefined,
-    isCheckingDuplicate,
-    duplicateCheckError: normalizedDuplicateError,
-  };
-}
 

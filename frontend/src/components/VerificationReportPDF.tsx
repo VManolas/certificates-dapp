@@ -150,13 +150,6 @@ export function VerificationReportPDF({
   // Only show student section if at least one piece of student info is provided
   const hasStudentInfo = Boolean(studentWallet) || Boolean(studentInitials);
   
-  console.log('📄 PDF Generation - Privacy Check:', {
-    studentWallet,
-    studentInitials,
-    hasStudentInfo,
-    includeWalletInPDF: Boolean(studentWallet),
-    includeInitialsInPDF: Boolean(studentInitials),
-  });
 
   return (
     <Document>

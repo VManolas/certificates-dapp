@@ -93,19 +93,6 @@ export function useCertificateVerification(
       }
     : undefined;
 
-  // 🔍 DEBUG LOGGING - Certificate Verification
-  if (documentHash && data !== undefined) {
-    console.log('🔍 VERIFICATION DEBUG:', {
-      documentHash,
-      rawData: data,
-      validatedData,
-      verificationResult,
-      isValid: verificationResult?.isValid,
-      certificateId: verificationResult?.certificateId?.toString(),
-      isRevoked: verificationResult?.isRevoked,
-    });
-  }
-
   // Log validation failures
   if (data && !validatedData) {
     logger.error('Certificate verification data validation failed', undefined, { data });
@@ -229,53 +216,6 @@ export function useCertificateDetails(
 }
 
 /**
- * Hook to get certificate details by document hash
- * 
- * @param documentHash - SHA-256 hash of the PDF document
- * @param enabled - Whether the query should be enabled (default: true if hash is provided)
- * 
- * @example
- * ```tsx
- * const { certificate, isLoading } = useCertificateByHash('0x123...');
- * ```
- */
-export function useCertificateByHash(
-  documentHash: `0x${string}` | undefined,
-  enabled: boolean = true
-): UseCertificateDetailsReturn {
-  const { 
-    data, 
-    isLoading, 
-    error,
-    refetch: refetchQuery
-  } = useReadContract({
-    address: CERTIFICATE_REGISTRY_ADDRESS,
-    abi: CertificateRegistryABI.abi,
-    functionName: 'getCertificateByHash',
-    args: documentHash ? [documentHash] : undefined,
-    query: {
-      enabled: !!documentHash && !!CERTIFICATE_REGISTRY_ADDRESS && enabled,
-    },
-  });
-
-  const refetch = () => {
-    refetchQuery();
-  };
-
-  // Normalize error to proper Error type
-  const normalizedError = error 
-    ? (error instanceof Error ? error : new Error(String(error)))
-    : null;
-
-  return {
-    certificate: data as CertificateDetails | undefined,
-    isLoading,
-    error: normalizedError,
-    refetch,
-  };
-}
-
-/**
  * Hook to get all certificate IDs for a student
  * 
  * @param studentWallet - The wallet address of the student
@@ -329,62 +269,6 @@ export function useStudentCertificates(
 
   return {
     certificateIds: data as readonly bigint[] | undefined,
-    isLoading,
-    error: normalizedError,
-    refetch,
-  };
-}
-
-/**
- * Hook to check if a certificate exists (non-reverting)
- * 
- * @param certificateId - The ID of the certificate to check
- * @param enabled - Whether the query should be enabled (default: true if ID is provided)
- * 
- * @example
- * ```tsx
- * const { exists, isLoading } = useCertificateExists(123n);
- * 
- * if (exists) {
- *   return <Badge>Certificate Found</Badge>;
- * }
- * ```
- */
-export function useCertificateExists(
-  certificateId: bigint | undefined,
-  enabled: boolean = true
-): {
-  exists: boolean | undefined;
-  isLoading: boolean;
-  error: Error | null;
-  refetch: () => void;
-} {
-  const { 
-    data, 
-    isLoading, 
-    error,
-    refetch: refetchQuery
-  } = useReadContract({
-    address: CERTIFICATE_REGISTRY_ADDRESS,
-    abi: CertificateRegistryABI.abi,
-    functionName: 'certificateExists',
-    args: certificateId !== undefined ? [certificateId] : undefined,
-    query: {
-      enabled: certificateId !== undefined && !!CERTIFICATE_REGISTRY_ADDRESS && enabled,
-    },
-  });
-
-  const refetch = () => {
-    refetchQuery();
-  };
-
-  // Normalize error to proper Error type
-  const normalizedError = error 
-    ? (error instanceof Error ? error : new Error(String(error)))
-    : null;
-
-  return {
-    exists: data as boolean | undefined,
     isLoading,
     error: normalizedError,
     refetch,

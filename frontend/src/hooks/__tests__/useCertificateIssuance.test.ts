@@ -3,15 +3,13 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   useCertificateIssuance,
   useCertificateIssuanceWithCallback,
-  useCertificateIssuanceWithDuplicateCheck,
 } from '@/hooks/useCertificateIssuance';
-import { useWaitForTransactionReceipt, useWriteContract, useReadContract } from 'wagmi';
+import { useWaitForTransactionReceipt, useWriteContract } from 'wagmi';
 import { decodeEventLog } from 'viem';
 
 vi.mock('wagmi', () => ({
   useWriteContract: vi.fn(),
   useWaitForTransactionReceipt: vi.fn(),
-  useReadContract: vi.fn(),
 }));
 
 vi.mock('viem', () => ({
@@ -24,7 +22,6 @@ vi.mock('@/lib/wagmi', () => ({
 
 const mockUseWriteContract = useWriteContract as ReturnType<typeof vi.fn>;
 const mockUseWaitForTransactionReceipt = useWaitForTransactionReceipt as ReturnType<typeof vi.fn>;
-const mockUseReadContract = useReadContract as ReturnType<typeof vi.fn>;
 const mockDecodeEventLog = decodeEventLog as ReturnType<typeof vi.fn>;
 
 describe('useCertificateIssuance', () => {
@@ -263,133 +260,5 @@ describe('useCertificateIssuanceWithCallback', () => {
     rerender();
 
     expect(onError).toHaveBeenCalledTimes(1);
-  });
-});
-
-// ─────────────────────────────────────────────────────────────
-// useCertificateIssuanceWithDuplicateCheck
-// ─────────────────────────────────────────────────────────────
-
-describe('useCertificateIssuanceWithDuplicateCheck', () => {
-  let writeState: any;
-  let receiptState: any;
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.useFakeTimers();
-
-    writeState = {
-      data: undefined,
-      writeContractAsync: vi.fn(),
-      isPending: false,
-      error: null,
-      reset: vi.fn(),
-    };
-
-    receiptState = {
-      isSuccess: false,
-      data: undefined,
-      error: null,
-    };
-
-    mockUseWriteContract.mockImplementation(() => writeState);
-    mockUseWaitForTransactionReceipt.mockImplementation(() => receiptState);
-    mockUseReadContract.mockImplementation(() => ({
-      data: undefined,
-      isLoading: false,
-      error: null,
-    }));
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  it('returns isDuplicate=false when hashExists returns false', () => {
-    mockUseReadContract.mockImplementation(() => ({
-      data: false,
-      isLoading: false,
-      error: null,
-    }));
-
-    const { result } = renderHook(() =>
-      useCertificateIssuanceWithDuplicateCheck(
-        '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
-      )
-    );
-
-    expect(result.current.isDuplicate).toBe(false);
-    expect(result.current.isCheckingDuplicate).toBe(false);
-  });
-
-  it('returns isDuplicate=true when hashExists returns true', () => {
-    mockUseReadContract.mockImplementation(() => ({
-      data: true,
-      isLoading: false,
-      error: null,
-    }));
-
-    const { result } = renderHook(() =>
-      useCertificateIssuanceWithDuplicateCheck(
-        '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
-      )
-    );
-
-    expect(result.current.isDuplicate).toBe(true);
-  });
-
-  it('returns isCheckingDuplicate=true while hashExists query is loading', () => {
-    mockUseReadContract.mockImplementation(() => ({
-      data: undefined,
-      isLoading: true,
-      error: null,
-    }));
-
-    const { result } = renderHook(() =>
-      useCertificateIssuanceWithDuplicateCheck(
-        '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
-      )
-    );
-
-    expect(result.current.isCheckingDuplicate).toBe(true);
-    expect(result.current.isDuplicate).toBeUndefined();
-  });
-
-  it('returns isDuplicate=undefined when no documentHash is provided', () => {
-    const { result } = renderHook(() =>
-      useCertificateIssuanceWithDuplicateCheck(undefined)
-    );
-
-    expect(result.current.isDuplicate).toBeUndefined();
-    expect(result.current.isCheckingDuplicate).toBe(false);
-  });
-
-  it('surfaces a duplicateCheckError when the read fails', () => {
-    mockUseReadContract.mockImplementation(() => ({
-      data: undefined,
-      isLoading: false,
-      error: new Error('RPC error'),
-    }));
-
-    const { result } = renderHook(() =>
-      useCertificateIssuanceWithDuplicateCheck(
-        '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
-      )
-    );
-
-    expect(result.current.duplicateCheckError).toBeInstanceOf(Error);
-    expect(result.current.duplicateCheckError?.message).toBe('RPC error');
-  });
-
-  it('still exposes the base issuance API alongside duplicate check fields', () => {
-    const { result } = renderHook(() =>
-      useCertificateIssuanceWithDuplicateCheck(
-        '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
-      )
-    );
-
-    expect(typeof result.current.issueCertificate).toBe('function');
-    expect(typeof result.current.reset).toBe('function');
-    expect(result.current.transactionPhase).toBe('idle');
   });
 });

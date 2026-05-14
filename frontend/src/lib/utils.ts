@@ -26,35 +26,6 @@ export function debounce<T extends (...args: any[]) => any>(
 }
 
 /**
- * Format wallet address for display (truncate middle)
- */
-export function formatAddress(address: string, chars = 4): string {
-  if (!address) return '';
-  if (address.length < chars * 2 + 2) return address;
-  return `${address.slice(0, chars + 2)}...${address.slice(-chars)}`;
-}
-
-/**
- * Copy text to clipboard
- */
-export async function copyToClipboard(text: string): Promise<boolean> {
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch (err) {
-    console.error('Failed to copy:', err);
-    return false;
-  }
-}
-
-/**
- * Format number with commas
- */
-export function formatNumber(num: number | bigint): string {
-  return num.toLocaleString();
-}
-
-/**
  * Sleep function for delays
  */
 export function sleep(ms: number): Promise<void> {

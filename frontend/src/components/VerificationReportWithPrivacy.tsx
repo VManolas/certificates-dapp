@@ -51,12 +51,6 @@ export function VerificationReportWithPrivacy({
   const issueDateTime = new Date(Number(issueDate) * 1000);
   
   const handlePrivacyConfirm = async (settings: PrivacySettings) => {
-    console.log('🔐 Privacy settings confirmed for report:', settings);
-    console.log('📄 Original studentWallet:', studentWallet);
-    console.log('📄 Will include wallet?', settings.includeWallet);
-    console.log('📄 Wallet to pass:', settings.includeWallet ? studentWallet : undefined);
-    console.log('📄 Will include initials?', settings.includeInitials);
-    console.log('📄 Initials to pass:', settings.includeInitials ? settings.initials : undefined);
     
     setPrivacySettings(settings);
     setShowPrivacyModal(false);

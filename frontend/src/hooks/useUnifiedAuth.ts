@@ -209,26 +209,19 @@ export function useUnifiedAuth(): UnifiedAuthState {
   useEffect(() => {
     // Detect disconnection (was connected, now disconnected)
     if (prevConnectedRef.current && !isConnected) {
-      console.log('🧹 [useUnifiedAuth] Wallet disconnected, clearing role cache and redirecting to home');
 
       clearWalletScopedAuthState();
 
       // Redirect to home page
       navigate('/', { replace: true });
       
-      console.log('🧹 [useUnifiedAuth] Cache cleared, auth state cleared, and redirected to home');
     }
     
     // Detect address change while still connected (MetaMask account switch)
     if (prevAddressRef.current && address && prevAddressRef.current !== address) {
-      console.log('🔄 [useUnifiedAuth] Address changed, clearing role cache', {
-        from: prevAddressRef.current.slice(0, 8),
-        to: address.slice(0, 8),
-      });
       
       clearWalletScopedAuthState();
       
-      console.log('🔄 [useUnifiedAuth] Cache cleared for new address');
     }
     
     // Update previous state
@@ -267,45 +260,25 @@ export function useUnifiedAuth(): UnifiedAuthState {
   
   // Auto-select auth method based on preference, role restrictions, and detection
   useEffect(() => {
-    console.log('🔄 [useUnifiedAuth] Auto-select effect triggered', {
-      isConnected,
-      address: address ? `${address.slice(0, 6)}...${address.slice(-4)}` : null,
-      authMethod,
-      role,
-      'userRoles.primaryRole': userRoles.primaryRole,
-      'userRoles.isLoading': userRoles.isLoading,
-      'userRoles.isUniversity': userRoles.isUniversity,
-      'userRoles.isStudent': userRoles.isStudent,
-      'userRoles.isEmployer': userRoles.isEmployer,
-      isAuthenticated,
-      preSelectedRole,
-      preferredAuthMethod,
-      allowedAuthMethods,
-    });
     
     if (!isConnected || !address) {
-      console.log('⏹️ [useUnifiedAuth] Not connected, skipping');
       return;
     }
     
     // Wait for role detection to complete
     if (userRoles.isLoading) {
-      console.log('⏳ [useUnifiedAuth] Waiting for role detection to complete...');
       return;
     }
 
     // Prevent immediate re-login after explicit logout while wallet remains connected.
     if (isLogoutCooldown) {
-      console.log('⏸️ [useUnifiedAuth] Logout cooldown active, skipping auto-select');
       return;
     }
 
     if (requiresManualAuthSelection) {
-      console.log('⏸️ [useUnifiedAuth] Manual auth selection required, skipping auto-select');
       return;
     }
     
-    console.log('✅ [useUnifiedAuth] Role detection complete, proceeding with auto-select logic');
     
     // CRITICAL: Block authentication for suspended universities
     // This prevents signature requests before SuspensionGuard disconnects the wallet
@@ -392,11 +365,6 @@ export function useUnifiedAuth(): UnifiedAuthState {
     
     // Auto-select if only one method is allowed (for admin/university)
     if (!authMethod && allowedAuthMethods.length === 1) {
-      console.log('🎯 [useUnifiedAuth] Auto-selecting single allowed method', { 
-        method: allowedAuthMethods[0],
-        role: userRoles.primaryRole,
-        allowed: allowedAuthMethods 
-      });
       logger.info('Auto-selecting only available auth method', { 
         method: allowedAuthMethods[0],
         role: userRoles.primaryRole,
@@ -406,7 +374,6 @@ export function useUnifiedAuth(): UnifiedAuthState {
       
       // If auto-selected method is Web3 and user has role, auto-authenticate
       if (allowedAuthMethods[0] === 'web3' && userRoles.primaryRole) {
-        console.log('🔐 [useUnifiedAuth] Auto-authenticating with Web3 role', { role: userRoles.primaryRole });
         logger.info('Auto-authenticating with Web3 role', { role: userRoles.primaryRole });
         setRole(userRoles.primaryRole);
       }
@@ -418,17 +385,10 @@ export function useUnifiedAuth(): UnifiedAuthState {
     // and we have a detected role, set it now
     if (authMethod === 'web3' && !role && userRoles.primaryRole) {
       logger.info('🔧 Setting role for Web3 auth method', { role: userRoles.primaryRole });
-      console.log('🔧 [useUnifiedAuth] Setting role for Web3:', userRoles.primaryRole);
       setRole(userRoles.primaryRole);
       return;
     }
     
-    console.log('🏁 [useUnifiedAuth] End of auto-select logic', {
-      authMethod,
-      role,
-      'userRoles.primaryRole': userRoles.primaryRole,
-      isAuthenticated,
-    });
     
     // ONLY show auth method selector when user has a CHOICE
     // 1. User connects wallet for the first time (no authMethod set)

@@ -181,17 +181,6 @@ export function Verify() {
   // 🔍 DEBUG: Log verification state changes
   useEffect(() => {
     if (hashResult) {
-      console.log('🔍 VERIFY PAGE STATE:', {
-        state,
-        hashResult: hashResult.hash,
-        isValid,
-        isRevoked,
-        certificateId: certificateId?.toString(),
-        isVerifying,
-        verifyError: verifyError?.message,
-        verificationId,
-        verificationTimestamp: verificationTimestamp?.toISOString(),
-      });
     }
   }, [state, hashResult, isValid, isRevoked, certificateId, isVerifying, verifyError, verificationId, verificationTimestamp]);
 
@@ -227,7 +216,6 @@ export function Verify() {
   useEffect(() => {
     if (state === 'verifying' && !isVerifying && !isCheckingHash) {
       if (isValid !== undefined || verifyError) {
-        console.log('✅ Verification complete, transitioning to complete state');
         setState('complete');
       }
     }
@@ -274,7 +262,6 @@ export function Verify() {
     setFile(selectedFile);
     setHasLoggedVerification(false); // Reset logging flag
 
-    console.log('🔄 VERIFICATION RESET - Starting new verification for:', selectedFile.name);
 
     // Validate file before processing
     const validation = validatePdfFile(selectedFile);
