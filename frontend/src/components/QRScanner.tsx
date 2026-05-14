@@ -1,5 +1,5 @@
 // src/components/QRScanner.tsx
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import { Scanner } from '@yudiel/react-qr-scanner';
 import { useNavigate } from 'react-router-dom';
 import jsQR from 'jsqr';

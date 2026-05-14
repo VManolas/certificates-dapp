@@ -12,7 +12,7 @@ describe('RoleBadge', () => {
   it('renders correct icon and label for each role', () => {
     const roles = ['admin', 'university', 'student', 'employer'] as const;
     const expectedLabels = ['Admin', 'University', 'Student', 'Employer'];
-    const expectedIcons = ['🛡️', '🎓', '📜', '🔍'];
+    const expectedIcons = ['👔', '🏛️', '🎓', '💼'];
 
     roles.forEach((role, index) => {
       const { unmount } = render(<RoleBadge role={role} />);
@@ -54,7 +54,7 @@ describe('RoleBadge', () => {
 
   it('applies grayscale to icon when disabled', () => {
     render(<RoleBadge role="admin" disabled={true} showIcon={true} />);
-    const iconSpan = screen.getByText('🛡️');
+    const iconSpan = screen.getByText('👔');
     expect(iconSpan).toHaveClass('grayscale');
   });
 
@@ -77,7 +77,7 @@ describe('RoleBadge', () => {
 
   it('hides icon when showIcon is false', () => {
     render(<RoleBadge role="admin" showIcon={false} />);
-    expect(screen.queryByText('🛡️')).not.toBeInTheDocument();
+    expect(screen.queryByText('👔')).not.toBeInTheDocument();
     expect(screen.getByText('Admin')).toBeInTheDocument();
   });
 

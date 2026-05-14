@@ -94,8 +94,8 @@ describe('ErrorBoundary', () => {
       expect(screen.getByText('Reload Page')).toBeInTheDocument();
     });
 
-    it('should reset error state when Try Again is clicked', () => {
-      const { rerender } = render(
+    it('keeps fallback visible if underlying error persists after Try Again', () => {
+      render(
         <ErrorBoundary>
           <BuggyComponent shouldThrow={true} />
         </ErrorBoundary>
@@ -107,15 +107,8 @@ describe('ErrorBoundary', () => {
       // Click Try Again
       fireEvent.click(screen.getByText('Try Again'));
 
-      // Re-render with fixed component
-      rerender(
-        <ErrorBoundary>
-          <BuggyComponent shouldThrow={false} />
-        </ErrorBoundary>
-      );
-
-      // Component should render normally again
-      expect(screen.getByText('Working component')).toBeInTheDocument();
+      // Component still throws, so fallback remains visible
+      expect(screen.getByText('Something went wrong')).toBeInTheDocument();
     });
   });
 

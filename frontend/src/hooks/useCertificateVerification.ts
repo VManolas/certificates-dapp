@@ -77,9 +77,8 @@ export function useCertificateVerification(
       refetchOnReconnect: true,
       retry: 3, // Retry failed queries
       retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
-      
-      // Unique query key to force fresh blockchain query
-      queryKey: ['certificate-verification', documentHash, verificationId] as const,
+      // queryKey is controlled by wagmi for useReadContract (see QueryParameter type); rely on
+      // staleTime/gcTime/refetchOnMount instead of a custom key plus verificationId identity.
     },
   });
 

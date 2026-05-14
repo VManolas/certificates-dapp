@@ -52,27 +52,37 @@ zkCredentials is a decentralized platform for issuing, managing, and verifying e
 - MetaMask or compatible Web3 wallet
 - (Optional) Testnet ETH for Sepolia deployment
 
-### Quick Start - Localhost Development
+### Quick Start - Local Development
 
-**Automated setup (recommended):**
+**Recommended: Hardhat local (`localHardhat`, chain `1337`)**
 
 ```bash
-# 1. Run quick start script
-./quick-start.sh
-
-# 2. Start Hardhat node (Terminal 1)
+# Terminal 1: start Hardhat local node
 cd contracts && npx hardhat node
 
-# 3. Deploy and auto-configure (Terminal 2)
-./deploy-and-configure.sh
+# Terminal 2: deploy and auto-configure frontend/.env.local
+cd contracts && npm run deploy:local
 
-# 4. Start frontend (Terminal 3)
+# Terminal 3: start frontend
 cd frontend && npm run dev
 ```
 
 **Your app will be running at http://localhost:5173** 🎉
 
-> 📖 **See [SETUP_CHECKLIST.md](SETUP_CHECKLIST.md) for detailed verification steps**
+**Alternative local modes**
+
+```bash
+# zkSync in-memory node (anvil-zksync, chain 260)
+cd contracts && npm run node:local:zksync
+cd contracts && npm run deploy:local:zksync
+
+# zkSync docker local L2 (chain 270)
+cd contracts && npm run deploy:local:docker
+```
+
+> 📖 **See [docs/SETUP_CHECKLIST.md](docs/SETUP_CHECKLIST.md) for detailed verification steps**
+>
+> 📚 **Documentation index:** See [docs/README.md](docs/README.md) for the current authoritative guides and the historical-docs policy.
 
 > ⚠️ **Development Mode**: The app includes a visual "Development Mode" indicator showing that ZK authentication is running with simplified proofs for testing. See [frontend/DEVELOPMENT_MODE.md](frontend/DEVELOPMENT_MODE.md) for details.
 
@@ -93,7 +103,7 @@ npm install
 
 ### Configuration
 
-**For Localhost (Development):**
+**For `localHardhat` (Development):**
 ```bash
 # Contracts - Use test private key
 cd contracts
@@ -101,10 +111,9 @@ cat > .env << 'EOF'
 DEPLOYER_PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 EOF
 
-# Frontend - Configure for localhost
+# Frontend
 cd ../frontend
-# Will be auto-configured by ./deploy-and-configure.sh
-# Or manually set VITE_CHAIN_ID=1337
+# Will be auto-configured by `cd ../contracts && npm run deploy:local`
 ```
 
 **For Sepolia Testnet:**
@@ -123,7 +132,7 @@ VITE_CHAIN_ID=300
 EOF
 ```
 
-> 📖 **See [ENVIRONMENT_SETUP.md](ENVIRONMENT_SETUP.md) for switching between environments**
+> 📖 **See [docs/ENVIRONMENT_SETUP.md](docs/ENVIRONMENT_SETUP.md) for switching between environments**
 
 ### Development
 
@@ -136,7 +145,7 @@ npm run compile
 npm test
 
 # Deploy to testnet
-npm run deploy:testnet
+npm run deploy:staging
 
 # Start frontend
 cd ../frontend
@@ -355,4 +364,3 @@ Contributions are welcome! Please read our contributing guidelines before submit
 - [zkSync Era Documentation](https://docs.zksync.io/)
 - [OpenZeppelin Contracts](https://docs.openzeppelin.com/contracts/)
 - [wagmi Documentation](https://wagmi.sh/)
-

@@ -170,7 +170,7 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     // STEP 5: Link Contracts
     // ============================================
     const institutionRegistryArtifact = await deployer.loadArtifact(
-      "InstitutionRegistry"
+      "contracts/InstitutionRegistry.sol:InstitutionRegistry"
     );
     const institutionRegistry = new hre.ethers.Contract(
       coreContracts.institutionRegistry,
@@ -179,7 +179,7 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     );
 
     const employerRegistryArtifact = await deployer.loadArtifact(
-      "EmployerRegistry"
+      "contracts/EmployerRegistry.sol:EmployerRegistry"
     );
     const employerRegistry = new hre.ethers.Contract(
       coreContracts.employerRegistry,

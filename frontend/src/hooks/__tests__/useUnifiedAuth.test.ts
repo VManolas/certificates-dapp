@@ -1,5 +1,5 @@
 // frontend/src/hooks/__tests__/useUnifiedAuth.test.ts
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { useUnifiedAuth } from '../useUnifiedAuth';
 import { useAccount, useDisconnect } from 'wagmi';
@@ -484,6 +484,28 @@ describe('useUnifiedAuth', () => {
       });
     });
 
+    it('should clear active auth state for suspended university', async () => {
+      mockUseAccount.mockReturnValue({ address: '0x123', isConnected: true });
+      mockAuthStore.authMethod = 'web3';
+      mockAuthStore.role = 'university';
+      mockAuthStore.showAuthMethodSelector = true;
+      mockUseAuthStore.mockReturnValue(mockAuthStore);
+      mockUserRoles.primaryRole = 'university';
+      mockUserRoles.isUniversity = true;
+      mockUseUserRoles.mockReturnValue(mockUserRoles);
+      mockInstitutionStatus.isRegistered = true;
+      mockInstitutionStatus.isActive = false;
+      mockUseInstitutionStatus.mockReturnValue(mockInstitutionStatus);
+
+      renderHook(() => useUnifiedAuth());
+
+      await waitFor(() => {
+        expect(mockAuthStore.setShowAuthMethodSelector).toHaveBeenCalledWith(false);
+        expect(mockAuthStore.setAuthMethod).toHaveBeenCalledWith(null);
+        expect(mockAuthStore.setRole).toHaveBeenCalledWith(null);
+      });
+    });
+
     it('should allow authentication for active university', () => {
       mockUseAccount.mockReturnValue({ address: '0x123', isConnected: true });
       mockUserRoles.primaryRole = 'university';
@@ -515,6 +537,53 @@ describe('useUnifiedAuth', () => {
       // Should clear auth method when conflict detected
       await waitFor(() => {
         expect(mockAuthStore.setAuthMethod).toHaveBeenCalledWith(null);
+      });
+    });
+  });
+
+  describe('Wallet Scoped State Reset', () => {
+    it('clears wallet-scoped auth state and redirects on disconnect', async () => {
+      mockUseAccount
+        .mockReturnValueOnce({ address: '0x123', isConnected: true })
+        .mockReturnValueOnce({ address: undefined, isConnected: false });
+
+      const { rerender } = renderHook(() => useUnifiedAuth());
+      rerender();
+
+      await waitFor(() => {
+        expect(mockQueryClient.cancelQueries).toHaveBeenCalledWith({ queryKey: ['userRoles'] });
+        expect(mockQueryClient.cancelQueries).toHaveBeenCalledWith({ queryKey: ['readContract'] });
+        expect(mockQueryClient.removeQueries).toHaveBeenCalledWith({ queryKey: ['userRoles'] });
+        expect(mockQueryClient.removeQueries).toHaveBeenCalledWith({ queryKey: ['readContract'] });
+        expect(mockAuthStore.setZKAuthEnabled).toHaveBeenCalledWith(false);
+        expect(mockAuthStore.setZKAuthenticated).toHaveBeenCalledWith(false);
+        expect(mockAuthStore.setZKCommitment).toHaveBeenCalledWith(null);
+        expect(mockAuthStore.setZKSessionId).toHaveBeenCalledWith(null);
+        expect(mockAuthStore.setZKRole).toHaveBeenCalledWith(null);
+        expect(mockAuthStore.setAuthMethod).toHaveBeenCalledWith(null);
+        expect(mockAuthStore.setRole).toHaveBeenCalledWith(null);
+        expect(mockAuthStore.setPreSelectedRole).toHaveBeenCalledWith(null);
+        expect(mockAuthStore.setShowAuthMethodSelector).toHaveBeenCalledWith(false);
+        expect(mockAuthStore.setRequiresManualAuthSelection).toHaveBeenCalledWith(false);
+        expect(mockAuthStore.bumpAuthEpoch).toHaveBeenCalled();
+        expect(mockNavigate).toHaveBeenCalledWith('/', { replace: true });
+      });
+    });
+
+    it('clears wallet-scoped auth state when connected address changes', async () => {
+      mockUseAccount
+        .mockReturnValueOnce({ address: '0x123', isConnected: true })
+        .mockReturnValueOnce({ address: '0x456', isConnected: true });
+
+      const { rerender } = renderHook(() => useUnifiedAuth());
+      rerender();
+
+      await waitFor(() => {
+        expect(mockQueryClient.cancelQueries).toHaveBeenCalledWith({ queryKey: ['userRoles'] });
+        expect(mockQueryClient.removeQueries).toHaveBeenCalledWith({ queryKey: ['readContract'] });
+        expect(mockAuthStore.setAuthMethod).toHaveBeenCalledWith(null);
+        expect(mockAuthStore.setRole).toHaveBeenCalledWith(null);
+        expect(mockAuthStore.bumpAuthEpoch).toHaveBeenCalled();
       });
     });
   });
@@ -590,6 +659,216 @@ describe('useUnifiedAuth', () => {
       await waitFor(() => {
         expect(mockAuthStore.setShowAuthMethodSelector).toHaveBeenCalledWith(true);
       });
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // logout() — complete behaviour (navigate, cooldown, flags)
+  // ─────────────────────────────────────────────────────────────
+
+  describe('logout() — complete behaviour', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+      mockUseAccount.mockReturnValue({ address: '0x123', isConnected: true });
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('navigates to home page after logout', async () => {
+      mockAuthStore.authMethod = 'web3';
+      mockUseAuthStore.mockReturnValue(mockAuthStore);
+
+      const { result } = renderHook(() => useUnifiedAuth());
+
+      await act(async () => {
+        await result.current.logout();
+      });
+
+      expect(mockNavigate).toHaveBeenCalledWith('/', { replace: true });
+    });
+
+    it('sets requiresManualAuthSelection=true after logout', async () => {
+      mockAuthStore.authMethod = 'web3';
+      mockUseAuthStore.mockReturnValue(mockAuthStore);
+
+      const { result } = renderHook(() => useUnifiedAuth());
+
+      await act(async () => {
+        await result.current.logout();
+      });
+
+      expect(mockAuthStore.setRequiresManualAuthSelection).toHaveBeenCalledWith(true);
+    });
+
+    it('sets isLogoutCooldown=true immediately and false after 3 seconds', async () => {
+      mockAuthStore.authMethod = 'web3';
+      mockUseAuthStore.mockReturnValue(mockAuthStore);
+
+      const { result } = renderHook(() => useUnifiedAuth());
+
+      await act(async () => {
+        await result.current.logout();
+      });
+
+      expect(mockAuthStore.setIsLogoutCooldown).toHaveBeenCalledWith(true);
+
+      // Cooldown has not ended yet
+      expect(mockAuthStore.setIsLogoutCooldown).not.toHaveBeenCalledWith(false);
+
+      act(() => { vi.advanceTimersByTime(3000); });
+
+      expect(mockAuthStore.setIsLogoutCooldown).toHaveBeenCalledWith(false);
+    });
+
+    it('calls zkAuth.logout before clearing state when method is zk', async () => {
+      mockAuthStore.authMethod = 'zk';
+      mockAuthStore.zkAuth.isZKAuthenticated = true;
+      mockUseAuthStore.mockReturnValue(mockAuthStore);
+
+      const { result } = renderHook(() => useUnifiedAuth());
+
+      await act(async () => {
+        await result.current.logout();
+      });
+
+      expect(mockZKAuth.logout).toHaveBeenCalled();
+      expect(mockAuthStore.setAuthMethod).toHaveBeenCalledWith(null);
+      expect(mockNavigate).toHaveBeenCalledWith('/', { replace: true });
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // switchAuthMethod() — store-state clearing and edge cases
+  // ─────────────────────────────────────────────────────────────
+
+  describe('switchAuthMethod() — store-state clearing and edge cases', () => {
+    it('clears all ZK store state when switching from authenticated ZK to web3', async () => {
+      mockUseAccount.mockReturnValue({ address: '0x123', isConnected: true });
+      mockAuthStore.authMethod = 'zk';
+      mockAuthStore.zkAuth.isZKAuthenticated = true;
+      mockUseAuthStore.mockReturnValue(mockAuthStore);
+      mockUserRoles.primaryRole = 'student';
+      mockUseUserRoles.mockReturnValue(mockUserRoles);
+
+      const { result } = renderHook(() => useUnifiedAuth());
+
+      await act(async () => {
+        await result.current.switchAuthMethod('web3');
+      });
+
+      expect(mockAuthStore.setZKAuthEnabled).toHaveBeenCalledWith(false);
+      expect(mockAuthStore.setZKAuthenticated).toHaveBeenCalledWith(false);
+      expect(mockAuthStore.setZKCommitment).toHaveBeenCalledWith(null);
+      expect(mockAuthStore.setZKSessionId).toHaveBeenCalledWith(null);
+      expect(mockAuthStore.setZKRole).toHaveBeenCalledWith(null);
+    });
+
+    it('does NOT call zkAuth.logout when switching from web3 (not ZK-authenticated)', async () => {
+      mockUseAccount.mockReturnValue({ address: '0x123', isConnected: true });
+      mockAuthStore.authMethod = 'web3';
+      mockAuthStore.zkAuth.isZKAuthenticated = false;
+      mockUseAuthStore.mockReturnValue(mockAuthStore);
+      mockUserRoles.primaryRole = 'student';
+      mockUseUserRoles.mockReturnValue(mockUserRoles);
+
+      const { result } = renderHook(() => useUnifiedAuth());
+
+      await act(async () => {
+        await result.current.switchAuthMethod('zk');
+      });
+
+      expect(mockZKAuth.logout).not.toHaveBeenCalled();
+    });
+
+    it('sets requiresManualAuthSelection=false after switching', async () => {
+      mockUseAccount.mockReturnValue({ address: '0x123', isConnected: true });
+      mockAuthStore.authMethod = 'web3';
+      mockUseAuthStore.mockReturnValue(mockAuthStore);
+      mockUserRoles.primaryRole = 'student';
+      mockUseUserRoles.mockReturnValue(mockUserRoles);
+
+      const { result } = renderHook(() => useUnifiedAuth());
+
+      await act(async () => {
+        await result.current.switchAuthMethod('zk');
+      });
+
+      expect(mockAuthStore.setRequiresManualAuthSelection).toHaveBeenCalledWith(false);
+    });
+
+    it('auto-sets role when switching to web3 and a primary role is detected', async () => {
+      mockUseAccount.mockReturnValue({ address: '0x123', isConnected: true });
+      mockAuthStore.authMethod = 'zk';
+      mockAuthStore.zkAuth.isZKAuthenticated = true;
+      mockUseAuthStore.mockReturnValue(mockAuthStore);
+      mockUserRoles.primaryRole = 'student';
+      mockUseUserRoles.mockReturnValue(mockUserRoles);
+
+      const { result } = renderHook(() => useUnifiedAuth());
+
+      await act(async () => {
+        await result.current.switchAuthMethod('web3');
+      });
+
+      // setRole(null) clears current, then setRole('student') sets the new role
+      const setRoleCalls = mockAuthStore.setRole.mock.calls.map((c: any[]) => c[0]);
+      expect(setRoleCalls).toContain(null);
+      expect(setRoleCalls).toContain('student');
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // selectAuthMethod() — complete behaviour
+  // ─────────────────────────────────────────────────────────────
+
+  describe('selectAuthMethod() — complete behaviour', () => {
+    beforeEach(() => {
+      mockUseAccount.mockReturnValue({ address: '0x123', isConnected: true });
+      mockUserRoles.primaryRole = 'student';
+      mockUserRoles.availableRoles = ['student'];
+      mockUseUserRoles.mockReturnValue(mockUserRoles);
+    });
+
+    it('auto-sets role when selecting web3 and primaryRole is detected', () => {
+      const { result } = renderHook(() => useUnifiedAuth());
+
+      result.current.selectAuthMethod('web3', false);
+
+      expect(mockAuthStore.setRole).toHaveBeenCalledWith('student');
+    });
+
+    it('sets requiresManualAuthSelection=false on selection', () => {
+      const { result } = renderHook(() => useUnifiedAuth());
+
+      result.current.selectAuthMethod('web3', false);
+
+      expect(mockAuthStore.setRequiresManualAuthSelection).toHaveBeenCalledWith(false);
+    });
+
+    it('does NOT call setPreferredAuthMethod when remember=false', () => {
+      const { result } = renderHook(() => useUnifiedAuth());
+
+      result.current.selectAuthMethod('zk', false);
+
+      expect(mockAuthStore.setPreferredAuthMethod).not.toHaveBeenCalled();
+    });
+
+    it('calls setPreferredAuthMethod when remember=true', () => {
+      const { result } = renderHook(() => useUnifiedAuth());
+
+      result.current.selectAuthMethod('zk', true);
+
+      expect(mockAuthStore.setPreferredAuthMethod).toHaveBeenCalledWith('zk');
+    });
+
+    it('hides the auth method selector after selection', () => {
+      const { result } = renderHook(() => useUnifiedAuth());
+
+      result.current.selectAuthMethod('web3', false);
+
+      expect(mockAuthStore.setShowAuthMethodSelector).toHaveBeenCalledWith(false);
     });
   });
 });

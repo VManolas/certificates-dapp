@@ -10,6 +10,13 @@ import {
   RateLimiter,
 } from '../sanitization';
 
+/** PDF-shaped File with `size` overridden (avoids multi‑MB array allocation in CI). */
+function createPdfStubFile(sizeBytes: number, name = 'stub.pdf'): File {
+  const file = new File(['%PDF-1.4'], name, { type: 'application/pdf' });
+  Object.defineProperty(file, 'size', { value: sizeBytes, configurable: true });
+  return file;
+}
+
 // Mock viem's isAddress to work in test environment
 vi.mock('viem', async () => {
   const actual = await vi.importActual<typeof import('viem')>('viem');
@@ -207,8 +214,7 @@ describe('sanitization utilities', () => {
     });
 
     it('rejects files exceeding maximum size', () => {
-      const largeContent = new Array(11 * 1024 * 1024).fill(0); // 11MB
-      const largeFile = new File(largeContent, 'large.pdf', { type: 'application/pdf' });
+      const largeFile = createPdfStubFile(11 * 1024 * 1024, 'large.pdf');
       const result = validatePdfFile(largeFile);
 
       expect(result.valid).toBe(false);
@@ -224,8 +230,7 @@ describe('sanitization utilities', () => {
     });
 
     it('accepts custom maximum size', () => {
-      const content = new Array(12 * 1024 * 1024).fill(0); // 12MB
-      const file = new File(content, 'test.pdf', { type: 'application/pdf' });
+      const file = createPdfStubFile(12 * 1024 * 1024, 'test.pdf');
       
       const resultDefault = validatePdfFile(file);
       expect(resultDefault.valid).toBe(false);

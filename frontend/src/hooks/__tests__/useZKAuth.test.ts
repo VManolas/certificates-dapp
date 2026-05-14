@@ -261,4 +261,278 @@ describe('useZKAuth', () => {
     const { result } = renderHook(() => useZKAuth());
     expect(result.current.error).toBe(writeError);
   });
+
+  // ─────────────────────────────────────────────────────────────
+  // register() — additional paths
+  // ─────────────────────────────────────────────────────────────
+
+  describe('register() — employer role and progress events', () => {
+    it('uses roleEnum=2 for employer and reports correct progress events', async () => {
+      mockWriteContractAsync.mockResolvedValue('0xtxhash_employer');
+      const progressEvents: string[] = [];
+      const { result } = renderHook(() => useZKAuth());
+
+      await act(async () => {
+        await result.current.register('employer', (e) => progressEvents.push(e));
+      });
+
+      expect(mockWriteContractAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          functionName: 'registerCommitment',
+          args: expect.arrayContaining(['0xcommitment', 2]),
+        })
+      );
+      expect(progressEvents).toContain('register_signature_required');
+      expect(progressEvents).toContain('register_signature_complete');
+      expect(progressEvents).toContain('register_transaction_required');
+      expect(progressEvents).toContain('register_transaction_submitted');
+      expect(progressEvents).toContain('register_transaction_confirmed');
+    });
+
+    it('does not persist credentials when wallet signature is rejected during registration', async () => {
+      const provider = (ethers.providers.Web3Provider as any).mock.results[0];
+      // Override the signer's signMessage to reject
+      (ethers.providers.Web3Provider as any).mockImplementationOnce(function () {
+        return {
+          getSigner: vi.fn(() => ({
+            signMessage: vi.fn().mockRejectedValue(new Error('MetaMask signature rejected')),
+          })),
+          waitForTransaction: vi.fn(),
+        };
+      });
+
+      const { result } = renderHook(() => useZKAuth());
+
+      await act(async () => {
+        await expect(result.current.register('student')).rejects.toThrow(
+          'MetaMask signature rejected'
+        );
+      });
+
+      expect(zkAuthLib.storeCredentials).not.toHaveBeenCalled();
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // login() — additional paths
+  // ─────────────────────────────────────────────────────────────
+
+  describe('login() — missing branches', () => {
+    it('throws when no stored credentials exist for the wallet', async () => {
+      (zkAuthLib.hasStoredCredentials as any).mockReturnValue(false);
+      const { result } = renderHook(() => useZKAuth());
+
+      await act(async () => {
+        await expect(result.current.login()).rejects.toThrow(
+          'No stored credentials for this wallet. Please register first.'
+        );
+      });
+
+      expect(mockWriteContractAsync).not.toHaveBeenCalled();
+    });
+
+    it('throws when wallet access is rejected during eth_requestAccounts', async () => {
+      (window as any).ethereum.request = vi
+        .fn()
+        .mockRejectedValue(new Error('User denied account access'));
+
+      const { result } = renderHook(() => useZKAuth());
+
+      await act(async () => {
+        await expect(result.current.login()).rejects.toThrow(
+          'Please approve wallet access to decrypt your credentials'
+        );
+      });
+    });
+
+    it('throws when eth_requestAccounts resolves with an empty accounts array', async () => {
+      (window as any).ethereum.request = vi.fn().mockResolvedValue([]);
+
+      const { result } = renderHook(() => useZKAuth());
+
+      await act(async () => {
+        await expect(result.current.login()).rejects.toThrow(
+          'No accounts found. Please unlock your wallet.'
+        );
+      });
+    });
+
+    it('clears credentials and throws COMMITMENT_NOT_REGISTERED when startSession reverts with CommitmentNotFound', async () => {
+      mockWriteContractAsync.mockRejectedValue(
+        new Error('execution reverted: CommitmentNotFound')
+      );
+      const { result } = renderHook(() => useZKAuth());
+
+      await act(async () => {
+        await expect(result.current.login()).rejects.toThrow('COMMITMENT_NOT_REGISTERED');
+      });
+
+      expect(zkAuthLib.clearStoredCredentials).toHaveBeenCalledWith(
+        '0x1234567890abcdef1234567890abcdef12345678'
+      );
+      expect(mockAuthStore.setZKCommitment).toHaveBeenCalledWith(null);
+      expect(mockAuthStore.setZKAuthenticated).toHaveBeenCalledWith(false);
+      expect(mockAuthStore.setZKSessionId).toHaveBeenCalledWith(null);
+    });
+
+    it('stores generic login error in hook state and rethrows', async () => {
+      mockWriteContractAsync.mockRejectedValue(new Error('network timeout'));
+      const { result } = renderHook(() => useZKAuth());
+
+      await act(async () => {
+        await expect(result.current.login()).rejects.toThrow('network timeout');
+      });
+
+      await waitFor(() => {
+        expect(result.current.error?.message).toBe('network timeout');
+      });
+    });
+
+    it('emits correct progress events during a successful login', async () => {
+      mockWriteContractAsync.mockResolvedValue('0xloginhash');
+      const progressEvents: string[] = [];
+      const { result } = renderHook(() => useZKAuth());
+
+      await act(async () => {
+        await result.current.login((e) => progressEvents.push(e));
+      });
+
+      expect(progressEvents).toContain('login_wallet_access_required');
+      expect(progressEvents).toContain('login_signature_required');
+      expect(progressEvents).toContain('login_signature_complete');
+      expect(progressEvents).toContain('login_transaction_required');
+      expect(progressEvents).toContain('login_transaction_submitted');
+      expect(progressEvents).toContain('login_transaction_confirmed');
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // logout() — with active session (endSession path)
+  // ─────────────────────────────────────────────────────────────
+
+  describe('logout() — active session paths', () => {
+    beforeEach(() => {
+      // Give the hook a live session so it takes the on-chain path
+      mockAuthStore.zkAuth.zkSessionId = '0xactivesession';
+      mockUseAuthStore.mockReturnValue(mockAuthStore);
+    });
+
+    it('calls endSession on-chain when session is active and clears state', async () => {
+      mockWriteContractAsync.mockResolvedValue('0xlogouthash');
+      // Override Contract to report session as active
+      (ethers.Contract as any).mockImplementationOnce(function () {
+        return {
+          isRegistered: vi.fn().mockResolvedValue(true),
+          getSession: vi.fn().mockResolvedValue({ active: true }),
+        };
+      });
+
+      const { result } = renderHook(() => useZKAuth());
+
+      await act(async () => {
+        await result.current.logout();
+      });
+
+      expect(mockWriteContractAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ functionName: 'endSession' })
+      );
+      expect(mockAuthStore.setZKAuthenticated).toHaveBeenCalledWith(false);
+      expect(mockAuthStore.setZKSessionId).toHaveBeenCalledWith(null);
+    });
+
+    it('emits progress events during an on-chain logout', async () => {
+      mockWriteContractAsync.mockResolvedValue('0xlogouthash');
+      (ethers.Contract as any).mockImplementationOnce(function () {
+        return {
+          isRegistered: vi.fn(),
+          getSession: vi.fn().mockResolvedValue({ active: true }),
+        };
+      });
+
+      const progressEvents: string[] = [];
+      const { result } = renderHook(() => useZKAuth());
+
+      await act(async () => {
+        await result.current.logout((e) => progressEvents.push(e));
+      });
+
+      expect(progressEvents).toContain('logout_transaction_required');
+      expect(progressEvents).toContain('logout_transaction_submitted');
+      expect(progressEvents).toContain('logout_transaction_confirmed');
+    });
+
+    it('skips endSession and clears state when session is already inactive on-chain', async () => {
+      // Default mock returns { active: false } — session already ended
+      const { result } = renderHook(() => useZKAuth());
+
+      await act(async () => {
+        await result.current.logout();
+      });
+
+      expect(mockWriteContractAsync).not.toHaveBeenCalled();
+      expect(mockAuthStore.setZKAuthenticated).toHaveBeenCalledWith(false);
+      expect(mockAuthStore.setZKSessionId).toHaveBeenCalledWith(null);
+    });
+
+    it('clears state when getSession pre-check throws SessionNotFound', async () => {
+      (ethers.Contract as any).mockImplementationOnce(function () {
+        return {
+          isRegistered: vi.fn(),
+          getSession: vi.fn().mockRejectedValue(new Error('SessionNotFound: 0xactivesession')),
+        };
+      });
+
+      const { result } = renderHook(() => useZKAuth());
+
+      await act(async () => {
+        await result.current.logout();
+      });
+
+      expect(mockWriteContractAsync).not.toHaveBeenCalled();
+      expect(mockAuthStore.setZKAuthenticated).toHaveBeenCalledWith(false);
+    });
+
+    it('clears state when endSession write throws SessionNotFound', async () => {
+      (ethers.Contract as any).mockImplementationOnce(function () {
+        return {
+          isRegistered: vi.fn(),
+          getSession: vi.fn().mockResolvedValue({ active: true }),
+        };
+      });
+      mockWriteContractAsync.mockRejectedValue(
+        new Error('execution reverted: SessionNotFound')
+      );
+
+      const { result } = renderHook(() => useZKAuth());
+
+      await act(async () => {
+        await result.current.logout();
+      });
+
+      expect(mockAuthStore.setZKAuthenticated).toHaveBeenCalledWith(false);
+      expect(mockAuthStore.setZKSessionId).toHaveBeenCalledWith(null);
+    });
+
+    it('stores error in state when endSession fails with a non-recoverable error', async () => {
+      (ethers.Contract as any).mockImplementationOnce(function () {
+        return {
+          isRegistered: vi.fn(),
+          getSession: vi.fn().mockResolvedValue({ active: true }),
+        };
+      });
+      mockWriteContractAsync.mockRejectedValue(new Error('gas estimation failed'));
+
+      const { result } = renderHook(() => useZKAuth());
+
+      await act(async () => {
+        await result.current.logout();
+      });
+
+      await waitFor(() => {
+        expect(result.current.error?.message).toBe('gas estimation failed');
+      });
+      // State should NOT have been cleared for a non-recoverable error
+      expect(mockAuthStore.setZKAuthenticated).not.toHaveBeenCalled();
+    });
+  });
 });

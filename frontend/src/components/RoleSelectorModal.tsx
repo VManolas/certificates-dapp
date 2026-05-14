@@ -71,7 +71,7 @@ export const RoleSelectorModal = memo(function RoleSelectorModal({
   studentCertificateCount = 0,
   canRegisterAsEmployer = false,
 }: RoleSelectorModalProps) {
-  const { setRole, setHasSelectedRole, setShowRoleSelector, setAuthMethod } = useAuthStore();
+  const { setRole, setHasSelectedRole, setShowRoleSelector } = useAuthStore();
   const navigate = useNavigate();
 
   // Create a Set for O(1) lookup

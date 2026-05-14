@@ -127,7 +127,7 @@ export function EmployerDashboard() {
 
       setBatchWallets(walletsWithCertificates);
     } catch (error) {
-      logger.warn('Failed to load batch wallet context for employer dashboard', error);
+      logger.warn('Failed to load batch wallet context for employer dashboard', { error });
       setBatchWallets([]);
     }
   }, [isFromBatch]);

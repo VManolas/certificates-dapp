@@ -9,7 +9,13 @@ import {
   // injectedWallet,
 } from '@rainbow-me/rainbowkit/wallets';
 import { createConfig, http } from 'wagmi';
-import { zksync, zksyncSepoliaTestnet, localhost } from 'wagmi/chains';
+import {
+  zksync,
+  zksyncSepoliaTestnet,
+  localhost,
+  zksyncLocalNode,
+  zksyncInMemoryNode,
+} from 'wagmi/chains';
 
 /**
  * wagmi configuration for zkSync Era
@@ -26,21 +32,31 @@ import { zksync, zksyncSepoliaTestnet, localhost } from 'wagmi/chains';
  *
  * Environment Variables:
  * - VITE_WALLETCONNECT_PROJECT_ID: WalletConnect Cloud project ID
- * - VITE_CHAIN_ID: "324" for mainnet, "300" for Sepolia testnet, "1337" for localhost
+ * - VITE_CHAIN_ID: "324" mainnet, "300" Sepolia, "270" zkSync docker local (L2), "260" anvil-zksync in-memory, "1337" vanilla Hardhat L1
+ * - VITE_RPC_URL: optional override (e.g. http://127.0.0.1:3050 for zkSync local L2)
  */
 
 const projectId = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID || '';
 const chainId = parseInt(import.meta.env.VITE_CHAIN_ID || '300');
+const viteRpcUrl = (import.meta.env.VITE_RPC_URL as string | undefined)?.trim();
 
-// For localhost testing, provide a fallback project ID if not set
-const effectiveProjectId = projectId || (chainId === 1337 ? 'localhost-testing' : '');
+// For local testing, provide a fallback project ID if not set
+const effectiveProjectId =
+  projectId || (chainId === 1337 || chainId === 270 || chainId === 260 ? 'localhost-testing' : '');
 
 // Determine which chain to use based on environment
-const activeChain = 
-  chainId === 324 ? zksync : 
-  chainId === 300 ? zksyncSepoliaTestnet : 
-  chainId === 1337 ? localhost :
-  zksyncSepoliaTestnet;
+const activeChain =
+  chainId === 324
+    ? zksync
+    : chainId === 300
+      ? zksyncSepoliaTestnet
+      : chainId === 1337
+        ? localhost
+        : chainId === 270
+          ? zksyncLocalNode
+          : chainId === 260
+            ? zksyncInMemoryNode
+            : zksyncSepoliaTestnet;
 
 // Only include the active chain to reduce initial load
 // Other chains can be switched to manually if needed
@@ -87,13 +103,23 @@ export const config = createConfig({
       retryDelay: 1000,
       timeout: 30_000,
     }),
-    [localhost.id]: http('http://127.0.0.1:8545', {
+    [localhost.id]: http(viteRpcUrl || 'http://127.0.0.1:8545', {
       retryCount: 3,
       retryDelay: 100,
       timeout: 10_000,
       batch: {
         wait: 0,
       },
+    }),
+    [zksyncLocalNode.id]: http(viteRpcUrl || 'http://127.0.0.1:3050', {
+      retryCount: 3,
+      retryDelay: 100,
+      timeout: 30_000,
+    }),
+    [zksyncInMemoryNode.id]: http(viteRpcUrl || 'http://127.0.0.1:8011', {
+      retryCount: 3,
+      retryDelay: 100,
+      timeout: 30_000,
     }),
   },
   ssr: false,

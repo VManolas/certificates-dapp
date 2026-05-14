@@ -178,10 +178,19 @@ contract EmployerRegistry is
         require(employers[msg.sender].isActive, "Account deactivated");
         require(bytes(_companyName).length > 0, "Company name required");
         require(bytes(_vatNumber).length > 0, "VAT number required");
-        
+
+        string memory oldVat = employers[msg.sender].vatNumber;
+
+        // If VAT is changing, validate uniqueness then update the mapping
+        if (keccak256(bytes(oldVat)) != keccak256(bytes(_vatNumber))) {
+            require(vatToWallet[_vatNumber] == address(0), "VAT already registered");
+            delete vatToWallet[oldVat];
+            vatToWallet[_vatNumber] = msg.sender;
+        }
+
         employers[msg.sender].companyName = _companyName;
         employers[msg.sender].vatNumber = _vatNumber;
-        
+
         emit EmployerUpdated(msg.sender, _companyName, _vatNumber, block.timestamp);
     }
     

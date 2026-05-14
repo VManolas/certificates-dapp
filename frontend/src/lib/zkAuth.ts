@@ -188,7 +188,7 @@ export async function computeCommitment(
     // Convert to hex string with proper padding (32 bytes = 64 hex chars)
     const commitmentHex = '0x' + commitmentBigInt.toString(16).padStart(64, '0');
     
-    logger.info('[ZK Auth] ✅ Final Commitment (Poseidon):', commitmentHex);
+    logger.info('[ZK Auth] ✅ Final commitment (Poseidon) computed', { commitmentHex });
     
     return commitmentHex;
     
@@ -346,7 +346,9 @@ export async function generateAuthProof(
     
     // UltraPlonkBackend returns {proof: Uint8Array} object
     const proof = proofResult.proof || proofResult;
-    logger.debug('[ZK Auth] Proof length:', proof.length);
+    logger.debug('[ZK Auth] Proof length', {
+      proofLength: (proof as Uint8Array).length,
+    });
     
     // Convert proof to hex string for contract submission
     const proofHex = ethers.utils.hexlify(proof);

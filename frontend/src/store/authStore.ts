@@ -1,6 +1,7 @@
 // src/store/authStore.ts
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { ZKCREDENTIALS_AUTH_STORAGE_KEY } from '@/constants/authStorage';
 import type { UserRole, AuthMethod } from '@/types/auth';
 
 /**
@@ -235,7 +236,7 @@ export const useAuthStore = create<AuthState>()(
         }),
     }),
     {
-      name: 'zkcredentials-auth',
+      name: ZKCREDENTIALS_AUTH_STORAGE_KEY,
       partialize: (state) => ({
         address: state.address,
         role: state.role,

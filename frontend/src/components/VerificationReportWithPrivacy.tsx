@@ -80,7 +80,9 @@ export function VerificationReportWithPrivacy({
       }
     } catch (error) {
       // Fallback keeps compatibility if signature is declined.
-      logger.warn('Failed to generate signed verification token; falling back to hash link', error);
+      logger.warn('Failed to generate signed verification token; falling back to hash link', {
+        error,
+      });
       setVerificationUrl(
         normalizeVerificationUrl(buildVerificationUrl(`hash=${documentHash}`))
       );

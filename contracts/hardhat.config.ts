@@ -1,6 +1,7 @@
 // contracts/hardhat.config.ts
 import { HardhatUserConfig } from "hardhat/config";
 import "@matterlabs/hardhat-zksync-deploy";
+import "@matterlabs/hardhat-zksync-node";
 import "@matterlabs/hardhat-zksync-solc";
 import "@matterlabs/hardhat-zksync-verify";
 import "@matterlabs/hardhat-zksync-upgradable";
@@ -49,6 +50,10 @@ const config: HardhatUserConfig = {
       },
     },
   },
+  // anvil-zksync binary for `hardhat node-zksync` — use 0.6+ so bytecode format matches current zksolc (e.g. Version29).
+  zksyncAnvil: {
+    version: "0.6.*",
+  },
   networks: {
     hardhat: {
       zksync: false, // Disable zkSync for local testing to avoid build info parsing issues
@@ -56,9 +61,24 @@ const config: HardhatUserConfig = {
       blockGasLimit: 30000000, // Increase block gas limit for large batch operations
       allowUnlimitedContractSize: true, // Allow large contracts like UltraPlonk verifier
     },
-    localhost: {
+    // Vanilla Hardhat JSON-RPC node for local MetaMask development.
+    localHardhat: {
       url: "http://127.0.0.1:8545",
       chainId: 1337,
+      accounts: DEPLOYER_PRIVATE_KEY ? [DEPLOYER_PRIVATE_KEY] : [],
+    },
+    // anvil-zksync in-memory node (`npx hardhat node-zksync`, default port 8011). Used by `npm run deploy:local`.
+    inMemoryNode: {
+      url: "http://127.0.0.1:8011",
+      ethNetwork: "",
+      zksync: true,
+      accounts: DEPLOYER_PRIVATE_KEY ? [DEPLOYER_PRIVATE_KEY] : [],
+    },
+    // zkSync docker stack (e.g. matter-labs/local-setup): L2 on 3050, L1 on 8545. Use `npm run deploy:local:docker`.
+    localhost: {
+      url: "http://127.0.0.1:3050",
+      ethNetwork: "http://127.0.0.1:8545",
+      zksync: true,
       accounts: DEPLOYER_PRIVATE_KEY ? [DEPLOYER_PRIVATE_KEY] : [],
     },
     zkSyncSepoliaTestnet: {

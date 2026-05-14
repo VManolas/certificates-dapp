@@ -79,7 +79,8 @@ export function Verify() {
   const hasLegacyCertParam = !!certIdParam;
   const canUseInternalHashMode = isConnected && isAuthenticated && !!effectiveRole;
 
-  // Legacy cert-id link verification is intentionally disabled.
+  // Legacy cert-id link verification is intentionally disabled (`cert` URLs are rejected in effects).
+  // Keep this explicitly undefined so legacy IDs never activate the certificate-by-id path.
   const certificateIdFromUrl: bigint | undefined = undefined;
   const {
     certificate: certFromId,
@@ -906,7 +907,11 @@ export function Verify() {
                       <div className="mt-2 p-3 bg-surface-900/50 rounded font-mono space-y-1">
                         <div><span className="text-surface-500">Document Hash:</span> {truncateHash(hashResult.hash, 12, 10)}</div>
                         <div><span className="text-surface-500">Network:</span> zkSync Era</div>
-                        <div><span className="text-surface-500">Contract:</span> {truncateHash(CERTIFICATE_REGISTRY_ADDRESS, 10, 8)}</div>
+                        <div><span className="text-surface-500">Contract:</span>{' '}
+                          {CERTIFICATE_REGISTRY_ADDRESS
+                            ? truncateHash(CERTIFICATE_REGISTRY_ADDRESS, 10, 8)
+                            : 'Not configured'}
+                        </div>
                         {verifyError && <div><span className="text-surface-500">Error Type:</span> {verifyError.message}</div>}
                       </div>
                     </details>
@@ -1103,6 +1108,7 @@ export function Verify() {
                     <span className="text-white font-mono">zkSync Era</span>
                   </div>
                   
+                  {CERTIFICATE_REGISTRY_ADDRESS ? (
                   <div className="flex justify-between">
                     <span className="text-surface-400">Smart Contract</span>
                     <a 
@@ -1115,6 +1121,12 @@ export function Verify() {
                       {truncateHash(CERTIFICATE_REGISTRY_ADDRESS, 8, 6)}
                     </a>
                   </div>
+                  ) : (
+                  <div className="flex justify-between">
+                    <span className="text-surface-400">Smart Contract</span>
+                    <span className="text-surface-500 text-xs">Not configured</span>
+                  </div>
+                  )}
                   
                   {verificationTimestamp && (
                     <div className="flex justify-between">
@@ -1209,4 +1221,3 @@ export function Verify() {
 }
 
 export default Verify;
-

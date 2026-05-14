@@ -40,6 +40,11 @@ import {
   printDeploymentSummary,
 } from "../lib/deployment-core";
 
+const FQN = {
+  institutionRegistry: "contracts/InstitutionRegistry.sol:InstitutionRegistry",
+  employerRegistry: "contracts/EmployerRegistry.sol:EmployerRegistry",
+} as const;
+
 /**
  * Hardhat-specific contract deployer implementation
  */
@@ -120,13 +125,17 @@ async function main() {
     // ============================================
     // STEP 5: Link Contracts
     // ============================================
-    const institutionRegistry = await ethers.getContractAt(
-      "InstitutionRegistry",
+    const institutionRegistryArtifact = await ethers.getContractFactory(
+      FQN.institutionRegistry
+    );
+    const institutionRegistry = institutionRegistryArtifact.attach(
       coreContracts.institutionRegistry
     );
 
-    const employerRegistry = await ethers.getContractAt(
-      "EmployerRegistry",
+    const employerRegistryArtifact = await ethers.getContractFactory(
+      FQN.employerRegistry
+    );
+    const employerRegistry = employerRegistryArtifact.attach(
       coreContracts.employerRegistry
     );
 
@@ -161,7 +170,7 @@ async function main() {
       verifier: verifierAddresses.verifier,
       verifierAdapter: verifierAddresses.adapter,
       admin: deployer.address,
-      network: "hardhat-local",
+      network: "localHardhat",
       timestamp: Date.now(),
       config,
     };
@@ -215,7 +224,7 @@ VITE_ENVIRONMENT=${result.config.environment}
 `;
 
     // Add network-specific variables for local development
-    if (config.network === 'hardhat' || result.network.includes('local')) {
+    if (config.network === "hardhat" || result.network === "localHardhat") {
       envContent += `VITE_CHAIN_ID=1337
 VITE_RPC_URL=http://127.0.0.1:8545
 VITE_DEBUG=true

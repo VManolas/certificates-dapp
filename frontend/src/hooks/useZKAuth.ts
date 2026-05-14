@@ -464,7 +464,9 @@ export function useZKAuth() {
           return;
         }
         // If read check fails for unrelated reasons, continue with write attempt.
-        logger.warn('Session pre-check failed, attempting on-chain logout anyway.', readError);
+        logger.warn('Session pre-check failed, attempting on-chain logout anyway.', {
+          readError,
+        });
       }
 
       // End session on-chain

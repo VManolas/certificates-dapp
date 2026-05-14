@@ -16,6 +16,20 @@
 import type { DeploymentConfig, VerifierType } from '../config/deployment.config';
 
 /**
+ * Fully qualified Solidity names for artifact resolution (zkSync + EVM).
+ * Avoids HH700 / ambiguous-name issues after incremental zksolc compiles.
+ */
+const FQN = {
+  institutionRegistry: 'contracts/InstitutionRegistry.sol:InstitutionRegistry',
+  certificateRegistry: 'contracts/CertificateRegistry.sol:CertificateRegistry',
+  employerRegistry: 'contracts/EmployerRegistry.sol:EmployerRegistry',
+  zkAuthRegistry: 'contracts/ZKAuthRegistry.sol:ZKAuthRegistry',
+  ultraVerifier: 'contracts/UltraPlonkAuthVerifier.sol:UltraVerifier',
+  ultraPlonkAuthVerifierAdapter:
+    'contracts/UltraPlonkAuthVerifierAdapter.sol:UltraPlonkAuthVerifierAdapter',
+} as const;
+
+/**
  * Deployment result containing all deployed contract addresses
  */
 export interface DeploymentResult {
@@ -90,10 +104,7 @@ export async function deployVerifier(
     console.log('📝 Deploying UltraVerifier (Production)...');
     console.log('   ⚠️  Large contract (~140KB) - this may take 1-2 minutes...\n');
     
-    const { address: verifierAddress } = await deployer.deployContract(
-      'UltraVerifier',
-      []
-    );
+    const { address: verifierAddress } = await deployer.deployContract(FQN.ultraVerifier, []);
     
     console.log(`✅ UltraVerifier deployed to: ${verifierAddress}`);
     console.log('   Size: ~140KB (2,778 lines of Solidity)');
@@ -102,7 +113,7 @@ export async function deployVerifier(
     
     console.log('📝 Deploying UltraPlonkAuthVerifierAdapter...');
     const { address: adapterAddress, contract: adapter } = await deployer.deployContract(
-      'UltraPlonkAuthVerifierAdapter',
+      FQN.ultraPlonkAuthVerifierAdapter,
       [verifierAddress]
     );
     
@@ -140,7 +151,7 @@ export async function deployCoreContracts(
   console.log('📝 Deploying InstitutionRegistry (UUPS Proxy)...');
   
   const { address: institutionRegistryAddress } = await deployer.deployProxy(
-    'InstitutionRegistry',
+    FQN.institutionRegistry,
     [adminAddress],
     { initializer: 'initialize' }
   );
@@ -156,7 +167,7 @@ export async function deployCoreContracts(
   console.log('📝 Deploying CertificateRegistry (UUPS Proxy)...');
   
   const { address: certificateRegistryAddress } = await deployer.deployProxy(
-    'CertificateRegistry',
+    FQN.certificateRegistry,
     [adminAddress, institutionRegistryAddress],
     { initializer: 'initialize' }
   );
@@ -172,7 +183,7 @@ export async function deployCoreContracts(
   console.log('📝 Deploying EmployerRegistry (UUPS Proxy)...');
   
   const { address: employerRegistryAddress } = await deployer.deployProxy(
-    'EmployerRegistry',
+    FQN.employerRegistry,
     [adminAddress],
     { initializer: 'initialize' }
   );
@@ -238,7 +249,7 @@ export async function deployZKAuthRegistry(
   console.log('📝 Deploying ZKAuthRegistry (UUPS Proxy)...');
   
   const { address: zkAuthRegistryAddress } = await deployer.deployProxy(
-    'ZKAuthRegistry',
+    FQN.zkAuthRegistry,
     [adminAddress, verifierAdapter],
     { initializer: 'initialize' }
   );
@@ -286,14 +297,22 @@ export function printDeploymentSummary(result: DeploymentResult): void {
   console.log(`VITE_ZK_AUTH_REGISTRY_ADDRESS=${result.zkAuthRegistry}`);
   console.log(`VITE_VERIFIER_ADAPTER_ADDRESS=${result.verifierAdapter}`);
   console.log(`VITE_ENVIRONMENT=${result.config.environment}`);
-  
-  // Add network-specific variables for local development
-  if (result.config.network === 'hardhat' || result.network.includes('local')) {
+
+  // Local env hints: zkSync dockerized stack vs anvil-zksync in-memory vs in-process Hardhat
+  if (result.network === 'inMemoryNode') {
+    console.log(`VITE_CHAIN_ID=260`);
+    console.log(`VITE_RPC_URL=http://127.0.0.1:8011`);
+    console.log(`VITE_DEBUG=true`);
+  } else if (result.network === 'localhost') {
+    console.log(`VITE_CHAIN_ID=270`);
+    console.log(`VITE_RPC_URL=http://127.0.0.1:3050`);
+    console.log(`VITE_DEBUG=true`);
+  } else if (result.config.network === 'hardhat' || result.network === 'hardhat') {
     console.log(`VITE_CHAIN_ID=1337`);
     console.log(`VITE_RPC_URL=http://127.0.0.1:8545`);
     console.log(`VITE_DEBUG=true`);
   }
-  
+
   console.log('\n' + '═'.repeat(60));
   console.log('🚀 Next Steps:');
   console.log('═'.repeat(60) + '\n');
