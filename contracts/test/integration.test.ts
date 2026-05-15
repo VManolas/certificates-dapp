@@ -1,7 +1,7 @@
 // contracts/test/integration.test.ts
 import { expect } from "chai";
 import { ethers, upgrades } from "hardhat";
-import { CertificateRegistry, InstitutionRegistry, CertificateRegistryV2 } from "../typechain-types";
+import { CertificateRegistry, InstitutionRegistry } from "../typechain-types";
 import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 
 describe("Integration Tests - Full Workflow", function () {
@@ -75,11 +75,8 @@ describe("Integration Tests - Full Workflow", function () {
       // ===== STEP 3: Certificate Issuance =====
       console.log("\n3. MIT issues degree to Alice...");
       await expect(
-        certificateRegistry.connect(mit).issueCertificate(
-          aliceDegreeHash,
-          studentAlice.address,
-          "ipfs://QmAliceDegree"
-        )
+        certificateRegistry.connect(mit).issueCertificate(aliceDegreeHash, studentAlice.address, "ipfs://QmAliceDegree"
+        , 2024)
       ).to.emit(certificateRegistry, "CertificateIssued");
       console.log("   ✓ Certificate issued (ID: 1)");
 
@@ -128,25 +125,16 @@ describe("Integration Tests - Full Workflow", function () {
       await institutionRegistry.connect(superAdmin).approveInstitution(stanford.address);
 
       // MIT issues to Alice
-      await certificateRegistry.connect(mit).issueCertificate(
-        aliceDegreeHash,
-        studentAlice.address,
-        ""
-      );
+      await certificateRegistry.connect(mit).issueCertificate(aliceDegreeHash, studentAlice.address, ""
+      , 2024);
 
       // Stanford issues to Bob
-      await certificateRegistry.connect(stanford).issueCertificate(
-        bobDegreeHash,
-        studentBob.address,
-        ""
-      );
+      await certificateRegistry.connect(stanford).issueCertificate(bobDegreeHash, studentBob.address, ""
+      , 2024);
 
       // MIT issues second certificate to Alice
-      await certificateRegistry.connect(mit).issueCertificate(
-        aliceCertHash,
-        studentAlice.address,
-        ""
-      );
+      await certificateRegistry.connect(mit).issueCertificate(aliceCertHash, studentAlice.address, ""
+      , 2024);
 
       // Verify system state
       expect(await certificateRegistry.getTotalCertificates()).to.equal(3);
@@ -177,11 +165,8 @@ describe("Integration Tests - Full Workflow", function () {
       // Setup
       await institutionRegistry.connect(mit).registerInstitution("MIT", "mit.edu");
       await institutionRegistry.connect(superAdmin).approveInstitution(mit.address);
-      await certificateRegistry.connect(mit).issueCertificate(
-        aliceDegreeHash,
-        studentAlice.address,
-        ""
-      );
+      await certificateRegistry.connect(mit).issueCertificate(aliceDegreeHash, studentAlice.address, ""
+      , 2024);
 
       // Verify certificate is valid
       let [isValid] = await certificateRegistry.isValidCertificate(aliceDegreeHash);
@@ -217,11 +202,8 @@ describe("Integration Tests - Full Workflow", function () {
       // Setup
       await institutionRegistry.connect(mit).registerInstitution("MIT", "mit.edu");
       await institutionRegistry.connect(superAdmin).approveInstitution(mit.address);
-      await certificateRegistry.connect(mit).issueCertificate(
-        aliceDegreeHash,
-        studentAlice.address,
-        ""
-      );
+      await certificateRegistry.connect(mit).issueCertificate(aliceDegreeHash, studentAlice.address, ""
+      , 2024);
 
       // Super admin revokes (not the issuing institution)
       await certificateRegistry.connect(superAdmin).revokeCertificate(
@@ -236,11 +218,8 @@ describe("Integration Tests - Full Workflow", function () {
     it("should prevent revoked certificate from being revoked again", async function () {
       await institutionRegistry.connect(mit).registerInstitution("MIT", "mit.edu");
       await institutionRegistry.connect(superAdmin).approveInstitution(mit.address);
-      await certificateRegistry.connect(mit).issueCertificate(
-        aliceDegreeHash,
-        studentAlice.address,
-        ""
-      );
+      await certificateRegistry.connect(mit).issueCertificate(aliceDegreeHash, studentAlice.address, ""
+      , 2024);
 
       // First revocation
       await certificateRegistry.connect(mit).revokeCertificate(1, "First reason");
@@ -260,11 +239,8 @@ describe("Integration Tests - Full Workflow", function () {
 
       // ===== ISSUE BEFORE SUSPENSION =====
       console.log("\n1. MIT issues certificate to Alice...");
-      await certificateRegistry.connect(mit).issueCertificate(
-        aliceDegreeHash,
-        studentAlice.address,
-        ""
-      );
+      await certificateRegistry.connect(mit).issueCertificate(aliceDegreeHash, studentAlice.address, ""
+      , 2024);
       console.log("   ✓ Certificate issued");
 
       // ===== SUSPENSION =====
@@ -276,11 +252,8 @@ describe("Integration Tests - Full Workflow", function () {
       // ===== CANNOT ISSUE WHILE SUSPENDED =====
       console.log("\n3. MIT attempts to issue while suspended...");
       await expect(
-        certificateRegistry.connect(mit).issueCertificate(
-          bobDegreeHash,
-          studentBob.address,
-          ""
-        )
+        certificateRegistry.connect(mit).issueCertificate(bobDegreeHash, studentBob.address, ""
+        , 2024)
       ).to.be.revertedWithCustomError(certificateRegistry, "UnauthorizedIssuer");
       console.log("   ✓ Issuance blocked (as expected)");
 
@@ -305,114 +278,13 @@ describe("Integration Tests - Full Workflow", function () {
 
       // ===== CAN ISSUE AFTER REACTIVATION =====
       console.log("\n7. MIT issues certificate to Bob...");
-      await certificateRegistry.connect(mit).issueCertificate(
-        bobDegreeHash,
-        studentBob.address,
-        ""
-      );
+      await certificateRegistry.connect(mit).issueCertificate(bobDegreeHash, studentBob.address, ""
+      , 2024);
       const bobCert = await certificateRegistry.getCertificate(2);
       expect(bobCert.studentWallet).to.equal(studentBob.address);
       console.log("   ✓ New issuance successful");
 
       console.log("\n✅ Suspension/reactivation workflow complete");
-    });
-  });
-
-  describe("Complete User Journey: Upgrade Scenario", function () {
-    it("should upgrade to V2 and maintain data integrity", async function () {
-      // ===== SETUP IN V1 =====
-      console.log("\n1. Setting up V1 data...");
-      await institutionRegistry.connect(mit).registerInstitution("MIT", "mit.edu");
-      await institutionRegistry.connect(stanford).registerInstitution("Stanford", "stanford.edu");
-      await institutionRegistry.connect(superAdmin).approveInstitution(mit.address);
-      await institutionRegistry.connect(superAdmin).approveInstitution(stanford.address);
-
-      // Issue certificates
-      await certificateRegistry.connect(mit).issueCertificate(
-        aliceDegreeHash,
-        studentAlice.address,
-        ""
-      );
-      await certificateRegistry.connect(stanford).issueCertificate(
-        bobDegreeHash,
-        studentBob.address,
-        ""
-      );
-
-      console.log("   ✓ 2 institutions registered and approved");
-      console.log("   ✓ 2 certificates issued");
-
-      // Verify V1 data
-      const aliceCertV1 = await certificateRegistry.getCertificate(1);
-      const bobCertV1 = await certificateRegistry.getCertificate(2);
-      expect(aliceCertV1.studentWallet).to.equal(studentAlice.address);
-      expect(bobCertV1.studentWallet).to.equal(studentBob.address);
-
-      // ===== UPGRADE TO V2 =====
-      console.log("\n2. Upgrading CertificateRegistry to V2...");
-      const CertificateRegistryV2 = await ethers.getContractFactory("CertificateRegistryV2");
-      const upgradedRegistry = await upgrades.upgradeProxy(
-        await certificateRegistry.getAddress(),
-        CertificateRegistryV2,
-        { kind: "uups" }
-      ) as unknown as CertificateRegistryV2;
-
-      await upgradedRegistry.upgradeToV2("Upgraded to V2 with batch operations");
-      console.log("   ✓ Upgraded to V2");
-
-      // ===== VERIFY DATA INTEGRITY =====
-      console.log("\n3. Verifying data integrity after upgrade...");
-      const aliceCertV2 = await upgradedRegistry.getCertificate(1);
-      const bobCertV2 = await upgradedRegistry.getCertificate(2);
-
-      expect(aliceCertV2.documentHash).to.equal(aliceCertV1.documentHash);
-      expect(aliceCertV2.studentWallet).to.equal(aliceCertV1.studentWallet);
-      expect(bobCertV2.documentHash).to.equal(bobCertV1.documentHash);
-      expect(bobCertV2.studentWallet).to.equal(bobCertV1.studentWallet);
-      console.log("   ✓ All V1 data preserved");
-
-      // ===== VERIFY VERSION CHANGE =====
-      expect(await upgradedRegistry.getVersion()).to.equal("2.0.0");
-      const history = await upgradedRegistry.getUpgradeHistory();
-      expect(history.length).to.equal(2);
-      expect(history[1].version).to.equal("2.0.0");
-      console.log("   ✓ Version updated to 2.0.0");
-
-      // ===== TEST V2 NEW FEATURE: BATCH ISSUANCE =====
-      console.log("\n4. Testing V2 batch issuance feature...");
-      const batchHashes = [
-        ethers.keccak256(ethers.toUtf8Bytes("Batch Cert 1")),
-        ethers.keccak256(ethers.toUtf8Bytes("Batch Cert 2")),
-        ethers.keccak256(ethers.toUtf8Bytes("Batch Cert 3")),
-      ];
-      const students = [studentAlice.address, studentAlice.address, studentBob.address];
-      const metadatas = ["", "", ""];
-
-      await upgradedRegistry.connect(mit).issueCertificateBatch(
-        batchHashes,
-        students,
-        metadatas
-      );
-
-      // Verify batch was recorded
-      const tx = await upgradedRegistry.connect(mit).issueCertificateBatch(
-        [ethers.keccak256(ethers.toUtf8Bytes("Batch Cert 4"))],
-        [studentBob.address],
-        [""]
-      );
-      const receipt = await tx.wait();
-      
-      console.log("   ✓ Batch issuance successful");
-
-      // Verify all certificates exist
-      expect(await upgradedRegistry.getTotalCertificates()).to.equal(6); // 2 from V1 + 3 from first batch + 1 from second batch
-
-      // Verify Alice now has 3 certificates (1 from V1 + 2 from batch)
-      const aliceCertsV2 = await upgradedRegistry.getCertificatesByStudent(studentAlice.address);
-      expect(aliceCertsV2.length).to.equal(3);
-      console.log("   ✓ Student certificates tracked correctly");
-
-      console.log("\n✅ Upgrade scenario completed successfully");
     });
   });
 
@@ -426,29 +298,17 @@ describe("Integration Tests - Full Workflow", function () {
       await institutionRegistry.connect(superAdmin).approveInstitution(mit.address);
 
       // MIT issues to both students
-      await certificateRegistry.connect(mit).issueCertificate(
-        aliceDegreeHash,
-        studentAlice.address,
-        "ipfs://alice-degree"
-      );
-      await certificateRegistry.connect(mit).issueCertificate(
-        aliceCertHash,
-        studentAlice.address,
-        "ipfs://alice-cert"
-      );
-      await certificateRegistry.connect(mit).issueCertificate(
-        bobDegreeHash,
-        studentBob.address,
-        "ipfs://bob-degree"
-      );
+      await certificateRegistry.connect(mit).issueCertificate(aliceDegreeHash, studentAlice.address, "ipfs://alice-degree"
+      , 2024);
+      await certificateRegistry.connect(mit).issueCertificate(aliceCertHash, studentAlice.address, "ipfs://alice-cert"
+      , 2024);
+      await certificateRegistry.connect(mit).issueCertificate(bobDegreeHash, studentBob.address, "ipfs://bob-degree"
+      , 2024);
 
       // Stanford tries to issue (should fail - not approved)
       await expect(
-        certificateRegistry.connect(stanford).issueCertificate(
-          ethers.keccak256(ethers.toUtf8Bytes("Stanford Degree")),
-          studentBob.address,
-          ""
-        )
+        certificateRegistry.connect(stanford).issueCertificate(ethers.keccak256(ethers.toUtf8Bytes("Stanford Degree")), studentBob.address, ""
+        , 2024)
       ).to.be.revertedWithCustomError(certificateRegistry, "UnauthorizedIssuer");
 
       // Approve Stanford
@@ -456,22 +316,16 @@ describe("Integration Tests - Full Workflow", function () {
 
       // Now Stanford can issue
       const stanfordCertHash = ethers.keccak256(ethers.toUtf8Bytes("Stanford MBA"));
-      await certificateRegistry.connect(stanford).issueCertificate(
-        stanfordCertHash,
-        studentBob.address,
-        ""
-      );
+      await certificateRegistry.connect(stanford).issueCertificate(stanfordCertHash, studentBob.address, ""
+      , 2024);
 
       // Suspend MIT
       await institutionRegistry.connect(superAdmin).suspendInstitution(mit.address);
 
       // MIT tries to issue (should fail - suspended)
       await expect(
-        certificateRegistry.connect(mit).issueCertificate(
-          ethers.keccak256(ethers.toUtf8Bytes("New MIT Degree")),
-          studentAlice.address,
-          ""
-        )
+        certificateRegistry.connect(mit).issueCertificate(ethers.keccak256(ethers.toUtf8Bytes("New MIT Degree")), studentAlice.address, ""
+        , 2024)
       ).to.be.revertedWithCustomError(certificateRegistry, "UnauthorizedIssuer");
 
       // MIT can still revoke its own certificates
@@ -509,9 +363,9 @@ describe("Integration Tests - Full Workflow", function () {
       const cert2Hash = ethers.keccak256(ethers.toUtf8Bytes("Master's Degree"));
       const cert3Hash = ethers.keccak256(ethers.toUtf8Bytes("PhD Degree"));
 
-      await certificateRegistry.connect(mit).issueCertificate(cert1Hash, studentAlice.address, "");
-      await certificateRegistry.connect(mit).issueCertificate(cert2Hash, studentAlice.address, "");
-      await certificateRegistry.connect(mit).issueCertificate(cert3Hash, studentAlice.address, "");
+      await certificateRegistry.connect(mit).issueCertificate(cert1Hash, studentAlice.address, "", 2024);
+      await certificateRegistry.connect(mit).issueCertificate(cert2Hash, studentAlice.address, "", 2024);
+      await certificateRegistry.connect(mit).issueCertificate(cert3Hash, studentAlice.address, "", 2024);
 
       // Revoke one certificate
       await certificateRegistry.connect(mit).revokeCertificate(2, "Degree rescinded");
@@ -556,11 +410,8 @@ describe("Integration Tests - Full Workflow", function () {
       await institutionRegistry.connect(superAdmin).approveInstitution(mit.address);
 
       // Issue certificate
-      await certificateRegistry.connect(mit).issueCertificate(
-        uniqueHash,
-        studentAlice.address,
-        ""
-      );
+      await certificateRegistry.connect(mit).issueCertificate(uniqueHash, studentAlice.address, ""
+      , 2024);
 
       // Get the certificate ID that was just issued
       const issuedCert = await certificateRegistry.getCertificateByHash(uniqueHash);

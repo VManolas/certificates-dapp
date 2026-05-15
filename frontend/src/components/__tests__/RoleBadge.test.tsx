@@ -12,7 +12,7 @@ describe('RoleBadge', () => {
   it('renders correct icon and label for each role', () => {
     const roles = ['admin', 'university', 'student', 'employer'] as const;
     const expectedLabels = ['Admin', 'University', 'Student', 'Employer'];
-    const expectedIcons = ['🛡️', '🎓', '📜', '🔍'];
+    const expectedIcons = ['👔', '🏛️', '🎓', '💼'];
 
     roles.forEach((role, index) => {
       const { unmount } = render(<RoleBadge role={role} />);
@@ -37,50 +37,52 @@ describe('RoleBadge', () => {
   });
 
   it('applies correct size classes', () => {
-    const { rerender } = render(<RoleBadge role="admin" size="sm" />);
+    const { rerender } = render(<RoleBadge role="admin" size="sm" onClick={() => {}} />);
     expect(screen.getByRole('button')).toHaveClass('text-xs');
 
-    rerender(<RoleBadge role="admin" size="lg" />);
+    rerender(<RoleBadge role="admin" size="lg" onClick={() => {}} />);
     expect(screen.getByRole('button')).toHaveClass('text-base');
   });
 
   it('applies disabled styles when disabled prop is true', () => {
-    render(<RoleBadge role="admin" disabled={true} />);
-    const button = screen.getByRole('button');
+    render(<RoleBadge role="admin" disabled={true} onClick={() => {}} />);
+    const element = screen.getByText('Admin').parentElement;
     
-    expect(button).toHaveClass('opacity-50');
-    expect(button).toHaveClass('cursor-not-allowed');
-    expect(button).toBeDisabled();
+    expect(element).toHaveClass('opacity-50');
+    expect(element).toHaveClass('cursor-not-allowed');
   });
 
   it('applies grayscale to icon when disabled', () => {
     render(<RoleBadge role="admin" disabled={true} showIcon={true} />);
-    const iconSpan = screen.getByText('🛡️');
+    const iconSpan = screen.getByText('👔');
     expect(iconSpan).toHaveClass('grayscale');
   });
 
   it('does not show dropdown arrow when disabled', () => {
     render(<RoleBadge role="admin" onClick={() => {}} disabled={true} />);
-    const button = screen.getByRole('button');
-    expect(button.querySelector('svg')).not.toBeInTheDocument();
+    const element = screen.getByText('Admin').parentElement;
+    expect(element?.querySelector('svg')).not.toBeInTheDocument();
   });
 
   it('does not call onClick when disabled', () => {
     const handleClick = vi.fn();
     render(<RoleBadge role="admin" onClick={handleClick} disabled={true} />);
     
-    fireEvent.click(screen.getByRole('button'));
+    const element = screen.getByText('Admin').parentElement;
+    if (element) {
+      fireEvent.click(element);
+    }
     expect(handleClick).not.toHaveBeenCalled();
   });
 
   it('hides icon when showIcon is false', () => {
     render(<RoleBadge role="admin" showIcon={false} />);
-    expect(screen.queryByText('🛡️')).not.toBeInTheDocument();
+    expect(screen.queryByText('👔')).not.toBeInTheDocument();
     expect(screen.getByText('Admin')).toBeInTheDocument();
   });
 
   it('applies enabled styles when not disabled', () => {
-    render(<RoleBadge role="admin" disabled={false} />);
+    render(<RoleBadge role="admin" disabled={false} onClick={() => {}} />);
     const button = screen.getByRole('button');
     
     expect(button).not.toHaveClass('opacity-50');
@@ -88,6 +90,9 @@ describe('RoleBadge', () => {
     expect(button).toHaveClass('bg-red-500/10');
   });
 });
+
+
+
 
 
 

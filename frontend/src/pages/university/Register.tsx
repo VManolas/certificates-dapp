@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAccount } from 'wagmi';
-import { useRegisterInstitution } from '@/hooks/useInstitutionRegistry';
+import { useRegisterUniversity } from '@/hooks/useInstitutionRegistry';
 import { useAuthStore } from '@/store/authStore';
 
 interface FormData {
@@ -29,14 +29,12 @@ export function UniversityRegister() {
   const [isFormValid, setIsFormValid] = useState(false);
 
   const {
-    registerInstitution,
-    isPending,
-    isConfirming,
+    registerUniversity,
+    isRegistering,
     isSuccess,
     error: transactionError,
     transactionHash,
-    reset,
-  } = useRegisterInstitution();
+  } = useRegisterUniversity();
 
   // Redirect if already registered
   useEffect(() => {
@@ -99,7 +97,7 @@ export function UniversityRegister() {
     }
 
     try {
-      registerInstitution(formData);
+      registerUniversity(formData.name, formData.emailDomain);
     } catch (err) {
       console.error('Registration error:', err);
     }
@@ -183,7 +181,7 @@ export function UniversityRegister() {
                 {transactionError.message || 'An error occurred during registration'}
               </p>
               <button
-                onClick={reset}
+                onClick={() => window.location.reload()}
                 className="mt-3 text-sm text-primary-400 hover:text-primary-300"
               >
                 Try again
@@ -208,7 +206,7 @@ export function UniversityRegister() {
               onChange={(e) => handleChange('name', e.target.value)}
               className={`input ${errors.name ? 'border-error-500 focus:border-error-500' : ''}`}
               placeholder="e.g., Massachusetts Institute of Technology"
-              disabled={isPending || isConfirming || isSuccess}
+              disabled={isRegistering || isSuccess}
               maxLength={100}
             />
             {errors.name && (
@@ -231,7 +229,7 @@ export function UniversityRegister() {
               onChange={(e) => handleChange('emailDomain', e.target.value)}
               className={`input ${errors.emailDomain ? 'border-error-500 focus:border-error-500' : ''}`}
               placeholder="e.g., mit.edu"
-              disabled={isPending || isConfirming || isSuccess}
+              disabled={isRegistering || isSuccess}
             />
             {errors.emailDomain && (
               <p className="mt-1 text-sm text-error-400">{errors.emailDomain}</p>
@@ -263,30 +261,22 @@ export function UniversityRegister() {
               type="button"
               onClick={() => navigate('/')}
               className="btn-secondary flex-1"
-              disabled={isPending || isConfirming}
+              disabled={isRegistering}
             >
               Cancel
             </button>
             <button
               type="submit"
               className="btn-primary flex-1"
-              disabled={!isFormValid || isPending || isConfirming || isSuccess}
+              disabled={!isFormValid || isRegistering || isSuccess}
             >
-              {isPending ? (
+              {isRegistering ? (
                 <>
                   <svg className="animate-spin h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                   </svg>
-                  Waiting for signature...
-                </>
-              ) : isConfirming ? (
-                <>
-                  <svg className="animate-spin h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                  </svg>
-                  Confirming on blockchain...
+                  Registering...
                 </>
               ) : (
                 'Register Institution'

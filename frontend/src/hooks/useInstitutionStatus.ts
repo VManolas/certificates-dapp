@@ -3,6 +3,7 @@ import { useReadContract } from 'wagmi';
 import { useAccount } from 'wagmi';
 import { INSTITUTION_REGISTRY_ADDRESS } from '@/lib/wagmi';
 import InstitutionRegistryABI from '@/contracts/abis/InstitutionRegistry.json';
+import { withAdminContact } from '@/lib/adminContact';
 import type { Institution } from '@/types';
 
 export interface InstitutionStatus {
@@ -65,24 +66,31 @@ export function useInstitutionStatus(
     args: targetAddress ? [targetAddress] : undefined,
     query: {
       enabled: !!targetAddress && !!INSTITUTION_REGISTRY_ADDRESS && enabled,
-      // Refetch on window focus to catch status changes
-      refetchOnWindowFocus: true,
-      // Always refetch on mount
-      refetchOnMount: 'always',
-      // Consider data stale immediately to ensure fresh checks
-      staleTime: 0,
-      // Auto-refetch interval (default 10 seconds if not specified)
-      refetchInterval: refetchInterval !== undefined ? refetchInterval : 10000,
+      // Refetch on window focus to catch status changes (but not too aggressively)
+      refetchOnWindowFocus: false,
+      // Don't always refetch on mount - use cached data if available
+      refetchOnMount: false,
+      // Cache institution data for 5 minutes (suspension is rare, no need for constant checks)
+      staleTime: 1000 * 60 * 5, // 5 minutes
+      // Longer refetch interval (default 60 seconds if not specified)
+      // Suspension is a rare admin action, doesn't need real-time polling
+      refetchInterval: refetchInterval !== undefined ? refetchInterval : 60000,
     },
   });
 
   const institution = institutionData as Institution | undefined;
 
   // Parse institution status
+  // CRITICAL FIX: An unregistered wallet returns a zero struct from the contract.
+  // We must check BOTH that the name is not empty AND that the wallet address
+  // is non-zero. The wallet address field is the most reliable indicator.
   const isRegistered =
     !!institution &&
     institution.walletAddress !== '0x0000000000000000000000000000000000000000' &&
-    institution.name !== '';
+    institution.walletAddress !== undefined &&
+    institution.walletAddress !== null &&
+    institution.name !== '' &&
+    institution.name !== undefined;
 
   const isVerified = isRegistered && institution.isVerified === true;
   const isActive = isRegistered && institution.isActive === true;
@@ -123,7 +131,7 @@ export function useCanIssueCertificates() {
   } else if (!status.isVerified) {
     reason = 'Your institution is pending verification. Please wait for admin approval.';
   } else if (!status.isActive) {
-    reason = 'Your institution has been suspended. Please contact an administrator.';
+    reason = withAdminContact('Your institution has been suspended.');
   }
 
   return {

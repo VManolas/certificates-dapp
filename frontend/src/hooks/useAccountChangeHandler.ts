@@ -2,6 +2,7 @@
 import { useEffect, useRef } from 'react';
 import { useAccount } from 'wagmi';
 import { useNavigate } from 'react-router-dom';
+import { ZKCREDENTIALS_AUTH_STORAGE_KEY } from '@/constants/authStorage';
 import { useAuthStore } from '@/store/authStore';
 
 /**
@@ -27,12 +28,6 @@ export function useAccountChangeHandler() {
 
   // Log connection state changes for debugging
   useEffect(() => {
-    console.log('🔌 Connection state:', {
-      isConnected,
-      address,
-      connector: connector?.name,
-      previousAddress: previousAddressRef.current,
-    });
   }, [isConnected, address, connector]);
 
   useEffect(() => {
@@ -50,11 +45,6 @@ export function useAccountChangeHandler() {
       previousAddressRef.current &&
       previousAddressRef.current !== address
     ) {
-      console.log('🔄 Account changed detected:', {
-        from: previousAddressRef.current,
-        to: address,
-        connector: connector?.name,
-      });
 
       // Clear auth store
       resetAuthStore();
@@ -62,15 +52,10 @@ export function useAccountChangeHandler() {
       // Clear React Query cache
       if (window.queryClient) {
         window.queryClient.clear();
-        console.log('🧹 React Query cache cleared');
       }
 
-      // Clear localStorage items that might be cached
-      const authStorageKey = 'zkcredentials-auth';
-      localStorage.removeItem(authStorageKey);
-      console.log('🧹 localStorage cleared');
+      localStorage.removeItem(ZKCREDENTIALS_AUTH_STORAGE_KEY);
 
-      console.log('🔄 Redirecting to home page and reloading...');
 
       // Navigate to home page
       navigate('/', { replace: true });
@@ -82,28 +67,26 @@ export function useAccountChangeHandler() {
       }, 100);
     }
 
-    // Update previous address
-    previousAddressRef.current = address;
+    // Only track address while connected; preserve last connected value so the disconnect
+    // effect (runs after this one in the same commit) still sees priorAddressRef.
+    if (isConnected && address) {
+      previousAddressRef.current = address;
+    }
   }, [address, isConnected, connector, resetAuthStore, navigate]);
 
   // Handle disconnection
   useEffect(() => {
     if (!isConnected && previousAddressRef.current) {
-      console.log('👋 Wallet disconnected');
       
-      // Clear auth store
+      localStorage.removeItem(ZKCREDENTIALS_AUTH_STORAGE_KEY);
+      
+      // Clear auth store (after localStorage to prevent re-persist)
       resetAuthStore();
       
       // Clear React Query cache
       if (window.queryClient) {
         window.queryClient.clear();
-        console.log('🧹 React Query cache cleared on disconnect');
       }
-      
-      // Clear all localStorage
-      const authStorageKey = 'zkcredentials-auth';
-      localStorage.removeItem(authStorageKey);
-      console.log('🧹 localStorage cleared on disconnect');
       
       previousAddressRef.current = undefined;
       

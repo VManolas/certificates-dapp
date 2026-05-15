@@ -5,13 +5,16 @@ import { getChainName } from '@/lib/blockExplorer';
 interface VerificationReportPDFProps {
   certificateId: string;
   documentHash: string;
-  studentWallet: string;
+  studentWallet?: string; // Optional - controlled by privacy settings
+  studentInitials?: string; // Optional - controlled by privacy settings
   institutionAddress: string;
   issueDate: Date;
   isValid: boolean;
   isRevoked: boolean;
   chainId: number;
   verificationUrl: string;
+  universityName?: string;
+  programName?: string;
 }
 
 const styles = StyleSheet.create({
@@ -64,6 +67,15 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: '#1f2937',
   },
+  urlBlock: {
+    marginBottom: 8,
+  },
+  urlLine: {
+    fontSize: 9,
+    color: '#1f2937',
+    fontFamily: 'Courier',
+    marginTop: 2,
+  },
   statusBadge: {
     marginTop: 10,
     marginBottom: 20,
@@ -98,21 +110,46 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     marginBottom: 10,
   },
+  privacyNotice: {
+    marginTop: 15,
+    paddingTop: 15,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+  },
+  privacyText: {
+    fontSize: 9,
+    color: '#6b7280',
+    fontStyle: 'italic',
+    lineHeight: 1.4,
+  },
 });
 
 export function VerificationReportPDF({
   certificateId,
   documentHash,
   studentWallet,
+  studentInitials,
   institutionAddress,
   issueDate,
   isValid,
   isRevoked,
   chainId,
   verificationUrl,
+  universityName,
+  programName,
 }: VerificationReportPDFProps) {
   const now = new Date();
   const chainName = getChainName(chainId);
+  const normalizedVerificationUrl = verificationUrl.replace('/veri-fy?', '/verify?');
+  const [verificationBaseUrl, verificationQuery = ''] = normalizedVerificationUrl.split('?');
+  const verificationQueryWithPrefix = verificationQuery ? `?${verificationQuery}` : '';
+  const verificationQueryChunks = verificationQueryWithPrefix
+    ? verificationQueryWithPrefix.match(/.{1,56}/g) || [verificationQueryWithPrefix]
+    : [];
+  
+  // Only show student section if at least one piece of student info is provided
+  const hasStudentInfo = Boolean(studentWallet) || Boolean(studentInitials);
+  
 
   return (
     <Document>
@@ -146,6 +183,20 @@ export function VerificationReportPDF({
             </Text>
           </View>
 
+          {programName && (
+            <View style={styles.row}>
+              <Text style={styles.label}>Program:</Text>
+              <Text style={styles.value}>{programName}</Text>
+            </View>
+          )}
+
+          {universityName && (
+            <View style={styles.row}>
+              <Text style={styles.label}>University:</Text>
+              <Text style={styles.value}>{universityName}</Text>
+            </View>
+          )}
+
           <View style={styles.row}>
             <Text style={styles.label}>Issue Date:</Text>
             <Text style={styles.value}>
@@ -163,15 +214,37 @@ export function VerificationReportPDF({
           </View>
 
           <View style={styles.row}>
-            <Text style={styles.label}>Student Wallet:</Text>
-            <Text style={styles.value}>{studentWallet}</Text>
-          </View>
-
-          <View style={styles.row}>
             <Text style={styles.label}>Issuing Institution:</Text>
             <Text style={styles.value}>{institutionAddress}</Text>
           </View>
         </View>
+
+        {/* Student Information (Privacy Controlled) - Only shown if student shared info */}
+        {hasStudentInfo && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>STUDENT INFORMATION</Text>
+            
+            {studentInitials && (
+              <View style={styles.row}>
+                <Text style={styles.label}>Student Initials:</Text>
+                <Text style={styles.value}>{studentInitials}</Text>
+              </View>
+            )}
+
+            {studentWallet && (
+              <View style={styles.row}>
+                <Text style={styles.label}>Student Wallet:</Text>
+                <Text style={styles.value}>{studentWallet}</Text>
+              </View>
+            )}
+
+            <View style={styles.privacyNotice}>
+              <Text style={styles.privacyText}>
+                Note: This information was shared by the student with privacy controls.
+              </Text>
+            </View>
+          </View>
+        )}
 
         {/* Blockchain Proof */}
         <View style={styles.section}>
@@ -187,9 +260,14 @@ export function VerificationReportPDF({
             <Text style={styles.value}>CertificateRegistry</Text>
           </View>
 
-          <View style={styles.row}>
+          <View style={styles.urlBlock}>
             <Text style={styles.label}>Verify Online:</Text>
-            <Text style={styles.value}>{verificationUrl}</Text>
+            <Text style={styles.urlLine}>{verificationBaseUrl}</Text>
+            {verificationQueryChunks.map((chunk, index) => (
+              <Text key={`verification-url-chunk-${index}`} style={styles.urlLine}>
+                {chunk}
+              </Text>
+            ))}
           </View>
         </View>
 
@@ -209,6 +287,15 @@ export function VerificationReportPDF({
             stored on the {chainName} blockchain and can be independently verified at any time using
             the document hash provided above.
           </Text>
+
+          {!hasStudentInfo && (
+            <View style={styles.privacyNotice}>
+              <Text style={styles.privacyText}>
+                Privacy Notice: Student personal information (wallet address, initials) was not included 
+                in this report based on the selected privacy settings.
+              </Text>
+            </View>
+          )}
         </View>
       </Page>
     </Document>

@@ -1,16 +1,31 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity 0.8.24;
 
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
+import "./interfaces/IInstitutionRegistry.sol";
+import "./interfaces/ICertificateRegistry.sol";
 
 /**
  * @title EmployerRegistry
  * @notice Manages employer registration with company details
  * @dev Only wallets that are NOT students, universities, or admins can register as employers
+ * 
+ * Role Conflict Validation:
+ * - Admins cannot register as employers
+ * - Universities (registered, pending, or suspended) cannot register as employers  
+ * - Students (with any certificates) cannot register as employers
+ * 
+ * See IEmployerRegistry interface for full API documentation
  */
-contract EmployerRegistry is Initializable, AccessControlUpgradeable, UUPSUpgradeable {
+contract EmployerRegistry is 
+    Initializable, 
+    AccessControlUpgradeable, 
+    UUPSUpgradeable,
+    ReentrancyGuardUpgradeable 
+{
     
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
     
@@ -25,11 +40,18 @@ contract EmployerRegistry is Initializable, AccessControlUpgradeable, UUPSUpgrad
     // Mapping from wallet address to employer data
     mapping(address => Employer) public employers;
     
+    // Mapping from VAT number to wallet address (for uniqueness enforcement)
+    mapping(string => address) public vatToWallet;
+    
     // Array to track all employer addresses
     address[] public employerAddresses;
     
     // Total count of registered employers
     uint256 public totalEmployers;
+    
+    // Registry contract references for role conflict validation
+    IInstitutionRegistry public institutionRegistry;
+    ICertificateRegistry public certificateRegistry;
     
     // Events
     event EmployerRegistered(
@@ -68,9 +90,26 @@ contract EmployerRegistry is Initializable, AccessControlUpgradeable, UUPSUpgrad
     function initialize(address admin) public initializer {
         __AccessControl_init();
         __UUPSUpgradeable_init();
+        __ReentrancyGuard_init();
         
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         _grantRole(ADMIN_ROLE, admin);
+    }
+    
+    /**
+     * @notice Set registry contract addresses
+     * @param _institutionRegistry Address of InstitutionRegistry
+     * @param _certificateRegistry Address of CertificateRegistry
+     * @dev Only callable by admin. Must be called after deployment.
+     */
+    function setRegistries(
+        address _institutionRegistry,
+        address _certificateRegistry
+    ) external onlyRole(ADMIN_ROLE) {
+        require(_institutionRegistry != address(0), "Invalid institution registry");
+        require(_certificateRegistry != address(0), "Invalid certificate registry");
+        institutionRegistry = IInstitutionRegistry(_institutionRegistry);
+        certificateRegistry = ICertificateRegistry(_certificateRegistry);
     }
     
     /**
@@ -81,10 +120,33 @@ contract EmployerRegistry is Initializable, AccessControlUpgradeable, UUPSUpgrad
     function registerEmployer(
         string memory _companyName,
         string memory _vatNumber
-    ) external {
+    ) external nonReentrant {
         require(bytes(_companyName).length > 0, "Company name required");
         require(bytes(_vatNumber).length > 0, "VAT number required");
         require(employers[msg.sender].walletAddress == address(0), "Already registered");
+        
+        // Role conflict validations (check these BEFORE VAT to fail fast on role issues)
+        require(!hasRole(ADMIN_ROLE, msg.sender), "Admin cannot register as employer");
+        
+        // Check not university (only if registry is set)
+        // Check both: approved universities AND pending universities
+        if (address(institutionRegistry) != address(0)) {
+            // Get institution data - if walletAddress is not zero, they're registered (pending or approved)
+            IInstitutionRegistry.Institution memory institution = institutionRegistry.getInstitution(msg.sender);
+            require(
+                institution.walletAddress == address(0),
+                "University cannot register as employer"
+            );
+        }
+        
+        // Check not student (only if registry is set)
+        if (address(certificateRegistry) != address(0)) {
+            uint256[] memory certs = certificateRegistry.getCertificatesByStudent(msg.sender);
+            require(certs.length == 0, "Student cannot register as employer");
+        }
+        
+        // VAT uniqueness check (after role validations)
+        require(vatToWallet[_vatNumber] == address(0), "VAT already registered");
         
         employers[msg.sender] = Employer({
             walletAddress: msg.sender,
@@ -93,6 +155,9 @@ contract EmployerRegistry is Initializable, AccessControlUpgradeable, UUPSUpgrad
             registrationDate: block.timestamp,
             isActive: true
         });
+        
+        // Register VAT number
+        vatToWallet[_vatNumber] = msg.sender;
         
         employerAddresses.push(msg.sender);
         totalEmployers++;
@@ -108,15 +173,24 @@ contract EmployerRegistry is Initializable, AccessControlUpgradeable, UUPSUpgrad
     function updateEmployer(
         string memory _companyName,
         string memory _vatNumber
-    ) external {
+    ) external nonReentrant {
         require(employers[msg.sender].walletAddress != address(0), "Not registered");
         require(employers[msg.sender].isActive, "Account deactivated");
         require(bytes(_companyName).length > 0, "Company name required");
         require(bytes(_vatNumber).length > 0, "VAT number required");
-        
+
+        string memory oldVat = employers[msg.sender].vatNumber;
+
+        // If VAT is changing, validate uniqueness then update the mapping
+        if (keccak256(bytes(oldVat)) != keccak256(bytes(_vatNumber))) {
+            require(vatToWallet[_vatNumber] == address(0), "VAT already registered");
+            delete vatToWallet[oldVat];
+            vatToWallet[_vatNumber] = msg.sender;
+        }
+
         employers[msg.sender].companyName = _companyName;
         employers[msg.sender].vatNumber = _vatNumber;
-        
+
         emit EmployerUpdated(msg.sender, _companyName, _vatNumber, block.timestamp);
     }
     
@@ -124,7 +198,7 @@ contract EmployerRegistry is Initializable, AccessControlUpgradeable, UUPSUpgrad
      * @notice Deactivate an employer (admin only)
      * @param employerAddress Address of the employer to deactivate
      */
-    function deactivateEmployer(address employerAddress) external onlyRole(ADMIN_ROLE) {
+    function deactivateEmployer(address employerAddress) external onlyRole(ADMIN_ROLE) nonReentrant {
         require(employers[employerAddress].walletAddress != address(0), "Not registered");
         require(employers[employerAddress].isActive, "Already deactivated");
         
@@ -137,7 +211,7 @@ contract EmployerRegistry is Initializable, AccessControlUpgradeable, UUPSUpgrad
      * @notice Reactivate an employer (admin only)
      * @param employerAddress Address of the employer to reactivate
      */
-    function reactivateEmployer(address employerAddress) external onlyRole(ADMIN_ROLE) {
+    function reactivateEmployer(address employerAddress) external onlyRole(ADMIN_ROLE) nonReentrant {
         require(employers[employerAddress].walletAddress != address(0), "Not registered");
         require(!employers[employerAddress].isActive, "Already active");
         
@@ -197,6 +271,24 @@ contract EmployerRegistry is Initializable, AccessControlUpgradeable, UUPSUpgrad
         }
         
         return result;
+    }
+    
+    /**
+     * @notice Check if a VAT number is available for registration
+     * @param _vatNumber VAT number to check
+     * @return bool True if available (not registered), false if already in use
+     */
+    function isVatAvailable(string calldata _vatNumber) external view returns (bool) {
+        return vatToWallet[_vatNumber] == address(0);
+    }
+    
+    /**
+     * @notice Get the wallet address associated with a VAT number
+     * @param _vatNumber VAT number to look up
+     * @return address Wallet address (zero address if VAT not registered)
+     */
+    function getEmployerByVat(string calldata _vatNumber) external view returns (address) {
+        return vatToWallet[_vatNumber];
     }
     
     /**

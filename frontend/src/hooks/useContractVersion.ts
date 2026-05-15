@@ -28,17 +28,11 @@ interface VersionInfo {
   error: Error | null;
 }
 
-interface UpgradeHistoryResult {
-  history: UpgradeInfo[] | undefined;
-  isLoading: boolean;
-  error: Error | null;
-}
-
 /**
  * Hook to check CertificateRegistry contract version
  * @returns Version information and compatibility status
  */
-export function useCertificateRegistryVersion(): VersionInfo {
+function useCertificateRegistryVersion(): VersionInfo {
   const { data: version, isLoading, error } = useReadContract({
     address: CERTIFICATE_REGISTRY_ADDRESS,
     abi: CertificateRegistryABI.abi,
@@ -67,7 +61,7 @@ export function useCertificateRegistryVersion(): VersionInfo {
  * Hook to check InstitutionRegistry contract version
  * @returns Version information and compatibility status
  */
-export function useInstitutionRegistryVersion(): VersionInfo {
+function useInstitutionRegistryVersion(): VersionInfo {
   const { data: version, isLoading, error } = useReadContract({
     address: INSTITUTION_REGISTRY_ADDRESS,
     abi: InstitutionRegistryABI.abi,
@@ -87,48 +81,6 @@ export function useInstitutionRegistryVersion(): VersionInfo {
     expectedVersion,
     isCompatible,
     needsUpgrade,
-    isLoading,
-    error: error as Error | null,
-  };
-}
-
-/**
- * Hook to get upgrade history for CertificateRegistry
- * @returns Upgrade history with loading and error states
- */
-export function useCertificateRegistryUpgradeHistory(): UpgradeHistoryResult {
-  const { data, isLoading, error } = useReadContract({
-    address: CERTIFICATE_REGISTRY_ADDRESS,
-    abi: CertificateRegistryABI.abi,
-    functionName: 'getUpgradeHistory',
-    query: {
-      enabled: !!CERTIFICATE_REGISTRY_ADDRESS,
-    },
-  });
-
-  return {
-    history: data as UpgradeInfo[] | undefined,
-    isLoading,
-    error: error as Error | null,
-  };
-}
-
-/**
- * Hook to get upgrade history for InstitutionRegistry
- * @returns Upgrade history with loading and error states
- */
-export function useInstitutionRegistryUpgradeHistory(): UpgradeHistoryResult {
-  const { data, isLoading, error } = useReadContract({
-    address: INSTITUTION_REGISTRY_ADDRESS,
-    abi: InstitutionRegistryABI.abi,
-    functionName: 'getUpgradeHistory',
-    query: {
-      enabled: !!INSTITUTION_REGISTRY_ADDRESS,
-    },
-  });
-
-  return {
-    history: data as UpgradeInfo[] | undefined,
     isLoading,
     error: error as Error | null,
   };

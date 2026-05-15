@@ -2,15 +2,13 @@
 import { useAccount, useReadContracts } from 'wagmi';
 import { useMemo } from 'react';
 import { keccak256, toBytes } from 'viem';
+import type { UserRole } from '@/types/auth';
 import InstitutionRegistryABI from '@/contracts/abis/InstitutionRegistry.json';
 import CertificateRegistryABI from '@/contracts/abis/CertificateRegistry.json';
 import EmployerRegistryABI from '@/contracts/abis/EmployerRegistry.json';
 
-// Role type as defined in authStore
-export type UserRole = 'university' | 'student' | 'employer' | 'admin' | null;
-
 // Computed role constant for contract queries
-const SUPER_ADMIN_ROLE = keccak256(toBytes('SUPER_ADMIN_ROLE'));
+const ADMIN_ROLE = keccak256(toBytes('ADMIN_ROLE'));
 
 // Contract addresses - these should match your deployed contracts
 const INSTITUTION_REGISTRY_ADDRESS = import.meta.env.VITE_INSTITUTION_REGISTRY_ADDRESS as `0x${string}`;
@@ -50,7 +48,7 @@ export interface DetectedRoles {
  * 4. Employer - Must register with company details (if not admin/university/student)
  * 
  * Queries multiple contracts in parallel to determine:
- * - Admin status (SUPER_ADMIN_ROLE)
+ * - Admin status (ADMIN_ROLE)
  * - University registration and verification status
  * - Student certificate ownership
  * - Employer registration status
@@ -67,6 +65,7 @@ export interface DetectedRoles {
 export function useUserRoles(): DetectedRoles {
   const { address, isConnected } = useAccount();
 
+
   // Batch contract reads for efficiency
   const { data, isLoading, error, refetch } = useReadContracts({
     contracts: [
@@ -75,14 +74,14 @@ export function useUserRoles(): DetectedRoles {
         address: INSTITUTION_REGISTRY_ADDRESS,
         abi: InstitutionRegistryABI.abi,
         functionName: 'hasRole',
-        args: [SUPER_ADMIN_ROLE, address],
+        args: [ADMIN_ROLE, address],
       },
       // Check admin role in CertificateRegistry (backup check)
       {
         address: CERTIFICATE_REGISTRY_ADDRESS,
         abi: CertificateRegistryABI.abi,
         functionName: 'hasRole',
-        args: [SUPER_ADMIN_ROLE, address],
+        args: [ADMIN_ROLE, address],
       },
       // Get institution data
       {
@@ -108,15 +107,20 @@ export function useUserRoles(): DetectedRoles {
     ],
     query: {
       enabled: isConnected && !!address,
-      // Force refetch when address changes
-      refetchOnWindowFocus: true,
+      // IMPORTANT: Always refetch when component mounts to get fresh data
+      // This ensures we detect role changes after registration
       refetchOnMount: 'always',
-      staleTime: 0, // Always consider data stale
-      gcTime: 0, // Don't cache query results
+      // Refetch on window focus to catch any blockchain state changes
+      refetchOnWindowFocus: true,
+      // Cache role data briefly (30 seconds) since roles can change (registration, etc.)
+      staleTime: 1000 * 30, // 30 seconds
+      // Keep in cache for 5 minutes before garbage collection
+      gcTime: 1000 * 60 * 5,
     },
   });
 
   return useMemo(() => {
+    
     if (!data || !isConnected) {
       return {
         isAdmin: false,
@@ -135,6 +139,7 @@ export function useUserRoles(): DetectedRoles {
       };
     }
 
+
     // Parse results
     const isAdminInstitution = data[0]?.result as boolean ?? false;
     const isAdminCertificate = data[1]?.result as boolean ?? false;
@@ -142,9 +147,17 @@ export function useUserRoles(): DetectedRoles {
 
     // Institution data parsing
     const institutionResult = data[2]?.result as any;
-    const isUniversity = institutionResult?.walletAddress !== '0x0000000000000000000000000000000000000000' 
-                        && institutionResult?.walletAddress !== undefined
+    
+    // DEBUG: Log institution data
+    
+    // CRITICAL FIX: Check if the institution wallet matches the CONNECTED wallet
+    // Previously this was checking if walletAddress !== 0x0, which was wrong
+    // because it could return data for ANY institution, not the connected one
+    const isUniversity = institutionResult?.walletAddress !== undefined
+                        && institutionResult?.walletAddress !== '0x0000000000000000000000000000000000000000'
+                        && institutionResult?.walletAddress?.toLowerCase() === address?.toLowerCase()
                         && institutionResult?.name !== '';
+    
     
     const universityData = isUniversity ? {
       name: institutionResult.name,
@@ -161,6 +174,7 @@ export function useUserRoles(): DetectedRoles {
     const certificates = data[3]?.result as bigint[] ?? [];
     const isStudent = certificates.length > 0;
     const studentCertificateCount = certificates.length;
+    
 
     // Employer registration
     const isEmployer = data[4]?.result as boolean ?? false;
@@ -199,6 +213,7 @@ export function useUserRoles(): DetectedRoles {
       primaryRole = null;
       canRegisterAsEmployer = true;
     }
+    
 
     return {
       isAdmin,
@@ -215,6 +230,6 @@ export function useUserRoles(): DetectedRoles {
       error: error as Error | null,
       refetch,
     };
-  }, [data, isConnected, isLoading, error, refetch]);
+  }, [data, isConnected, isLoading, error, refetch, address]);
 }
 

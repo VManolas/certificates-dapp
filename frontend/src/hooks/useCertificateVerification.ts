@@ -1,18 +1,17 @@
+import React from 'react';
 import { useReadContract } from 'wagmi';
 import { CERTIFICATE_REGISTRY_ADDRESS } from '@/lib/wagmi';
 import CertificateRegistryABI from '@/contracts/abis/CertificateRegistry.json';
 import { validateTuple, certificateVerificationSchema } from '@/lib/validation';
 import { logger } from '@/lib/logger';
 import { parseError } from '@/lib/errorHandling';
+import type { ContractVerificationResult } from '@/types';
 
 /**
- * Certificate verification result from smart contract
+ * Contract-level verification result (simplified)
+ * Use ContractVerificationResult from @/types for consistency
  */
-export interface CertificateVerificationResult {
-  isValid: boolean;
-  certificateId: bigint;
-  isRevoked: boolean;
-}
+type CertificateVerificationResult = ContractVerificationResult;
 
 /**
  * Return type for certificate verification hook
@@ -25,6 +24,8 @@ export interface UseCertificateVerificationReturn {
   isLoading: boolean;
   error: Error | null;
   refetch: () => void;
+  verificationTimestamp: Date | null;
+  verificationId: string;
 }
 
 /**
@@ -49,14 +50,17 @@ export interface UseCertificateVerificationReturn {
  */
 export function useCertificateVerification(
   documentHash: `0x${string}` | undefined,
-  enabled: boolean = true,
-  sessionKey?: number
+  enabled: boolean = true
 ): UseCertificateVerificationReturn {
+  // Generate unique verification ID for this attempt
+  const [verificationId] = React.useState(() => `verify-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
+  
   const { 
     data, 
     isLoading, 
     error,
-    refetch: refetchQuery
+    refetch: refetchQuery,
+    dataUpdatedAt,
   } = useReadContract({
     address: CERTIFICATE_REGISTRY_ADDRESS,
     abi: CertificateRegistryABI.abi,
@@ -64,13 +68,17 @@ export function useCertificateVerification(
     args: documentHash ? [documentHash] : undefined,
     query: {
       enabled: !!documentHash && !!CERTIFICATE_REGISTRY_ADDRESS && enabled,
+      
+      // Enhanced cache prevention for trustworthy verification
       staleTime: 0,
       gcTime: 0,
       refetchOnMount: 'always',
-      refetchOnWindowFocus: true,
-      queryKey: sessionKey !== undefined 
-        ? ['isValidCertificate', documentHash, sessionKey] 
-        : ['isValidCertificate', documentHash],
+      refetchOnWindowFocus: false, // Don't auto-refetch on focus
+      refetchOnReconnect: true,
+      retry: 3, // Retry failed queries
+      retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+      // queryKey is controlled by wagmi for useReadContract (see QueryParameter type); rely on
+      // staleTime/gcTime/refetchOnMount instead of a custom key plus verificationId identity.
     },
   });
 
@@ -91,9 +99,12 @@ export function useCertificateVerification(
   }
 
   const refetch = () => {
-    logger.debug('Refetching certificate verification');
+    logger.debug('Refetching certificate verification', { verificationId });
     refetchQuery();
   };
+
+  // Calculate verification timestamp from data update time
+  const verificationTimestamp = dataUpdatedAt ? new Date(dataUpdatedAt) : null;
 
   // Normalize error and provide user-friendly message
   let normalizedError: Error | null = null;
@@ -102,6 +113,7 @@ export function useCertificateVerification(
     normalizedError = new Error(errorResponse.message);
     logger.error('Certificate verification error', error, {
       documentHash,
+      verificationId,
       errorType: errorResponse.type,
       retryable: errorResponse.retryable
     });
@@ -115,6 +127,8 @@ export function useCertificateVerification(
     isLoading,
     error: normalizedError,
     refetch,
+    verificationTimestamp,
+    verificationId,
   };
 }
 
@@ -131,6 +145,7 @@ export interface CertificateDetails {
   isRevoked: boolean;
   revokedAt: bigint;
   revocationReason: string;
+  graduationYear: number; // Year of graduation (1900-2100) - matches smart contract
 }
 
 /**
@@ -180,53 +195,6 @@ export function useCertificateDetails(
     args: certificateId !== undefined ? [certificateId] : undefined,
     query: {
       enabled: certificateId !== undefined && !!CERTIFICATE_REGISTRY_ADDRESS && enabled,
-    },
-  });
-
-  const refetch = () => {
-    refetchQuery();
-  };
-
-  // Normalize error to proper Error type
-  const normalizedError = error 
-    ? (error instanceof Error ? error : new Error(String(error)))
-    : null;
-
-  return {
-    certificate: data as CertificateDetails | undefined,
-    isLoading,
-    error: normalizedError,
-    refetch,
-  };
-}
-
-/**
- * Hook to get certificate details by document hash
- * 
- * @param documentHash - SHA-256 hash of the PDF document
- * @param enabled - Whether the query should be enabled (default: true if hash is provided)
- * 
- * @example
- * ```tsx
- * const { certificate, isLoading } = useCertificateByHash('0x123...');
- * ```
- */
-export function useCertificateByHash(
-  documentHash: `0x${string}` | undefined,
-  enabled: boolean = true
-): UseCertificateDetailsReturn {
-  const { 
-    data, 
-    isLoading, 
-    error,
-    refetch: refetchQuery
-  } = useReadContract({
-    address: CERTIFICATE_REGISTRY_ADDRESS,
-    abi: CertificateRegistryABI.abi,
-    functionName: 'getCertificateByHash',
-    args: documentHash ? [documentHash] : undefined,
-    query: {
-      enabled: !!documentHash && !!CERTIFICATE_REGISTRY_ADDRESS && enabled,
     },
   });
 
@@ -301,62 +269,6 @@ export function useStudentCertificates(
 
   return {
     certificateIds: data as readonly bigint[] | undefined,
-    isLoading,
-    error: normalizedError,
-    refetch,
-  };
-}
-
-/**
- * Hook to check if a certificate exists (non-reverting)
- * 
- * @param certificateId - The ID of the certificate to check
- * @param enabled - Whether the query should be enabled (default: true if ID is provided)
- * 
- * @example
- * ```tsx
- * const { exists, isLoading } = useCertificateExists(123n);
- * 
- * if (exists) {
- *   return <Badge>Certificate Found</Badge>;
- * }
- * ```
- */
-export function useCertificateExists(
-  certificateId: bigint | undefined,
-  enabled: boolean = true
-): {
-  exists: boolean | undefined;
-  isLoading: boolean;
-  error: Error | null;
-  refetch: () => void;
-} {
-  const { 
-    data, 
-    isLoading, 
-    error,
-    refetch: refetchQuery
-  } = useReadContract({
-    address: CERTIFICATE_REGISTRY_ADDRESS,
-    abi: CertificateRegistryABI.abi,
-    functionName: 'certificateExists',
-    args: certificateId !== undefined ? [certificateId] : undefined,
-    query: {
-      enabled: certificateId !== undefined && !!CERTIFICATE_REGISTRY_ADDRESS && enabled,
-    },
-  });
-
-  const refetch = () => {
-    refetchQuery();
-  };
-
-  // Normalize error to proper Error type
-  const normalizedError = error 
-    ? (error instanceof Error ? error : new Error(String(error)))
-    : null;
-
-  return {
-    exists: data as boolean | undefined,
     isLoading,
     error: normalizedError,
     refetch,

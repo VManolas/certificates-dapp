@@ -1,18 +1,9 @@
 // frontend/src/components/RoleSwitcher.tsx
 import { useState, useRef, useEffect, useCallback, useMemo, memo } from 'react';
-import { useAuthStore, UserRole } from '@/store/authStore';
+import type { UserRole } from '@/types/auth';
+import { useAuthStore } from '@/store/authStore';
 import { RoleBadge } from './RoleBadge';
-
-// All possible roles in display order
-const ALL_ROLES: NonNullable<UserRole>[] = ['admin', 'university', 'student', 'employer'];
-
-// Tooltip messages for disabled roles
-const DISABLED_TOOLTIPS: Record<NonNullable<UserRole>, string> = {
-  admin: 'Admin access is restricted to platform administrators',
-  university: 'Register your institution to access university features',
-  student: "You'll appear here once you receive a certificate",
-  employer: '', // Never disabled
-};
+import { ALL_ROLES, getRoleDisabledTooltip } from '@/lib/constants/roles';
 
 interface RoleSwitcherProps {
   /** Roles that the user is eligible to select */
@@ -74,6 +65,7 @@ export const RoleSwitcher = memo(function RoleSwitcher({ availableRoles }: RoleS
               const isAvailable = availableRolesSet.has(r);
               const isActive = r === role;
               const isHovered = r === hoveredRole;
+              const disabledTooltip = getRoleDisabledTooltip(r);
 
               return (
                 <div key={r} className="relative">
@@ -114,12 +106,12 @@ export const RoleSwitcher = memo(function RoleSwitcher({ availableRoles }: RoleS
                   </button>
                   
                   {/* Tooltip for disabled roles */}
-                  {!isAvailable && isHovered && DISABLED_TOOLTIPS[r] && (
+                  {!isAvailable && isHovered && disabledTooltip && (
                     <div className="absolute right-full mr-2 top-1/2 -translate-y-1/2 
                                     px-3 py-2 bg-surface-900 border border-surface-700 
                                     rounded-lg shadow-lg text-xs text-surface-400 
                                     whitespace-nowrap z-50">
-                      {DISABLED_TOOLTIPS[r]}
+                      {disabledTooltip}
                       {/* Arrow pointing right */}
                       <div className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-full
                                       border-8 border-transparent border-l-surface-900" />

@@ -14,7 +14,6 @@
 export {
   useCertificateIssuance,
   useCertificateIssuanceWithCallback,
-  useCertificateIssuanceWithDuplicateCheck,
   type IssueCertificateParams,
   type UseCertificateIssuanceReturn,
 } from './useCertificateIssuance';
@@ -22,7 +21,6 @@ export {
 // Batch Certificate Issuance
 export {
   useBatchCertificateIssuance,
-  useBatchCertificateIssuanceWithCallback,
   type BatchCertificateData,
   type UseBatchCertificateIssuanceReturn,
 } from './useBatchCertificateIssuance';
@@ -31,40 +29,28 @@ export {
 export {
   useCertificateVerification,
   useCertificateDetails,
-  useCertificateByHash,
   useStudentCertificates,
-  useCertificateExists,
   useHashExists,
   useCertificatesBatch,
-  type CertificateVerificationResult,
   type UseCertificateVerificationReturn,
   type CertificateDetails,
   type UseCertificateDetailsReturn,
   type BatchCertificatesResult,
 } from './useCertificateVerification';
 
+// Re-export ContractVerificationResult from types (formerly CertificateVerificationResult)
+export type { ContractVerificationResult as CertificateVerificationResult } from '@/types';
+
 // Institution Registry (Admin Functions)
 export {
   useRegisterUniversity,
   useIsInstitution,
-  useApproveInstitution,
-  useDeactivateInstitution,
 } from './useInstitutionRegistry';
 
 // Contract Versioning
 export {
-  useCertificateRegistryVersion,
-  useInstitutionRegistryVersion,
-  useCertificateRegistryUpgradeHistory,
-  useInstitutionRegistryUpgradeHistory,
   useContractVersions,
 } from './useContractVersion';
-
-// User Role Detection
-export {
-  useUserRoles,
-  type DetectedRoles,
-} from './useUserRoles';
 
 // Certificate Revocation
 export {
@@ -82,3 +68,14 @@ export {
 export {
   useAccountChangeHandler,
 } from './useAccountChangeHandler';
+
+// ZK Authentication
+export {
+  useZKAuth,
+} from './useZKAuth';
+
+// Unified Authentication
+export {
+  useUnifiedAuth,
+  type UnifiedAuthState,
+} from './useUnifiedAuth';

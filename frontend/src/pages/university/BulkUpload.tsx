@@ -15,6 +15,7 @@ import {
 import { generatePDFHash } from '@/lib/pdfHash';
 import { CERTIFICATE_REGISTRY_ADDRESS, config } from '@/lib/wagmi';
 import CertificateRegistryABI from '@/contracts/abis/CertificateRegistry.json';
+import { withAdminContact } from '@/lib/adminContact';
 import { logger } from '@/lib/logger';
 
 export function BulkUpload() {
@@ -36,10 +37,43 @@ export function BulkUpload() {
     isPending, 
     isConfirming, 
     isSuccess,
+    transactionPhase,
     error: batchError,
+    transactionHash,
     certificateIds,
     reset: resetBatch
   } = useBatchCertificateIssuance();
+
+  const transactionStatusConfig: Record<'awaiting_wallet_confirmation' | 'pending_onchain' | 'confirmed', {
+    title: string;
+    description: string;
+    borderClassName: string;
+    textClassName: string;
+  }> = {
+    awaiting_wallet_confirmation: {
+      title: 'Waiting to submit transaction',
+      description: 'Confirm this bulk issuance transaction in MetaMask to broadcast it.',
+      borderClassName: 'border-yellow-500/30 bg-yellow-500/10',
+      textClassName: 'text-yellow-300',
+    },
+    pending_onchain: {
+      title: 'Transaction pending',
+      description: 'The batch transaction was submitted and is waiting for blockchain confirmation.',
+      borderClassName: 'border-blue-500/30 bg-blue-500/10',
+      textClassName: 'text-blue-300',
+    },
+    confirmed: {
+      title: 'Transaction confirmed',
+      description: 'Bulk certificate issuance is now confirmed on-chain.',
+      borderClassName: 'border-green-500/30 bg-green-500/10',
+      textClassName: 'text-green-300',
+    },
+  };
+
+  const showTransactionStatus =
+    transactionPhase === 'awaiting_wallet_confirmation'
+    || transactionPhase === 'pending_onchain'
+    || transactionPhase === 'confirmed';
 
   const handleCSVUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -118,19 +152,19 @@ export function BulkUpload() {
 
     // CRITICAL: Real-time authorization check before bulk issuance
     if (!canIssue) {
-      alert(reason || 'Your institution cannot issue certificates. Please contact an administrator.');
+      alert(reason || withAdminContact('Your institution cannot issue certificates.'));
       logger.error('Bulk issuance blocked:', reason);
       return;
     }
 
     // Legacy check (kept for backward compatibility with cached data)
     if (!institutionData?.isVerified) {
-      alert('Your institution must be verified before issuing certificates. Please contact an administrator.');
+      alert(withAdminContact('Your institution must be verified before issuing certificates.'));
       return;
     }
 
     if (!institutionData?.isActive) {
-      alert('Your institution account is not active. Please contact an administrator.');
+      alert(withAdminContact('Your institution account is not active.'));
       return;
     }
 
@@ -143,11 +177,15 @@ export function BulkUpload() {
 
     try {
       // Check for duplicate hashes before submitting
+      if (!CERTIFICATE_REGISTRY_ADDRESS) {
+        throw new Error('Certificate Registry not configured');
+      }
+      
       const duplicateChecks = await Promise.all(
         validEntries.map(async (entry, index) => {
           try {
             const existingCertId = await readContract(config, {
-              address: CERTIFICATE_REGISTRY_ADDRESS,
+              address: CERTIFICATE_REGISTRY_ADDRESS as `0x${string}`,
               abi: CertificateRegistryABI.abi,
               functionName: 'hashToCertificateId',
               args: [entry.documentHash as `0x${string}`],
@@ -193,10 +231,16 @@ export function BulkUpload() {
       // Prepare batch data for valid entries only
       const batchData = validIndexes.map(index => {
         const entry = validEntries[index];
+        const metadata = JSON.stringify({
+          program: entry.program.trim(),
+          timestamp: Date.now(),
+        });
+
         return {
           documentHash: entry.documentHash as `0x${string}`,
           studentWallet: entry.studentWallet as `0x${string}`,
-          metadataURI: ''
+          metadataURI: metadata,
+          graduationYear: entry.graduationYear, // Include graduation year
         };
       });
 
@@ -213,7 +257,9 @@ export function BulkUpload() {
         const errStr = error.message.toLowerCase();
         
         if (errStr.includes('unauthorizedissuer') || errStr.includes('unauthorized')) {
-          errorMsg = 'Your institution is not authorized to issue certificates. Please ensure your institution is verified and active.';
+          errorMsg = withAdminContact(
+            'Your institution is not authorized to issue certificates. Please ensure your institution is verified and active,'
+          );
         } else if (errStr.includes('user rejected') || errStr.includes('user denied')) {
           errorMsg = 'Transaction was rejected by user.';
         } else {
@@ -367,7 +413,7 @@ export function BulkUpload() {
             <h2 className="text-xl font-semibold text-white mb-4">1. Download CSV Template</h2>
             <p className="text-surface-400 mb-4">
               Download the template and fill in student information. Include columns for wallet address,
-              name, program, graduation date, and PDF filename.
+              name, program, graduation year (1900-2100), and PDF filename.
             </p>
             <button onClick={downloadCSVTemplate} className="btn-secondary">
               <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -586,7 +632,7 @@ export function BulkUpload() {
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-sm text-surface-300 mb-2">
                     <div>Program: {entry.program}</div>
-                    <div>Date: {entry.graduationDate}</div>
+                    <div>Year: {entry.graduationYear}</div>
                     <div className="col-span-2">PDF: {entry.pdfFilename}</div>
                   </div>
                   {entry.validationErrors.length > 0 && (
@@ -668,6 +714,25 @@ export function BulkUpload() {
                 </svg>
                 <p className="text-red-400 font-semibold mb-6">Transaction Failed</p>
               </>
+            )}
+
+            {showTransactionStatus && (
+              <div className={`mb-6 rounded-lg border p-4 text-left ${transactionStatusConfig[transactionPhase].borderClassName}`}>
+                <p className={`font-medium flex items-center gap-2 ${transactionStatusConfig[transactionPhase].textClassName}`}>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  {transactionStatusConfig[transactionPhase].title}
+                </p>
+                <p className="mt-1 text-sm text-surface-300">
+                  {transactionStatusConfig[transactionPhase].description}
+                </p>
+                {transactionHash && (
+                  <p className="mt-2 text-xs text-surface-400 font-mono break-all">
+                    Transaction: {transactionHash}
+                  </p>
+                )}
+              </div>
             )}
 
             {/* Progress Stats */}

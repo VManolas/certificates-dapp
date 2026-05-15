@@ -1,11 +1,8 @@
 // src/store/authStore.ts
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-
-/**
- * User roles in the zkCredentials system
- */
-export type UserRole = 'university' | 'student' | 'employer' | 'admin' | null;
+import { ZKCREDENTIALS_AUTH_STORAGE_KEY } from '@/constants/authStorage';
+import type { UserRole, AuthMethod } from '@/types/auth';
 
 /**
  * Institution data for university users
@@ -15,8 +12,24 @@ export interface InstitutionData {
   emailDomain: string;
   isVerified: boolean;
   isActive: boolean;
-  verificationDate: number;
-  totalCertificatesIssued: number;
+  verificationDate: bigint;
+  totalCertificatesIssued: bigint;
+}
+
+/**
+ * ZK Authentication state
+ */
+export interface ZKAuthState {
+  /** Whether user has enabled ZK authentication */
+  isZKAuthEnabled: boolean;
+  /** ZK authentication commitment (if registered) */
+  zkCommitment: string | null;
+  /** ZK session ID (if authenticated) */
+  zkSessionId: string | null;
+  /** Whether user is currently authenticated via ZK proof */
+  isZKAuthenticated: boolean;
+  /** ZK authentication role */
+  zkRole: UserRole;
 }
 
 /**
@@ -27,6 +40,8 @@ interface AuthState {
   address: string | null;
   /** User's selected role */
   role: UserRole;
+  /** Pre-selected role before wallet connection */
+  preSelectedRole: UserRole | null;
   /** Whether the role is aspirational (not yet on-chain verified) */
   isAspirationalRole: boolean;
   /** Institution data if user is a university */
@@ -41,16 +56,42 @@ interface AuthState {
   showRoleSelector: boolean;
   /** Optional refetch callback for institution data */
   refetchInstitution: (() => void) | null;
+  /** ZK authentication state */
+  zkAuth: ZKAuthState;
+  /** Current authentication method (web3 or zk) */
+  authMethod: AuthMethod;
+  /** Whether authentication method selector should be shown */
+  showAuthMethodSelector: boolean;
+  /** User's preferred authentication method (saved preference) */
+  preferredAuthMethod: AuthMethod;
+  /** Whether system is in cooldown period after logout */
+  isLogoutCooldown: boolean;
+  /** Blocks auto-auth after explicit logout until user initiates auth again */
+  requiresManualAuthSelection: boolean;
+  /** Monotonic counter for auth resets/transitions */
+  authEpoch: number;
 
   // Actions
   setAddress: (address: string | null) => void;
   setRole: (role: UserRole, isAspirational?: boolean) => void;
+  setPreSelectedRole: (role: UserRole | null) => void;
   setInstitutionData: (data: InstitutionData | null) => void;
   setHasSelectedRole: (selected: boolean) => void;
   setDetectedRoles: (roles: UserRole[]) => void;
   setIsRoleDetectionComplete: (complete: boolean) => void;
   setShowRoleSelector: (show: boolean) => void;
   setRefetchInstitution: (refetch: (() => void) | null) => void;
+  setZKAuthEnabled: (enabled: boolean) => void;
+  setZKCommitment: (commitment: string | null) => void;
+  setZKSessionId: (sessionId: string | null) => void;
+  setZKAuthenticated: (authenticated: boolean) => void;
+  setZKRole: (role: UserRole) => void;
+  setAuthMethod: (method: AuthMethod) => void;
+  setShowAuthMethodSelector: (show: boolean) => void;
+  setPreferredAuthMethod: (method: AuthMethod) => void;
+  setIsLogoutCooldown: (cooldown: boolean) => void;
+  setRequiresManualAuthSelection: (required: boolean) => void;
+  bumpAuthEpoch: () => void;
   reset: () => void;
 }
 
@@ -65,6 +106,7 @@ export const useAuthStore = create<AuthState>()(
     (set) => ({
       address: null,
       role: null,
+      preSelectedRole: null,
       isAspirationalRole: false,
       institutionData: null,
       hasSelectedRole: false,
@@ -72,27 +114,55 @@ export const useAuthStore = create<AuthState>()(
       isRoleDetectionComplete: false,
       showRoleSelector: false,
       refetchInstitution: null,
+      zkAuth: {
+        isZKAuthEnabled: false,
+        zkCommitment: null,
+        zkSessionId: null,
+        isZKAuthenticated: false,
+        zkRole: null,
+      },
+      authMethod: null,
+      showAuthMethodSelector: false,
+      preferredAuthMethod: null,
+      isLogoutCooldown: false,
+      requiresManualAuthSelection: false,
+      authEpoch: 0,
 
       setAddress: (address) =>
         set((state) => {
-          // If address changes, reset role and institution data
+          // If address changes (including disconnect), reset ALL auth state
           if (address !== state.address) {
             return {
               address,
               role: null,
+              preSelectedRole: null, // Clear pre-selected role too
               isAspirationalRole: false,
               institutionData: null,
-              hasSelectedRole: false,
+              hasSelectedRole: false, // Reset this to allow re-detection
               detectedRoles: [],
               isRoleDetectionComplete: false,
               showRoleSelector: false,
               refetchInstitution: null,
+              zkAuth: {
+                isZKAuthEnabled: false,
+                zkCommitment: null,
+                zkSessionId: null,
+                isZKAuthenticated: false,
+                zkRole: null,
+              },
+              authMethod: null,
+              showAuthMethodSelector: false,
+              requiresManualAuthSelection: false,
+              authEpoch: state.authEpoch + 1,
+              // Keep preferredAuthMethod - user's saved preference
             };
           }
           return { address };
         }),
 
       setRole: (role, isAspirational = false) => set({ role, isAspirationalRole: isAspirational, hasSelectedRole: true }),
+
+      setPreSelectedRole: (preSelectedRole) => set({ preSelectedRole }),
 
       setInstitutionData: (institutionData) => set({ institutionData }),
 
@@ -107,10 +177,38 @@ export const useAuthStore = create<AuthState>()(
 
       setRefetchInstitution: (refetchInstitution) => set({ refetchInstitution }),
 
+      setZKAuthEnabled: (isZKAuthEnabled) => 
+        set((state) => ({ zkAuth: { ...state.zkAuth, isZKAuthEnabled } })),
+
+      setZKCommitment: (zkCommitment) =>
+        set((state) => ({ zkAuth: { ...state.zkAuth, zkCommitment } })),
+
+      setZKSessionId: (zkSessionId) =>
+        set((state) => ({ zkAuth: { ...state.zkAuth, zkSessionId } })),
+
+      setZKAuthenticated: (isZKAuthenticated) =>
+        set((state) => ({ zkAuth: { ...state.zkAuth, isZKAuthenticated } })),
+
+      setZKRole: (zkRole) =>
+        set((state) => ({ zkAuth: { ...state.zkAuth, zkRole } })),
+
+      setAuthMethod: (authMethod) => set({ authMethod }),
+
+      setShowAuthMethodSelector: (showAuthMethodSelector) => set({ showAuthMethodSelector }),
+
+      setPreferredAuthMethod: (preferredAuthMethod) => set({ preferredAuthMethod }),
+
+      setIsLogoutCooldown: (isLogoutCooldown) => set({ isLogoutCooldown }),
+
+      setRequiresManualAuthSelection: (requiresManualAuthSelection) => set({ requiresManualAuthSelection }),
+
+      bumpAuthEpoch: () => set((state) => ({ authEpoch: state.authEpoch + 1 })),
+
       reset: () =>
         set({
           address: null,
           role: null,
+          preSelectedRole: null,
           isAspirationalRole: false,
           institutionData: null,
           hasSelectedRole: false,
@@ -118,16 +216,32 @@ export const useAuthStore = create<AuthState>()(
           isRoleDetectionComplete: false,
           showRoleSelector: false,
           refetchInstitution: null,
+          zkAuth: {
+            isZKAuthEnabled: false,
+            zkCommitment: null,
+            zkSessionId: null,
+            isZKAuthenticated: false,
+            zkRole: null,
+          },
+          authMethod: null,
+          showAuthMethodSelector: false,
+          requiresManualAuthSelection: false,
+          authEpoch: 0,
+          // Keep preferredAuthMethod even on reset
         }),
     }),
     {
-      name: 'zkcredentials-auth',
+      name: ZKCREDENTIALS_AUTH_STORAGE_KEY,
       partialize: (state) => ({
         address: state.address,
         role: state.role,
         isAspirationalRole: state.isAspirationalRole,
         hasSelectedRole: state.hasSelectedRole,
-        detectedRoles: state.detectedRoles,
+        // ❌ DON'T persist detectedRoles - they should always be fresh from blockchain
+        // ❌ DON'T persist preSelectedRole - it's only valid for the current session
+        zkAuth: state.zkAuth,
+        authMethod: state.authMethod,
+        preferredAuthMethod: state.preferredAuthMethod,
         // Don't persist modal state or detection state or institution data
       }),
     }
@@ -158,5 +272,39 @@ export function useHasMultipleRoles(): boolean {
   // Filter out null and employer (always available)
   const specialRoles = detectedRoles.filter(r => r && r !== 'employer');
   return specialRoles.length > 0;
+}
+
+/**
+ * Hook to check if user is authenticated (via any method)
+ */
+export function useIsAuthenticated(): boolean {
+  const { role, zkAuth, authMethod } = useAuthStore();
+  
+  // Check ZK authentication
+  if (authMethod === 'zk' && zkAuth.isZKAuthenticated) {
+    return true;
+  }
+  
+  // Check Web3 authentication (has role from on-chain detection)
+  if (authMethod === 'web3' && role !== null) {
+    return true;
+  }
+  
+  return false;
+}
+
+/**
+ * Hook to get the effective role (from either auth method)
+ */
+export function useEffectiveRole(): UserRole {
+  const { role, zkAuth, authMethod } = useAuthStore();
+  
+  // ZK auth takes precedence if active
+  if (authMethod === 'zk' && zkAuth.isZKAuthenticated) {
+    return zkAuth.zkRole;
+  }
+  
+  // Otherwise use Web3 role
+  return role;
 }
 

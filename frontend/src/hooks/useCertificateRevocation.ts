@@ -1,20 +1,24 @@
 // src/hooks/useCertificateRevocation.ts
 import { useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
+import { useEffect, useRef, useState } from 'react';
 import { CERTIFICATE_REGISTRY_ADDRESS } from '@/lib/wagmi';
 import CertificateRegistryABI from '@/contracts/abis/CertificateRegistry.json';
 import { logger } from '@/lib/logger';
 
 export interface UseCertificateRevocationReturn {
-  revokeCertificate: (certificateId: bigint, reason: string) => void;
+  revokeCertificate: (certificateId: bigint, reason: string) => Promise<void>;
   isPending: boolean;
   isConfirming: boolean;
   isConfirmed: boolean;
   isSuccess: boolean;
+  transactionPhase: 'idle' | 'awaiting_wallet_confirmation' | 'pending_onchain' | 'confirmed' | 'failed';
   error: Error | null;
   hash: `0x${string}` | undefined;
   transactionHash: `0x${string}` | undefined;
   reset: () => void;
 }
+
+const MIN_PENDING_DISPLAY_MS = 1200;
 
 /**
  * Hook to revoke a certificate (institution only)
@@ -39,27 +43,63 @@ export function useCertificateRevocation(): UseCertificateRevocationReturn {
   // Contract write hook
   const {
     data: hash,
-    writeContract,
-    isPending,
+    writeContractAsync,
+    isPending: isWritePending,
     error: writeError,
     reset: resetWrite,
   } = useWriteContract();
 
   // Transaction confirmation hook
   const {
-    isLoading: isConfirming,
-    isSuccess,
+    isSuccess: isReceiptConfirmed,
     error: confirmError,
   } = useWaitForTransactionReceipt({
     hash,
   });
+
+  const [transactionPhase, setTransactionPhase] = useState<
+    'idle' | 'awaiting_wallet_confirmation' | 'pending_onchain' | 'confirmed' | 'failed'
+  >('idle');
+  const pendingStartRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (writeError || confirmError) {
+      setTransactionPhase('failed');
+      return;
+    }
+
+    if (isWritePending && !hash) {
+      setTransactionPhase('awaiting_wallet_confirmation');
+      pendingStartRef.current = null;
+      return;
+    }
+
+    if (hash && !isReceiptConfirmed) {
+      if (pendingStartRef.current === null) {
+        pendingStartRef.current = Date.now();
+      }
+      setTransactionPhase('pending_onchain');
+      return;
+    }
+
+    if (isReceiptConfirmed && hash) {
+      const pendingSince = pendingStartRef.current ?? Date.now();
+      const elapsed = Date.now() - pendingSince;
+      const waitRemaining = Math.max(0, MIN_PENDING_DISPLAY_MS - elapsed);
+      const timer = setTimeout(() => setTransactionPhase('confirmed'), waitRemaining);
+      return () => clearTimeout(timer);
+    }
+
+    setTransactionPhase('idle');
+    pendingStartRef.current = null;
+  }, [isWritePending, hash, isReceiptConfirmed, writeError, confirmError]);
 
   /**
    * Revoke a certificate with a reason
    * @param certificateId - The ID of the certificate to revoke
    * @param reason - The reason for revocation (required for audit trail)
    */
-  const revokeCertificate = (certificateId: bigint, reason: string) => {
+  const revokeCertificate = async (certificateId: bigint, reason: string) => {
     if (!CERTIFICATE_REGISTRY_ADDRESS) {
       throw new Error('Certificate registry address not configured');
     }
@@ -81,7 +121,7 @@ export function useCertificateRevocation(): UseCertificateRevocationReturn {
       reason,
     });
 
-    writeContract({
+    await writeContractAsync({
       address: CERTIFICATE_REGISTRY_ADDRESS,
       abi: CertificateRegistryABI.abi as readonly unknown[],
       functionName: 'revokeCertificate',
@@ -94,6 +134,8 @@ export function useCertificateRevocation(): UseCertificateRevocationReturn {
    * Clears transaction state to allow new revocation attempts
    */
   const reset = () => {
+    setTransactionPhase('idle');
+    pendingStartRef.current = null;
     resetWrite();
   };
 
@@ -110,10 +152,11 @@ export function useCertificateRevocation(): UseCertificateRevocationReturn {
 
   return {
     revokeCertificate,
-    isPending,
-    isConfirming,
-    isConfirmed: isSuccess,
-    isSuccess,
+    isPending: transactionPhase === 'awaiting_wallet_confirmation',
+    isConfirming: transactionPhase === 'pending_onchain',
+    isConfirmed: transactionPhase === 'confirmed',
+    isSuccess: transactionPhase === 'confirmed',
+    transactionPhase,
     error,
     hash,
     transactionHash: hash,

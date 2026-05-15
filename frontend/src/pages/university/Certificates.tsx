@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { useAccount, useReadContract } from 'wagmi';
 import { useNavigate, Link } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/store/authStore';
 import { useCertificatesBatch, useCanIssueCertificates, type CertificateDetails } from '@/hooks';
 import { useCertificateRevocation } from '@/hooks/useCertificateRevocation';
@@ -10,6 +11,36 @@ import { CERTIFICATE_REGISTRY_ADDRESS } from '@/lib/wagmi';
 import CertificateRegistryABI from '@/contracts/abis/CertificateRegistry.json';
 import { logger } from '@/lib/logger';
 
+function getProgramNameFromMetadata(metadataURI: string): string {
+  if (!metadataURI) return 'Unknown Program';
+
+  try {
+    const parsed = JSON.parse(metadataURI) as { program?: string };
+    return (parsed.program || '').trim() || 'Unknown Program';
+  } catch {
+    return metadataURI.trim() || 'Unknown Program';
+  }
+}
+
+function getGraduationYearValue(graduationYear: unknown): number | null {
+  if (typeof graduationYear === 'number' && Number.isFinite(graduationYear)) {
+    return graduationYear;
+  }
+
+  if (typeof graduationYear === 'bigint') {
+    return Number(graduationYear);
+  }
+
+  if (typeof graduationYear === 'string' && graduationYear.trim()) {
+    const parsed = Number(graduationYear);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return null;
+}
+
 export function UniversityCertificates() {
   const navigate = useNavigate();
   const { address, isConnected } = useAccount();
@@ -17,6 +48,7 @@ export function UniversityCertificates() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'revoked'>('all');
   const [yearFilter, setYearFilter] = useState<string>('all');
+  const [programFilter, setProgramFilter] = useState<string>('all');
   const [isRefreshing, setIsRefreshing] = useState(false);
   
   // Real-time institution status check
@@ -35,7 +67,9 @@ export function UniversityCertificates() {
     },
   });
 
-  const certificateIds = institutionCerts ? (institutionCerts[0] as bigint[]) : undefined;
+  const certificateIds = institutionCerts && Array.isArray(institutionCerts) && institutionCerts.length > 0
+    ? (institutionCerts[0] as bigint[]) 
+    : undefined;
 
   // Fetch certificate details
   const { certificates: allCertificates, foundFlags, isLoading: isLoadingCerts, refetch: refetchCerts } = useCertificatesBatch(
@@ -76,9 +110,20 @@ export function UniversityCertificates() {
     new Set(
       myCertificates
         .filter(({ cert }) => cert)
-        .map(({ cert }) => new Date(Number(cert.issueDate) * 1000).getFullYear())
+        .map(({ cert }) => getGraduationYearValue(cert.graduationYear))
+        .filter((year): year is number => year !== null)
     )
   ).sort((a, b) => b - a); // Sort descending (newest first)
+
+  // Extract unique programs from certificates
+  const availablePrograms = Array.from(
+    new Set(
+      myCertificates
+        .filter(({ cert }) => cert)
+        .map(({ cert }) => getProgramNameFromMetadata(cert.metadataURI))
+        .filter((program) => program && program !== 'Unknown Program')
+    )
+  ).sort((a, b) => a.localeCompare(b));
 
   // Apply filters
   const filteredCertificates = myCertificates.filter(({ cert }) => {
@@ -90,17 +135,28 @@ export function UniversityCertificates() {
 
     // Year filter
     if (yearFilter !== 'all') {
-      const certYear = new Date(Number(cert.issueDate) * 1000).getFullYear();
+      const certYear = getGraduationYearValue(cert.graduationYear);
+      if (certYear === null) return false;
       if (certYear.toString() !== yearFilter) return false;
+    }
+
+    // Program filter
+    if (programFilter !== 'all') {
+      const certProgram = getProgramNameFromMetadata(cert.metadataURI);
+      if (certProgram !== programFilter) return false;
     }
 
     // Search filter
     if (searchTerm) {
       const search = searchTerm.toLowerCase();
+      const programName = getProgramNameFromMetadata(cert.metadataURI).toLowerCase();
+      const graduationYear = getGraduationYearValue(cert.graduationYear)?.toString() || '';
       return (
         cert.certificateId.toString().includes(search) ||
         cert.studentWallet.toLowerCase().includes(search) ||
-        cert.documentHash.toLowerCase().includes(search)
+        cert.documentHash.toLowerCase().includes(search) ||
+        programName.includes(search) ||
+        graduationYear.includes(search)
       );
     }
 
@@ -172,17 +228,41 @@ export function UniversityCertificates() {
       <div className="container mx-auto px-4 py-16 text-center">
         <h1 className="text-2xl font-bold text-white mb-4">Institution Not Registered</h1>
         <p className="text-surface-400 mb-6">
-          You must be a registered institution to view certificates.
+          This wallet is not an active admin-approved institution. Contact the platform admin for institution onboarding.
         </p>
-        <Link to="/university/register" className="btn-primary">
-          Register Institution
-        </Link>
+        <button onClick={() => navigate('/')} className="btn-secondary">
+          Back to Home
+        </button>
       </div>
     );
   }
 
   return (
     <div className="container mx-auto px-4 py-8">
+      {/* Navigation Buttons */}
+      <div className="flex items-center gap-3 mb-6">
+        <button
+          onClick={() => navigate(-1)}
+          className="btn-secondary flex items-center gap-2"
+          title="Go back to previous page"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+          Back
+        </button>
+        <button
+          onClick={() => navigate('/university/dashboard')}
+          className="btn-primary flex items-center gap-2"
+          title="Go to University Dashboard"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+          </svg>
+          Dashboard
+        </button>
+      </div>
+
       {/* Header */}
       <div className="mb-8">
         <div className="flex items-center justify-between">
@@ -276,7 +356,7 @@ export function UniversityCertificates() {
 
       {/* Filters */}
       <div className="card mb-6">
-        <div className="grid md:grid-cols-3 gap-4">
+        <div className="grid md:grid-cols-4 gap-4">
           <div>
             <label className="block text-sm font-medium text-surface-200 mb-2">
               Search
@@ -305,7 +385,7 @@ export function UniversityCertificates() {
           </div>
           <div>
             <label className="block text-sm font-medium text-surface-200 mb-2">
-              Issue Year
+              Graduation Year
             </label>
             <select
               value={yearFilter}
@@ -316,6 +396,23 @@ export function UniversityCertificates() {
               {availableYears.map((year) => (
                 <option key={year} value={year.toString()}>
                   {year}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-surface-200 mb-2">
+              Program
+            </label>
+            <select
+              value={programFilter}
+              onChange={(e) => setProgramFilter(e.target.value)}
+              className="input w-full"
+            >
+              <option value="all">All Programs</option>
+              {availablePrograms.map((programName) => (
+                <option key={programName} value={programName}>
+                  {programName}
                 </option>
               ))}
             </select>
@@ -338,26 +435,28 @@ export function UniversityCertificates() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
           <h3 className="text-lg font-semibold text-white mb-2">
-            {searchTerm || statusFilter !== 'all' || yearFilter !== 'all' ? 'No Matching Certificates' : 'No Certificates Issued'}
+            {searchTerm || statusFilter !== 'all' || yearFilter !== 'all' || programFilter !== 'all' ? 'No Matching Certificates' : 'No Certificates Issued'}
           </h3>
           <p className="text-surface-400 mb-4">
-            {searchTerm || statusFilter !== 'all' || yearFilter !== 'all'
+            {searchTerm || statusFilter !== 'all' || yearFilter !== 'all' || programFilter !== 'all'
               ? (
                   <>
                     No certificates found
                     {searchTerm && ` matching "${searchTerm}"`}
                     {statusFilter !== 'all' && ` with status: ${statusFilter}`}
-                    {yearFilter !== 'all' && ` issued in ${yearFilter}`}
+                    {yearFilter !== 'all' && ` with graduation year: ${yearFilter}`}
+                    {programFilter !== 'all' && ` in program: ${programFilter}`}
                   </>
                 )
               : 'Start issuing certificates to see them here'}
           </p>
-          {(searchTerm || statusFilter !== 'all' || yearFilter !== 'all') && (
+          {(searchTerm || statusFilter !== 'all' || yearFilter !== 'all' || programFilter !== 'all') && (
             <button
               onClick={() => {
                 setSearchTerm('');
                 setStatusFilter('all');
                 setYearFilter('all');
+                setProgramFilter('all');
               }}
               className="btn-secondary inline-flex items-center gap-2 mb-4"
             >
@@ -367,7 +466,7 @@ export function UniversityCertificates() {
               Clear filters
             </button>
           )}
-          {!searchTerm && statusFilter === 'all' && yearFilter === 'all' && (
+          {!searchTerm && statusFilter === 'all' && yearFilter === 'all' && programFilter === 'all' && (
             <Link to="/university/issue" className="btn-primary inline-flex items-center gap-2">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -398,6 +497,8 @@ function CertificateRow({
   certificateId: bigint;
   certificate: CertificateDetails;
 }) {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [showRevokeConfirm, setShowRevokeConfirm] = useState(false);
   const [revocationReason, setRevocationReason] = useState('');
   const [reasonError, setReasonError] = useState<string | null>(null);
@@ -406,7 +507,9 @@ function CertificateRow({
     isPending,
     isConfirming,
     isSuccess,
+    transactionPhase,
     error,
+    transactionHash,
     reset,
   } = useCertificateRevocation();
 
@@ -427,15 +530,18 @@ function CertificateRow({
     revokeCertificate(certificateId, revocationReason.trim());
   };
 
-  // Close modal on success
+  // Close modal on success and invalidate queries to refetch fresh data
   if (isSuccess && showRevokeConfirm) {
     setTimeout(() => {
       setShowRevokeConfirm(false);
       setRevocationReason('');
       setReasonError(null);
       reset();
-      // Refresh page to show updated status
-      window.location.reload();
+      
+      // Invalidate certificate queries to refetch fresh data (no hard reload needed!)
+      queryClient.invalidateQueries({ queryKey: ['readContract'] });
+      
+      logger.info('Certificate revoked successfully, cache invalidated');
     }, 2000);
   }
 
@@ -460,6 +566,10 @@ function CertificateRow({
                 <span className="text-white font-mono">{truncateHash(certificate.studentWallet, 8, 6)}</span>
               </div>
               <div>
+                <span className="text-surface-500">Graduation Year:</span>{' '}
+                <span className="text-white">{getGraduationYearValue(certificate.graduationYear) ?? 'N/A'}</span>
+              </div>
+              <div>
                 <span className="text-surface-500">Issue Date:</span>{' '}
                 <span className="text-white">
                   {issueDate.toLocaleDateString('en-US', {
@@ -470,6 +580,10 @@ function CertificateRow({
                 </span>
               </div>
               <div className="md:col-span-2">
+                <span className="text-surface-500">Program:</span>{' '}
+                <span className="text-white">{getProgramNameFromMetadata(certificate.metadataURI)}</span>
+              </div>
+              <div className="md:col-span-2">
                 <span className="text-surface-500">Document Hash:</span>{' '}
                 <span className="text-white font-mono text-xs">{truncateHash(certificate.documentHash, 12, 10)}</span>
               </div>
@@ -478,14 +592,13 @@ function CertificateRow({
 
           {/* Actions */}
           <div className="flex gap-2 ml-4">
-            <a
-              href={`/verify?cert=${certificateId.toString()}`}
+            <button
+              onClick={() => navigate(`/verify?hash=${certificate.documentHash}`)}
               className="btn-secondary text-sm px-4 py-2"
-              target="_blank"
-              rel="noopener noreferrer"
+              title="View certificate details"
             >
               View
-            </a>
+            </button>
             {!certificate.isRevoked && (
               <button
                 onClick={() => setShowRevokeConfirm(true)}
@@ -563,6 +676,47 @@ function CertificateRow({
                     </div>
                   )}
 
+                  {(transactionPhase === 'awaiting_wallet_confirmation'
+                    || transactionPhase === 'pending_onchain'
+                    || transactionPhase === 'confirmed') && (
+                    <div
+                      className={`rounded-lg border p-4 mb-4 ${
+                        transactionPhase === 'awaiting_wallet_confirmation'
+                          ? 'border-yellow-500/30 bg-yellow-500/10'
+                          : transactionPhase === 'pending_onchain'
+                          ? 'border-blue-500/30 bg-blue-500/10'
+                          : 'border-green-500/30 bg-green-500/10'
+                      }`}
+                    >
+                      <p
+                        className={`text-sm font-medium ${
+                          transactionPhase === 'awaiting_wallet_confirmation'
+                            ? 'text-yellow-300'
+                            : transactionPhase === 'pending_onchain'
+                            ? 'text-blue-300'
+                            : 'text-green-300'
+                        }`}
+                      >
+                        {transactionPhase === 'awaiting_wallet_confirmation' && 'Waiting to submit transaction'}
+                        {transactionPhase === 'pending_onchain' && 'Transaction pending'}
+                        {transactionPhase === 'confirmed' && 'Transaction confirmed'}
+                      </p>
+                      <p className="mt-1 text-xs text-surface-300">
+                        {transactionPhase === 'awaiting_wallet_confirmation' &&
+                          'Confirm certificate revocation in MetaMask to submit the transaction.'}
+                        {transactionPhase === 'pending_onchain' &&
+                          'Revocation transaction submitted. Waiting for blockchain confirmation.'}
+                        {transactionPhase === 'confirmed' &&
+                          'Certificate revocation is confirmed on-chain.'}
+                      </p>
+                      {transactionHash && (
+                        <p className="mt-2 text-xs text-surface-400 font-mono break-all">
+                          Transaction: {transactionHash}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
                   <div className="flex gap-3">
                     <button
                       onClick={() => {
@@ -581,7 +735,11 @@ function CertificateRow({
                       className="btn-primary flex-1 bg-yellow-500 hover:bg-yellow-600"
                       disabled={isPending || isConfirming || !revocationReason.trim()}
                     >
-                      {isPending ? 'Waiting for signature...' : isConfirming ? 'Revoking...' : 'Confirm Revocation'}
+                      {isPending
+                        ? 'Waiting for wallet confirmation...'
+                        : isConfirming
+                        ? 'Transaction pending...'
+                        : 'Confirm Revocation'}
                     </button>
                   </div>
                 </>

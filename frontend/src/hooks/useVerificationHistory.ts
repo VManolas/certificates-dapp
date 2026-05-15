@@ -1,5 +1,6 @@
 // src/hooks/useVerificationHistory.ts
 import { useState, useEffect, useCallback } from 'react';
+import { useAccount } from 'wagmi';
 import { logger } from '@/lib/logger';
 
 export interface VerificationHistoryEntry {
@@ -28,7 +29,7 @@ interface UseVerificationHistoryReturn {
   };
 }
 
-const STORAGE_KEY = 'zkcredentials-verification-history';
+const STORAGE_KEY_PREFIX = 'zkcredentials-verification-history';
 const MAX_ENTRIES = 100;
 
 /**
@@ -60,12 +61,23 @@ const MAX_ENTRIES = 100;
  * ```
  */
 export function useVerificationHistory(): UseVerificationHistoryReturn {
+  const { address } = useAccount();
   const [history, setHistory] = useState<VerificationHistoryEntry[]>([]);
+  const normalizedAddress = address?.toLowerCase();
+  const storageKey = normalizedAddress
+    ? `${STORAGE_KEY_PREFIX}:${normalizedAddress}`
+    : null;
 
-  // Load history from localStorage on mount
+  // Load wallet-scoped history from localStorage.
+  // Each employer wallet sees only its own verification records.
   useEffect(() => {
+    if (!storageKey) {
+      setHistory([]);
+      return;
+    }
+
     try {
-      const stored = localStorage.getItem(STORAGE_KEY);
+      const stored = localStorage.getItem(storageKey);
       if (stored) {
         const parsed = JSON.parse(stored) as Array<Omit<VerificationHistoryEntry, 'certificateId'> & { certificateId?: string }>;
         // Convert bigint strings back to bigint
@@ -79,21 +91,25 @@ export function useVerificationHistory(): UseVerificationHistoryReturn {
       logger.error('Failed to load verification history', error);
       setHistory([]);
     }
-  }, []);
+  }, [storageKey]);
 
   // Save history to localStorage whenever it changes
   const saveHistory = useCallback((entries: VerificationHistoryEntry[]) => {
+    if (!storageKey) {
+      return;
+    }
+
     try {
       // Convert bigint to string for JSON serialization
       const serializable = entries.map((entry) => ({
         ...entry,
         certificateId: entry.certificateId?.toString(),
       }));
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(serializable));
+      localStorage.setItem(storageKey, JSON.stringify(serializable));
     } catch (error) {
       console.error('Failed to save verification history:', error);
     }
-  }, []);
+  }, [storageKey]);
 
   // Add a new verification entry
   const addEntry = useCallback(
@@ -117,8 +133,10 @@ export function useVerificationHistory(): UseVerificationHistoryReturn {
   // Clear all history
   const clearHistory = useCallback(() => {
     setHistory([]);
-    localStorage.removeItem(STORAGE_KEY);
-  }, []);
+    if (storageKey) {
+      localStorage.removeItem(storageKey);
+    }
+  }, [storageKey]);
 
   // Export history to CSV
   const exportToCSV = useCallback(() => {
@@ -166,12 +184,13 @@ export function useVerificationHistory(): UseVerificationHistoryReturn {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `verification-history-${new Date().toISOString().split('T')[0]}.csv`;
+    const walletSuffix = normalizedAddress ? `-${normalizedAddress.slice(2, 8)}` : '';
+    link.download = `verification-history${walletSuffix}-${new Date().toISOString().split('T')[0]}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-  }, [history]);
+  }, [history, normalizedAddress]);
 
   // Get statistics
   const getStats = useCallback(() => {

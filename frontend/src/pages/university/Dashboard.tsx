@@ -36,7 +36,9 @@ export function UniversityDashboard() {
     },
   });
 
-  const certificateIds = institutionCerts ? (institutionCerts[0] as bigint[]) : undefined;
+  const certificateIds = institutionCerts && Array.isArray(institutionCerts) && institutionCerts.length > 0
+    ? (institutionCerts[0] as bigint[]) 
+    : undefined;
 
   // Fetch certificate details
   const { certificates: allCertificates, foundFlags, isLoading, refetch: refetchCertDetails } = useCertificatesBatch(
@@ -336,11 +338,17 @@ export function UniversityDashboard() {
         ) : (
           <div className="space-y-3">
             {recentCertificates.map(({ cert, id }) => (
-              <div key={id.toString()} className="p-4 bg-surface-800 rounded-lg border border-surface-700 hover:border-primary-500/50 transition-colors">
+              <button
+                key={id.toString()}
+                onClick={() => navigate(`/verify?hash=${cert.documentHash}`)}
+                className="w-full p-4 bg-surface-800 rounded-lg border border-surface-700 hover:border-primary-500/50 transition-all cursor-pointer text-left hover:bg-surface-800/80 group"
+              >
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-2">
-                      <span className="text-sm font-mono text-surface-400">ID #{id.toString()}</span>
+                      <span className="text-sm font-mono text-surface-400 group-hover:text-primary-400 transition-colors">
+                        ID #{id.toString()}
+                      </span>
                       {cert.isRevoked ? (
                         <span className="badge badge-error">Revoked</span>
                       ) : (
@@ -354,11 +362,21 @@ export function UniversityDashboard() {
                       <span className="text-surface-400">Hash:</span> {truncateHash(cert.documentHash)}
                     </div>
                   </div>
-                  <div className="text-xs text-surface-500">
-                    {new Date(Number(cert.issueDate) * 1000).toLocaleDateString()}
+                  <div className="flex flex-col items-end gap-2">
+                    <div className="text-xs text-surface-500">
+                      {new Date(Number(cert.issueDate) * 1000).toLocaleDateString()}
+                    </div>
+                    <svg 
+                      className="w-5 h-5 text-surface-600 group-hover:text-primary-400 transition-colors" 
+                      fill="none" 
+                      stroke="currentColor" 
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
                   </div>
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         )}

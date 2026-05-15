@@ -2,13 +2,16 @@
 import { decodeErrorResult, type Abi } from 'viem';
 import CertificateRegistryABI from '@/contracts/abis/CertificateRegistry.json';
 import InstitutionRegistryABI from '@/contracts/abis/InstitutionRegistry.json';
+import { withAdminContact } from './adminContact';
 
 /**
  * Maps of custom error names to user-friendly messages
  */
 const ERROR_MESSAGES: Record<string, string> = {
   // CertificateRegistry errors
-  'UnauthorizedIssuer': 'Your institution is not authorized to issue certificates. Please ensure your institution is verified and active, or contact an administrator.',
+  'UnauthorizedIssuer': withAdminContact(
+    'Your institution is not authorized to issue certificates. Please ensure your institution is verified and active,'
+  ),
   'CertificateAlreadyExists': 'This PDF certificate has already been issued. Each certificate must use a unique PDF document. Please upload a different PDF file for this student.',
   'CertificateNotFound': 'Certificate not found in the registry.',
   'CertificateAlreadyRevoked': 'This certificate has already been revoked.',
@@ -22,7 +25,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   'InstitutionNotFound': 'Institution not found in the registry.',
   'InstitutionNotVerified': 'Your institution has not been verified yet. Please wait for admin approval.',
   'InstitutionAlreadyVerified': 'This institution has already been verified.',
-  'InstitutionNotActive': 'Your institution is currently suspended. Please contact an administrator.',
+  'InstitutionNotActive': withAdminContact('Your institution is currently suspended.'),
   'InstitutionAlreadyActive': 'This institution is already active.',
   'EmailDomainAlreadyRegistered': 'This email domain is already registered to another institution.',
   'InvalidEmailDomain': 'The email domain provided is invalid (cannot be empty).',
@@ -43,13 +46,11 @@ const COMBINED_ABI = [
  */
 function extractErrorDataFromObject(error: any): string | null {
   if (import.meta.env.DEV) {
-    console.log('[Error Decoding] Extracting from error object...');
   }
 
   // Check direct data property
   if (error?.data && typeof error.data === 'string' && error.data.startsWith('0x')) {
     if (import.meta.env.DEV) {
-      console.log('[Error Decoding] Found in error.data:', error.data);
     }
     return error.data;
   }
@@ -57,8 +58,6 @@ function extractErrorDataFromObject(error: any): string | null {
   // Check cause property (common in wrapped errors) - RECURSIVELY
   if (error?.cause) {
     if (import.meta.env.DEV) {
-      console.log('[Error Decoding] Checking error.cause recursively...');
-      console.log('[Error Decoding] Cause keys:', Object.keys(error.cause));
     }
     const causeData = extractErrorDataFromObject(error.cause);
     if (causeData) return causeData;
@@ -67,13 +66,11 @@ function extractErrorDataFromObject(error: any): string | null {
   // Check details property (viem specific)
   if (error?.details) {
     if (import.meta.env.DEV) {
-      console.log('[Error Decoding] Checking error.details:', error.details);
     }
     if (typeof error.details === 'string') {
       const hexMatch = error.details.match(/0x[a-fA-F0-9]{8,}/);
       if (hexMatch && hexMatch[0].length !== 42) {
         if (import.meta.env.DEV) {
-          console.log('[Error Decoding] Found in error.details:', hexMatch[0]);
         }
         return hexMatch[0];
       }
@@ -83,14 +80,12 @@ function extractErrorDataFromObject(error: any): string | null {
   // Check metaMessages array (wagmi detailed errors)
   if (Array.isArray(error?.metaMessages)) {
     if (import.meta.env.DEV) {
-      console.log('[Error Decoding] Checking metaMessages:', error.metaMessages);
     }
     for (const msg of error.metaMessages) {
       if (typeof msg === 'string') {
         const hexMatch = msg.match(/0x[a-fA-F0-9]{8,}/);
         if (hexMatch && hexMatch[0].length !== 42) { // Not an address
           if (import.meta.env.DEV) {
-            console.log('[Error Decoding] Found in metaMessages:', hexMatch[0]);
           }
           return hexMatch[0];
         }
@@ -101,12 +96,10 @@ function extractErrorDataFromObject(error: any): string | null {
   // Check shortMessage property (wagmi errors)
   if (error?.shortMessage && typeof error.shortMessage === 'string') {
     if (import.meta.env.DEV) {
-      console.log('[Error Decoding] Checking shortMessage:', error.shortMessage);
     }
     const hexMatch = error.shortMessage.match(/0x[a-fA-F0-9]{8,}/);
     if (hexMatch && hexMatch[0].length !== 42) {
       if (import.meta.env.DEV) {
-        console.log('[Error Decoding] Found in shortMessage:', hexMatch[0]);
       }
       return hexMatch[0];
     }
@@ -115,18 +108,15 @@ function extractErrorDataFromObject(error: any): string | null {
   // Check walk property (viem nested errors)
   if (typeof error?.walk === 'function') {
     if (import.meta.env.DEV) {
-      console.log('[Error Decoding] Trying error.walk() method...');
     }
     try {
       let foundData: string | null = null;
       error.walk((e: any) => {
         if (import.meta.env.DEV) {
-          console.log('[Error Decoding] Walking error:', e?.name, 'keys:', Object.keys(e || {}));
         }
         if (e?.data && typeof e.data === 'string' && e.data.startsWith('0x')) {
           foundData = e.data;
           if (import.meta.env.DEV) {
-            console.log('[Error Decoding] Found in walk:', foundData);
           }
           return false; // Stop walking
         }
@@ -134,7 +124,6 @@ function extractErrorDataFromObject(error: any): string | null {
       if (foundData) return foundData;
     } catch (walkError) {
       if (import.meta.env.DEV) {
-        console.log('[Error Decoding] Walk failed:', walkError);
       }
       // Ignore walk errors
     }
@@ -169,9 +158,6 @@ export function decodeContractError(error: unknown): string {
   
   // Debug logging in development
   if (import.meta.env.DEV) {
-    console.log('[Error Decoding] Original error:', error);
-    console.log('[Error Decoding] Error message:', errorMessage);
-    console.log('[Error Decoding] Error keys:', Object.keys(error));
   }
 
   // First, try to recursively extract error data from error object
@@ -180,7 +166,6 @@ export function decodeContractError(error: unknown): string {
   if (extractedData) {
     errorData = extractedData as `0x${string}`;
     if (import.meta.env.DEV) {
-      console.log('[Error Decoding] Extracted error data from object:', errorData);
     }
     
     // Try to decode it immediately
@@ -190,12 +175,10 @@ export function decodeContractError(error: unknown): string {
         data: errorData,
       });
       if (import.meta.env.DEV) {
-        console.log('[Error Decoding] Successfully decoded from extracted data:', decoded);
       }
       return mapErrorToUserMessage(decoded.errorName, decoded.args);
     } catch {
       if (import.meta.env.DEV) {
-        console.log('[Error Decoding] Failed to decode extracted data:', errorData);
       }
       // Continue to try other methods
     }
@@ -209,7 +192,6 @@ export function decodeContractError(error: unknown): string {
     
     if (errorSelectorMatches) {
       if (import.meta.env.DEV) {
-        console.log('[Error Decoding] Found potential error selectors in message:', errorSelectorMatches);
       }
       
       // Try each potential error data, starting with the shortest (most likely to be error selector)
@@ -219,7 +201,6 @@ export function decodeContractError(error: unknown): string {
         // Skip if it looks like an address (40 hex chars)
         if (match.length === 42) {
           if (import.meta.env.DEV) {
-            console.log('[Error Decoding] Skipping address:', match);
           }
           continue;
         }
@@ -233,7 +214,6 @@ export function decodeContractError(error: unknown): string {
           });
           
           if (import.meta.env.DEV) {
-            console.log('[Error Decoding] Successfully decoded from message:', decoded);
           }
           
           // Successfully decoded! Use this error data
@@ -241,7 +221,6 @@ export function decodeContractError(error: unknown): string {
         } catch {
           // Not a valid error, try next match
           if (import.meta.env.DEV) {
-            console.log('[Error Decoding] Failed to decode:', match);
           }
           continue;
         }
@@ -251,7 +230,6 @@ export function decodeContractError(error: unknown): string {
 
   // No valid error data found, fall back to string matching
   if (import.meta.env.DEV) {
-    console.log('[Error Decoding] Falling back to string matching');
   }
   return fallbackErrorParsing(errorMessage);
 }
@@ -284,7 +262,6 @@ function fallbackErrorParsing(errorMessage: string): string {
   const errStr = errorMessage.toLowerCase();
 
   if (import.meta.env.DEV) {
-    console.log('[Error Decoding] Fallback parsing for error message');
   }
 
   // ⚠️ CRITICAL FIX: Handle "Internal JSON-RPC error" from hardhat
@@ -292,13 +269,11 @@ function fallbackErrorParsing(errorMessage: string): string {
   // We infer the actual error from the function context
   if (errStr.includes('internal json-rpc error')) {
     if (import.meta.env.DEV) {
-      console.log('[Error Decoding] Detected "Internal JSON-RPC error"');
     }
     
     // Check function context to infer the error
     if (errStr.includes('issuecertificate')) {
       if (import.meta.env.DEV) {
-        console.log('[Error Decoding] Context: issueCertificate -> Inferring CertificateAlreadyExists');
       }
       // The most common reason for issueCertificate to fail is duplicate certificate
       // This is a reasonable inference given the function context

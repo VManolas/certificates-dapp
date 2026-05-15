@@ -9,6 +9,7 @@ import { logger } from '@/lib/logger';
 import { sanitizeAddress, validatePdfFile, globalRateLimiter } from '@/lib/sanitization';
 import { parseError, withRetry } from '@/lib/errorHandling';
 import { decodeContractError } from '@/lib/errorDecoding';
+import { withAdminContact } from '@/lib/adminContact';
 import CertificateRegistryABI from '@/contracts/abis/CertificateRegistry.json';
 
 const CERTIFICATE_REGISTRY_ADDRESS = import.meta.env.VITE_CERTIFICATE_REGISTRY_ADDRESS as `0x${string}`;
@@ -26,7 +27,11 @@ export function IssueCertificate() {
   const [formState, setFormState] = useState<FormState>('upload');
   const [hashResult, setHashResult] = useState<HashResult | null>(null);
   const [studentWallet, setStudentWallet] = useState('');
+  const [program, setProgram] = useState('');
+  const [graduationYear, setGraduationYear] = useState(new Date().getFullYear());
   const [walletError, setWalletError] = useState<string | null>(null);
+  const [programError, setProgramError] = useState<string | null>(null);
+  const [yearError, setYearError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [bypassDuplicateCheck, setBypassDuplicateCheck] = useState(false);
 
@@ -49,6 +54,7 @@ export function IssueCertificate() {
     isPending, 
     isConfirming,
     isSuccess,
+    transactionPhase,
     error: txError,
     certificateId,
     transactionHash,
@@ -70,24 +76,24 @@ export function IssueCertificate() {
       
       // Enhanced debugging
       if (import.meta.env.DEV) {
-        console.log('🔍 [IssueCertificate] Raw error object:', err);
-        console.log('🔍 [IssueCertificate] Error type:', err?.constructor?.name);
-        console.log('🔍 [IssueCertificate] Error message:', err?.message);
-        console.log('🔍 [IssueCertificate] Error keys:', Object.keys(err || {}));
-        if (err?.cause) {
-          console.log('🔍 [IssueCertificate] Error cause:', err.cause);
+        logger.debug('Raw error object', { 
+          error: err,
+          errorType: err?.constructor?.name,
+          errorMessage: err?.message,
+          errorKeys: Object.keys(err || {})
+        });
+        if (err && typeof err === 'object' && 'cause' in err) {
+          logger.debug('Error cause', { cause: (err as any).cause });
         }
-        if (err?.data) {
-          console.log('🔍 [IssueCertificate] Error data:', err.data);
+        if (err && typeof err === 'object' && 'data' in err) {
+          logger.debug('Error data', { data: (err as any).data });
         }
       }
       
       // Decode the error with enhanced duplicate detection
       const userFriendlyError = decodeContractError(err);
       
-      if (import.meta.env.DEV) {
-        console.log('🔍 [IssueCertificate] Decoded error:', userFriendlyError);
-      }
+      logger.debug('Decoded error', { userFriendlyError });
       
       setError(userFriendlyError);
       setFormState('confirm');
@@ -96,16 +102,14 @@ export function IssueCertificate() {
 
   // Monitor transaction state and auto-transition to success if needed
   useEffect(() => {
-    if (import.meta.env.DEV) {
-      console.log('📊 [IssueCertificate] Transaction State:', {
-        formState,
-        isSuccess,
-        isPending,
-        isConfirming,
-        hasHash: !!transactionHash,
-        hasCertId: certificateId !== undefined,
-      });
-    }
+    logger.debug('Transaction state update', {
+      formState,
+      isSuccess,
+      isPending,
+      isConfirming,
+      hasHash: !!transactionHash,
+      hasCertId: certificateId !== undefined,
+    });
     
     if (isSuccess && formState === 'submitting') {
       logger.info('Transaction succeeded, updating UI state');
@@ -122,6 +126,37 @@ export function IssueCertificate() {
       setFormState('confirm');
     }
   }, [formState, isPending, isConfirming, isSuccess, error]);
+
+  const transactionStatusConfig: Record<'awaiting_wallet_confirmation' | 'pending_onchain' | 'confirmed', {
+    title: string;
+    description: string;
+    borderClassName: string;
+    textClassName: string;
+  }> = {
+    awaiting_wallet_confirmation: {
+      title: 'Waiting to submit transaction',
+      description: 'Confirm this certificate issuance in MetaMask to broadcast the transaction.',
+      borderClassName: 'border-yellow-500/30 bg-yellow-500/10',
+      textClassName: 'text-yellow-300',
+    },
+    pending_onchain: {
+      title: 'Transaction pending',
+      description: 'The issuance transaction was submitted and is waiting for blockchain confirmation.',
+      borderClassName: 'border-blue-500/30 bg-blue-500/10',
+      textClassName: 'text-blue-300',
+    },
+    confirmed: {
+      title: 'Transaction confirmed',
+      description: 'The certificate issuance transaction is now confirmed on-chain.',
+      borderClassName: 'border-green-500/30 bg-green-500/10',
+      textClassName: 'text-green-300',
+    },
+  };
+
+  const showTransactionStatus =
+    transactionPhase === 'awaiting_wallet_confirmation'
+    || transactionPhase === 'pending_onchain'
+    || transactionPhase === 'confirmed';
 
   const handleFile = useCallback(async (file: File) => {
     setError(null);
@@ -185,8 +220,56 @@ export function IssueCertificate() {
     return true;
   };
 
+  const validateProgram = (programName: string): boolean => {
+    const trimmedProgram = programName.trim();
+    
+    if (!trimmedProgram) {
+      setProgramError('Program name is required');
+      return false;
+    }
+    
+    if (trimmedProgram.length < 3) {
+      setProgramError('Program name must be at least 3 characters');
+      return false;
+    }
+    
+    if (trimmedProgram.length > 200) {
+      setProgramError('Program name must be less than 200 characters');
+      return false;
+    }
+    
+    // Update the program with trimmed value
+    if (trimmedProgram !== programName) {
+      setProgram(trimmedProgram);
+    }
+    
+    setProgramError(null);
+    return true;
+  };
+
+  const validateYear = (year: number): boolean => {
+    if (!year) {
+      setYearError('Graduation year is required');
+      return false;
+    }
+    
+    if (!Number.isInteger(year)) {
+      setYearError('Graduation year must be a valid integer');
+      return false;
+    }
+    
+    if (year < 1900 || year > 2100) {
+      setYearError('Graduation year must be between 1900 and 2100');
+      logger.warn('Invalid graduation year provided', { year });
+      return false;
+    }
+    
+    setYearError(null);
+    return true;
+  };
+
   const handleSubmit = async () => {
-    if (!hashResult || !validateWallet(studentWallet)) return;
+    if (!hashResult || !validateWallet(studentWallet) || !validateProgram(program) || !validateYear(graduationYear)) return;
 
     // Prevent double submissions
     if (isPending || isConfirming) {
@@ -196,7 +279,7 @@ export function IssueCertificate() {
 
     // CRITICAL: Real-time authorization check before submission
     if (!canIssue) {
-      setError(reason || 'Your institution cannot issue certificates at this time. Please contact an administrator.');
+      setError(reason || withAdminContact('Your institution cannot issue certificates at this time.'));
       logger.warn('Certificate issuance blocked: institution cannot issue', { reason });
       return;
     }
@@ -236,14 +319,24 @@ export function IssueCertificate() {
       logger.userAction('Issuing certificate', {
         documentHash: hashResult.hash,
         studentWallet: sanitizedWallet,
+        program: program.trim(),
+        graduationYear,
         bypassedDuplicateCheck: bypassDuplicateCheck,
+      });
+
+      // Create metadata URI with program information
+      // Format: JSON string with program info
+      const metadata = JSON.stringify({
+        program: program.trim(),
+        timestamp: Date.now(),
       });
 
       // Issue the certificate
       await issueCertificate({
         documentHash: hashResult.hash,
         studentWallet: sanitizedWallet,
-        metadataURI: '',
+        metadataURI: metadata,
+        graduationYear,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to issue certificate');
@@ -328,7 +421,8 @@ export function IssueCertificate() {
             (['confirm', 'submitting', 'success'].includes(formState) && stepNum === 3);
           const isComplete = 
             (stepNum === 1 && formState !== 'upload') ||
-            (stepNum === 2 && ['confirm', 'submitting', 'success'].includes(formState));
+            (stepNum === 2 && ['confirm', 'submitting', 'success'].includes(formState)) ||
+            (stepNum === 3 && formState === 'success');
 
           return (
             <div key={step} className="flex items-center gap-2">
@@ -414,13 +508,54 @@ export function IssueCertificate() {
             {walletError && <p className="text-red-400 text-sm mt-2">{walletError}</p>}
           </div>
 
+          {/* Program Name */}
+          <div className="card">
+            <label className="label">Program Name</label>
+            <input
+              type="text"
+              value={program}
+              onChange={(e) => {
+                setProgram(e.target.value);
+                setProgramError(null);
+              }}
+              placeholder="e.g., MSc Cybersecurity, Bachelor of Science in Computer Science"
+              className={`input ${programError ? 'border-red-500' : ''}`}
+            />
+            {programError && <p className="text-red-400 text-sm mt-2">{programError}</p>}
+            <p className="text-surface-400 text-xs mt-2">
+              Enter the full name of the degree or certificate program
+            </p>
+          </div>
+
+          {/* Graduation Year */}
+          <div className="card">
+            <label className="label">Graduation Year</label>
+            <input
+              type="number"
+              value={graduationYear}
+              onChange={(e) => {
+                const year = parseInt(e.target.value);
+                setGraduationYear(year);
+                setYearError(null);
+              }}
+              placeholder="2024"
+              min={1900}
+              max={2100}
+              className={`input ${yearError ? 'border-red-500' : ''}`}
+            />
+            {yearError && <p className="text-red-400 text-sm mt-2">{yearError}</p>}
+            <p className="text-surface-400 text-xs mt-2">
+              Enter the year the student graduated (1900-2100)
+            </p>
+          </div>
+
           {/* Actions */}
           <div className="flex gap-4">
             <button onClick={() => setFormState('upload')} className="btn-secondary flex-1">
               Back
             </button>
             <button
-              onClick={() => validateWallet(studentWallet) && setFormState('confirm')}
+              onClick={() => validateWallet(studentWallet) && validateProgram(program) && validateYear(graduationYear) && setFormState('confirm')}
               className="btn-primary flex-1"
             >
               Continue
@@ -448,20 +583,48 @@ export function IssueCertificate() {
                 <span className="text-surface-400 text-sm">Student Wallet</span>
                 <p className="text-white font-mono text-sm">{studentWallet}</p>
               </div>
+              <div>
+                <span className="text-surface-400 text-sm">Program</span>
+                <p className="text-white">{program}</p>
+              </div>
+              <div>
+                <span className="text-surface-400 text-sm">Graduation Year</span>
+                <p className="text-white">{graduationYear}</p>
+              </div>
             </div>
           </div>
 
+          {/* Transaction Status */}
+          {showTransactionStatus && (
+            <div className={`card ${transactionStatusConfig[transactionPhase].borderClassName}`}>
+              <p className={`font-medium flex items-center gap-2 ${transactionStatusConfig[transactionPhase].textClassName}`}>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                {transactionStatusConfig[transactionPhase].title}
+              </p>
+              <p className="mt-1 text-sm text-surface-300">
+                {transactionStatusConfig[transactionPhase].description}
+              </p>
+              {transactionHash && (
+                <p className="mt-2 text-xs text-surface-400 font-mono break-all">
+                  Transaction: {transactionHash}
+                </p>
+              )}
+            </div>
+          )}
+
           {/* Frontend Duplicate Check Warning */}
-          {isCheckingDuplicate && (
-            <div className="card border-blue-500/30 bg-blue-500/10">
+          {isCheckingDuplicate ? (
+            <div className="card border-blue-500/30 bg-blue-500/10" key="duplicate-check">
               <div className="flex items-center gap-3">
                 <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-400"></div>
                 <p className="text-blue-300 text-sm">Checking if certificate already exists on blockchain...</p>
               </div>
             </div>
-          )}
+          ) : null}
 
-          {error === 'frontend-duplicate' && isDuplicateOnChain && (
+          {error === 'frontend-duplicate' && isDuplicateOnChain ? (
             <div className="card border-yellow-500/30 bg-yellow-500/10">
               <div className="flex items-start gap-3">
                 <svg className="w-6 h-6 text-yellow-400 flex-shrink-0 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -524,7 +687,7 @@ export function IssueCertificate() {
                 </div>
               </div>
             </div>
-          )}
+          ) : null}
 
           {error && error !== 'frontend-duplicate' && (
             <div className="card border-red-500/30 bg-red-500/10">
@@ -659,7 +822,9 @@ export function IssueCertificate() {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                   </svg>
-                  {isPending ? 'Confirming...' : 'Processing...'}
+                  {transactionPhase === 'awaiting_wallet_confirmation'
+                    ? 'Waiting for wallet confirmation...'
+                    : 'Transaction pending...'}
                 </>
               ) : bypassDuplicateCheck ? (
                 'Verify on Blockchain'
@@ -698,6 +863,8 @@ export function IssueCertificate() {
                 setFormState('upload');
                 setHashResult(null);
                 setStudentWallet('');
+                setProgram('');
+                setGraduationYear(new Date().getFullYear());
                 reset();
               }}
               className="btn-primary"

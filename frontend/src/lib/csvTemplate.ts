@@ -4,7 +4,7 @@ export interface BulkCertificateEntry {
   studentWallet: string;
   studentName: string;
   program: string;
-  graduationDate: string;
+  graduationYear: number;
   pdfFilename: string;
   documentHash?: string;
   pdfFile?: File;
@@ -12,10 +12,10 @@ export interface BulkCertificateEntry {
 }
 
 export function generateCSVTemplate(): string {
-  const headers = ['student_wallet', 'student_name', 'program', 'graduation_date', 'pdf_filename'];
+  const headers = ['student_wallet', 'student_name', 'program', 'graduation_year', 'pdf_filename'];
   const exampleRows = [
-    ['0x1234567890123456789012345678901234567890', 'John Doe', 'Computer Science', '2025-12-15', 'john_doe_diploma.pdf'],
-    ['0xabcdefabcdefabcdefabcdefabcdefabcdefabcd', 'Jane Smith', 'Mathematics', '2025-12-15', 'jane_smith_diploma.pdf'],
+    ['0x1234567890123456789012345678901234567890', 'John Doe', 'Bachelor of Science in Computer Science', '2024', 'john_doe_diploma.pdf'],
+    ['0xabcdefabcdefabcdefabcdefabcdefabcdefabcd', 'Jane Smith', 'Master of Business Administration', '2023', 'jane_smith_diploma.pdf'],
   ];
   
   const csvContent = [
@@ -48,7 +48,7 @@ export function parseCSV(csvText: string): BulkCertificateEntry[] {
   }
 
   const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
-  const requiredHeaders = ['student_wallet', 'student_name', 'program', 'graduation_date', 'pdf_filename'];
+  const requiredHeaders = ['student_wallet', 'student_name', 'program', 'graduation_year', 'pdf_filename'];
   
   // Validate headers
   const missingHeaders = requiredHeaders.filter(h => !headers.includes(h));
@@ -61,7 +61,7 @@ export function parseCSV(csvText: string): BulkCertificateEntry[] {
     studentWallet: headers.indexOf('student_wallet'),
     studentName: headers.indexOf('student_name'),
     program: headers.indexOf('program'),
-    graduationDate: headers.indexOf('graduation_date'),
+    graduationYear: headers.indexOf('graduation_year'),
     pdfFilename: headers.indexOf('pdf_filename'),
   };
 
@@ -73,11 +73,15 @@ export function parseCSV(csvText: string): BulkCertificateEntry[] {
 
     const values = line.split(',').map(v => v.trim());
     
+    // Parse graduation year as integer
+    const yearValue = values[indices.graduationYear];
+    const graduationYear = yearValue ? parseInt(yearValue, 10) : 0;
+    
     const entry: BulkCertificateEntry = {
       studentWallet: values[indices.studentWallet] || '',
       studentName: values[indices.studentName] || '',
       program: values[indices.program] || '',
-      graduationDate: values[indices.graduationDate] || '',
+      graduationYear,
       pdfFilename: values[indices.pdfFilename] || '',
       validationErrors: [],
     };
@@ -92,8 +96,11 @@ export function parseCSV(csvText: string): BulkCertificateEntry[] {
     if (!entry.program) {
       entry.validationErrors.push('Program is required');
     }
-    if (!entry.graduationDate || !entry.graduationDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
-      entry.validationErrors.push('Invalid date format (use YYYY-MM-DD)');
+    // Validate graduation year (1900-2100)
+    if (!graduationYear || isNaN(graduationYear)) {
+      entry.validationErrors.push('Graduation year is required and must be a valid number');
+    } else if (graduationYear < 1900 || graduationYear > 2100) {
+      entry.validationErrors.push('Graduation year must be between 1900 and 2100');
     }
     if (!entry.pdfFilename || !entry.pdfFilename.endsWith('.pdf')) {
       entry.validationErrors.push('PDF filename must end with .pdf');

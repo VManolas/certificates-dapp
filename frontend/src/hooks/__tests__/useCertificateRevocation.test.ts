@@ -1,6 +1,6 @@
 // src/hooks/__tests__/useCertificateRevocation.test.ts
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { renderHook, act } from '@testing-library/react';
 import { useCertificateRevocation } from '../useCertificateRevocation';
 import * as wagmi from 'wagmi';
 
@@ -8,7 +8,6 @@ import * as wagmi from 'wagmi';
 vi.mock('wagmi', () => ({
   useWriteContract: vi.fn(),
   useWaitForTransactionReceipt: vi.fn(),
-  useAccount: vi.fn(),
 }));
 
 // Mock logger
@@ -27,19 +26,14 @@ vi.mock('@/lib/wagmi', () => ({
 }));
 
 describe('useCertificateRevocation', () => {
-  const mockWriteContract = vi.fn();
+  const mockWriteContractAsync = vi.fn();
   const mockReset = vi.fn();
   
   beforeEach(() => {
     vi.clearAllMocks();
 
-    (wagmi.useAccount as ReturnType<typeof vi.fn>).mockReturnValue({
-      address: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0',
-      isConnected: true,
-    });
-
     (wagmi.useWriteContract as ReturnType<typeof vi.fn>).mockReturnValue({
-      writeContract: mockWriteContract,
+      writeContractAsync: mockWriteContractAsync,
       data: undefined,
       isPending: false,
       error: null,
@@ -53,49 +47,38 @@ describe('useCertificateRevocation', () => {
     });
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   describe('revokeCertificate function', () => {
-    it('requires certificateId parameter', () => {
+    it('requires certificateId parameter', async () => {
       const { result } = renderHook(() => useCertificateRevocation());
-
-      expect(() => {
-        result.current.revokeCertificate(null as unknown as bigint, 'Test reason');
-      }).toThrow();
+      await expect(
+        result.current.revokeCertificate(null as unknown as bigint, 'Test reason')
+      ).rejects.toThrow('Invalid certificate ID');
     });
 
-    it('requires reason parameter', () => {
+    it('requires reason parameter', async () => {
       const { result } = renderHook(() => useCertificateRevocation());
-
-      expect(() => {
-        result.current.revokeCertificate(1n, '');
-      }).toThrow();
+      await expect(result.current.revokeCertificate(1n, '')).rejects.toThrow(
+        'Revocation reason is required'
+      );
     });
 
-    it('validates reason length (minimum)', () => {
-      const { result } = renderHook(() => useCertificateRevocation());
-
-      expect(() => {
-        result.current.revokeCertificate(1n, '');
-      }).toThrow();
-    });
-
-    it('validates reason length (maximum)', () => {
+    it('validates reason length (maximum)', async () => {
       const { result } = renderHook(() => useCertificateRevocation());
       const longReason = 'a'.repeat(501);
-
-      expect(() => {
-        result.current.revokeCertificate(1n, longReason);
-      }).toThrow();
+      await expect(result.current.revokeCertificate(1n, longReason)).rejects.toThrow(
+        'Revocation reason must be less than 500 characters'
+      );
     });
 
-    it('accepts valid reason within limits', () => {
+    it('accepts valid reason within limits', async () => {
       const { result } = renderHook(() => useCertificateRevocation());
       const validReason = 'Certificate revoked due to fraudulent information';
-
-      expect(() => {
-        result.current.revokeCertificate(1n, validReason);
-      }).not.toThrow();
-
-      expect(mockWriteContract).toHaveBeenCalledWith({
+      await result.current.revokeCertificate(1n, validReason);
+      expect(mockWriteContractAsync).toHaveBeenCalledWith({
         address: '0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9',
         abi: expect.any(Array),
         functionName: 'revokeCertificate',
@@ -103,12 +86,10 @@ describe('useCertificateRevocation', () => {
       });
     });
 
-    it('calls writeContract with correct parameters', () => {
+    it('calls writeContractAsync with correct parameters', async () => {
       const { result } = renderHook(() => useCertificateRevocation());
-
-      result.current.revokeCertificate(123n, 'Academic misconduct detected');
-
-      expect(mockWriteContract).toHaveBeenCalledWith({
+      await result.current.revokeCertificate(123n, 'Academic misconduct detected');
+      expect(mockWriteContractAsync).toHaveBeenCalledWith({
         address: '0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9',
         abi: expect.any(Array),
         functionName: 'revokeCertificate',
@@ -116,12 +97,12 @@ describe('useCertificateRevocation', () => {
       });
     });
 
-    it('handles different reason lengths', () => {
+    it('handles different reason lengths', async () => {
       const { result } = renderHook(() => useCertificateRevocation());
 
       // Minimum valid length (1 character)
-      result.current.revokeCertificate(1n, 'A');
-      expect(mockWriteContract).toHaveBeenLastCalledWith(
+      await result.current.revokeCertificate(1n, 'A');
+      expect(mockWriteContractAsync).toHaveBeenLastCalledWith(
         expect.objectContaining({
           args: [1n, 'A'],
         })
@@ -129,15 +110,15 @@ describe('useCertificateRevocation', () => {
 
       // Maximum valid length (500 characters)
       const maxReason = 'a'.repeat(500);
-      result.current.revokeCertificate(2n, maxReason);
-      expect(mockWriteContract).toHaveBeenLastCalledWith(
+      await result.current.revokeCertificate(2n, maxReason);
+      expect(mockWriteContractAsync).toHaveBeenLastCalledWith(
         expect.objectContaining({
           args: [2n, maxReason],
         })
       );
     });
 
-    it('accepts various reason formats', () => {
+    it('accepts various reason formats', async () => {
       const { result } = renderHook(() => useCertificateRevocation());
 
       const testReasons = [
@@ -148,23 +129,23 @@ describe('useCertificateRevocation', () => {
         'Reason with unicode: 日本語',
       ];
 
-      testReasons.forEach((reason, index) => {
+      for (const [index, reason] of testReasons.entries()) {
         const certId = BigInt(index + 1); // Start from 1, not 0
-        result.current.revokeCertificate(certId, reason);
-        expect(mockWriteContract).toHaveBeenLastCalledWith(
+        await result.current.revokeCertificate(certId, reason);
+        expect(mockWriteContractAsync).toHaveBeenLastCalledWith(
           expect.objectContaining({
             args: [certId, reason],
           })
         );
-      });
+      }
     });
   });
 
   describe('transaction states', () => {
     it('reflects pending state', () => {
       (wagmi.useWriteContract as ReturnType<typeof vi.fn>).mockReturnValue({
-        writeContract: mockWriteContract,
-        data: '0xhash123',
+        writeContractAsync: mockWriteContractAsync,
+        data: undefined,
         isPending: true,
         error: null,
         reset: mockReset,
@@ -177,7 +158,7 @@ describe('useCertificateRevocation', () => {
 
     it('reflects confirming state', () => {
       (wagmi.useWriteContract as ReturnType<typeof vi.fn>).mockReturnValue({
-        writeContract: mockWriteContract,
+        writeContractAsync: mockWriteContractAsync,
         data: '0xhash123',
         isPending: false,
         error: null,
@@ -191,13 +172,14 @@ describe('useCertificateRevocation', () => {
       });
 
       const { result } = renderHook(() => useCertificateRevocation());
-
       expect(result.current.isConfirming).toBe(true);
     });
 
     it('reflects confirmed state', () => {
+      vi.useFakeTimers();
+
       (wagmi.useWriteContract as ReturnType<typeof vi.fn>).mockReturnValue({
-        writeContract: mockWriteContract,
+        writeContractAsync: mockWriteContractAsync,
         data: '0xhash123',
         isPending: false,
         error: null,
@@ -211,15 +193,19 @@ describe('useCertificateRevocation', () => {
       });
 
       const { result } = renderHook(() => useCertificateRevocation());
+      act(() => {
+        vi.advanceTimersByTime(1300);
+      });
 
       expect(result.current.isConfirmed).toBe(true);
+      expect(result.current.isSuccess).toBe(true);
     });
 
     it('handles errors', () => {
       const mockError = new Error('Transaction failed');
       
       (wagmi.useWriteContract as ReturnType<typeof vi.fn>).mockReturnValue({
-        writeContract: mockWriteContract,
+        writeContractAsync: mockWriteContractAsync,
         data: undefined,
         isPending: false,
         error: mockError,
@@ -252,7 +238,7 @@ describe('useCertificateRevocation', () => {
   describe('transaction hash', () => {
     it('returns transaction hash when available', () => {
       (wagmi.useWriteContract as ReturnType<typeof vi.fn>).mockReturnValue({
-        writeContract: mockWriteContract,
+        writeContractAsync: mockWriteContractAsync,
         data: '0x1234567890abcdef',
         isPending: false,
         error: null,
@@ -267,33 +253,32 @@ describe('useCertificateRevocation', () => {
   });
 
   describe('edge cases', () => {
-    it('handles very large certificate IDs', () => {
+    it('handles very large certificate IDs', async () => {
       const { result } = renderHook(() => useCertificateRevocation());
       const largeCertId = 2n ** 200n;
 
-      result.current.revokeCertificate(largeCertId, 'Valid reason');
+      await result.current.revokeCertificate(largeCertId, 'Valid reason');
 
-      expect(mockWriteContract).toHaveBeenCalledWith(
+      expect(mockWriteContractAsync).toHaveBeenCalledWith(
         expect.objectContaining({
           args: [largeCertId, 'Valid reason'],
         })
       );
     });
 
-    it('handles reason with only whitespace as invalid', () => {
+    it('handles reason with only whitespace as invalid', async () => {
       const { result } = renderHook(() => useCertificateRevocation());
-
-      expect(() => {
-        result.current.revokeCertificate(1n, '   ');
-      }).toThrow();
+      await expect(result.current.revokeCertificate(1n, '   ')).rejects.toThrow(
+        'Revocation reason is required'
+      );
     });
 
-    it('trims whitespace from reason', () => {
+    it('preserves whitespace in reason payload after validation', async () => {
       const { result } = renderHook(() => useCertificateRevocation());
 
-      result.current.revokeCertificate(1n, '  Valid reason  ');
+      await result.current.revokeCertificate(1n, '  Valid reason  ');
 
-      expect(mockWriteContract).toHaveBeenCalledWith(
+      expect(mockWriteContractAsync).toHaveBeenCalledWith(
         expect.objectContaining({
           args: [1n, '  Valid reason  '],
         })

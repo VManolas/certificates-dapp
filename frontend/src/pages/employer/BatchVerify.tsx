@@ -1,5 +1,5 @@
 // src/pages/employer/BatchVerify.tsx
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAccount } from 'wagmi';
 import { isAddress } from 'viem';
@@ -15,12 +15,66 @@ interface BatchEntry {
   error?: string;
 }
 
+const BATCH_RESULTS_STORAGE_KEY = 'zkcredentials-employer-batch-results';
+
+interface PersistedBatchVerifyState {
+  csvText: string;
+  entries: BatchEntry[];
+  isProcessing: boolean;
+  currentIndex: number;
+}
+
 export function BatchVerify() {
   const { isConnected } = useAccount();
   const [csvText, setCsvText] = useState('');
   const [entries, setEntries] = useState<BatchEntry[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
+
+  // Restore batch verify UI state when returning from dashboard.
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(BATCH_RESULTS_STORAGE_KEY);
+      if (!raw) return;
+
+      const parsed = JSON.parse(raw) as PersistedBatchVerifyState | BatchEntry[];
+
+      if (Array.isArray(parsed)) {
+        // Backward compatibility with older persisted format (entries only).
+        setEntries(
+          parsed.map((entry, index) => ({
+            id: entry.id || `${index}-${entry.walletAddress}`,
+            walletAddress: entry.walletAddress,
+            isValid: entry.isValid ?? true,
+            status: entry.status ?? 'pending',
+            certificateCount: entry.certificateCount,
+            error: entry.error,
+          }))
+        );
+        return;
+      }
+
+      const restoredEntries = (parsed.entries || []).map((entry, index) => ({
+        id: entry.id || `${index}-${entry.walletAddress}`,
+        walletAddress: entry.walletAddress,
+        isValid: entry.isValid ?? true,
+        status: entry.status ?? 'pending',
+        certificateCount: entry.certificateCount,
+        error: entry.error,
+      }));
+
+      setCsvText(parsed.csvText || '');
+      setEntries(restoredEntries);
+      setIsProcessing(parsed.isProcessing && restoredEntries.length > 0);
+      setCurrentIndex(
+        parsed.currentIndex >= 0 && parsed.currentIndex < restoredEntries.length
+          ? parsed.currentIndex
+          : 0
+      );
+    } catch {
+      // Ignore malformed persisted state and continue with a clean screen.
+    }
+  }, []);
 
   // Parse CSV input
   const parseCSV = useCallback((text: string): string[] => {
@@ -89,10 +143,28 @@ export function BatchVerify() {
     setEntries([]);
     setIsProcessing(false);
     setCurrentIndex(0);
+    sessionStorage.removeItem(BATCH_RESULTS_STORAGE_KEY);
   };
 
   const completedCount = entries.filter((e) => e.status === 'completed').length;
   const hasResults = entries.some((e) => e.status === 'completed');
+
+  // Persist latest batch data so dashboard can provide cross-wallet navigation context.
+  useEffect(() => {
+    if (!entries.length && !csvText.trim()) {
+      sessionStorage.removeItem(BATCH_RESULTS_STORAGE_KEY);
+      return;
+    }
+
+    const serializable: PersistedBatchVerifyState = {
+      csvText,
+      entries,
+      isProcessing,
+      currentIndex,
+    };
+
+    sessionStorage.setItem(BATCH_RESULTS_STORAGE_KEY, JSON.stringify(serializable));
+  }, [entries, csvText, isProcessing, currentIndex]);
 
   if (!isConnected) {
     return (
@@ -314,7 +386,7 @@ function BatchEntryRow({
       <td className="px-4 py-3 text-right">
         {entry.status === 'completed' && entry.certificateCount! > 0 && (
           <Link
-            to={`/employer/dashboard?search=${entry.walletAddress}`}
+            to={`/employer/dashboard?search=${entry.walletAddress}&from=batch`}
             className="text-primary-400 hover:text-primary-300 text-sm"
           >
             View Details →

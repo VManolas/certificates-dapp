@@ -1,0 +1,423 @@
+// frontend/src/lib/zkAuth.ts
+/**
+ * ZK Authentication Library for zkCredentials
+ * ============================================
+ * 
+ * This library provides client-side cryptographic primitives for
+ * privacy-preserving authentication using zero-knowledge proofs.
+ * 
+ * Key Features:
+ * - Generate keypairs locally (never touch blockchain)
+ * - Compute commitments for registration using Poseidon hash
+ * - Encrypt/decrypt credentials with wallet signatures
+ * - Generate ZK proofs for authentication using Noir
+ * 
+ * Security:
+ * - Private keys stored encrypted in localStorage
+ * - Encryption key derived from wallet signature
+ * - No sensitive data leaves the browser unencrypted
+ * 
+ * Hash Function: Poseidon (matching Noir circuit, BN254-compatible)
+ */
+
+import { ethers } from 'ethers';
+import { Noir } from '@noir-lang/noir_js';
+import { UltraPlonkBackend } from '@aztec/bb.js';
+import type { CompiledCircuit } from '@noir-lang/types';
+import authCircuitJson from './circuits/auth_login.json';
+// Import Poseidon from circomlibjs (proven compatibility with Noir)
+import { buildPoseidon } from 'circomlibjs';
+import { logger } from './logger';
+
+// Type the circuit properly
+const authCircuit = authCircuitJson as CompiledCircuit;
+
+/**
+ * User credentials stored locally (encrypted)
+ */
+export interface ZKCredentials {
+  privateKey: string;
+  salt: string;
+  commitment: string;
+  role: 'student' | 'university' | 'employer';
+}
+
+/**
+ * Poseidon hash instance (cached at module level)
+ * Initialization is async and takes ~100ms, so we cache it
+ */
+let poseidonInstance: any = null;
+
+/**
+ * Get or initialize Poseidon hasher instance
+ * Uses circomlibjs which is proven compatible with Noir's Poseidon
+ */
+async function getPoseidon() {
+  if (!poseidonInstance) {
+    logger.debug('[ZK Auth] Initializing Poseidon hasher (circomlibjs)...');
+    poseidonInstance = await buildPoseidon();
+    logger.debug('[ZK Auth] ✅ Poseidon hasher initialized');
+  }
+  return poseidonInstance;
+}
+
+/**
+ * Generate a secure random 256-bit key that fits within the BN254 field modulus
+ * 
+ * CRITICAL: The key must be less than the BN254 field modulus used by Noir
+ * to ensure it can be used in ZK circuits.
+ * 
+ * @returns Hex-encoded private key (guaranteed to be < field modulus)
+ */
+export function generateRandomKey(): string {
+  const BN254_FIELD_MODULUS = BigInt('21888242871839275222246405745257275088548364400416034343698204186575808495617');
+  
+  // Generate random bytes
+  const array = new Uint8Array(32);
+  crypto.getRandomValues(array);
+  
+  // Convert to BigInt
+  let keyBigInt = BigInt(ethers.utils.hexlify(array));
+  
+  // If the key exceeds the field modulus, reduce it
+  // This is safe because:
+  // 1. The modulo operation preserves randomness
+  // 2. The resulting key is still cryptographically secure
+  // 3. The key space is still enormous (> 2^250 possible values)
+  if (keyBigInt >= BN254_FIELD_MODULUS) {
+    keyBigInt = keyBigInt % BN254_FIELD_MODULUS;
+    logger.debug('[ZK Auth] Generated key exceeded field modulus, applied modulo reduction');
+  }
+  
+  // Convert back to hex
+  const keyHex = keyBigInt.toString(16);
+  const result = '0x' + keyHex.padStart(64, '0');
+  
+  logger.debug('[ZK Auth] Generated random key within field bounds');
+  
+  return result;
+}
+
+/**
+ * Helper function to convert hex string to Field-compatible string
+ * Noir Field expects decimal string representation
+ */
+function hexToFieldString(hex: string): string {
+  // Remove '0x' prefix if present
+  const cleanHex = hex.startsWith('0x') ? hex.slice(2) : hex;
+  // Convert to BigInt then to string
+  return BigInt('0x' + cleanHex).toString(10);
+}
+
+/**
+ * Helper function to convert Ethereum address to Field-compatible string
+ */
+function addressToFieldString(address: string): string {
+  // Remove '0x' prefix and convert to BigInt
+  const cleanAddr = address.startsWith('0x') ? address.slice(2) : address;
+  return BigInt('0x' + cleanAddr).toString(10);
+}
+
+/**
+ * Compute commitment from credentials using Poseidon hash
+ * 
+ * This matches the Noir circuit implementation exactly:
+ * 1. public_key = poseidon_hash_1([private_key])
+ * 2. commitment = poseidon_hash_3([public_key, wallet_address, salt])
+ * 
+ * Uses circomlibjs which is proven compatible with Noir's Poseidon (BN254 curve)
+ * 
+ * @param privateKey User's private authentication key (hex string)
+ * @param walletAddress User's blockchain wallet (hex string)
+ * @param salt Random salt (hex string)
+ * @returns Commitment (hex string)
+ */
+export async function computeCommitment(
+  privateKey: string,
+  walletAddress: string,
+  salt: string
+): Promise<string> {
+  try {
+    // Get Poseidon hasher instance (cached after first call)
+    const poseidon = await getPoseidon();
+    
+    // Normalize wallet address to lowercase to ensure consistency
+    const normalizedAddress = walletAddress.toLowerCase();
+    
+    logger.debug('[ZK Auth] Computing commitment using Poseidon hash (circomlibjs)...', {
+      privateKey,
+      walletAddressOriginal: walletAddress,
+      walletAddress: normalizedAddress,
+      salt
+    });
+    
+    // Convert inputs to BigInt for Poseidon
+    const privateKeyBigInt = BigInt(privateKey);
+    const walletAddressBigInt = BigInt(normalizedAddress);
+    const saltBigInt = BigInt(salt);
+    
+    logger.debug('[ZK Auth] BigInt inputs (DECIMAL):', {
+      privateKey: privateKeyBigInt.toString(),
+      wallet: walletAddressBigInt.toString(),
+      salt: saltBigInt.toString()
+    });
+    
+    // Step 1: Derive public key from private key using Poseidon single-input hash
+    // Matches Noir: let public_key = poseidon_hash_1([private_key]);
+    // circomlibjs returns field element, convert to string then to BigInt
+    const publicKeyField = poseidon([privateKeyBigInt]);
+    const publicKey = poseidon.F.toString(publicKeyField);
+    const publicKeyBigInt = BigInt(publicKey);
+    
+    logger.debug('[ZK Auth] Public key computed', {
+      decimal: publicKey,
+      hex: '0x' + publicKeyBigInt.toString(16)
+    });
+    
+    // Step 2: Compute commitment from public key, wallet address, and salt
+    // Matches Noir: let commitment = poseidon_hash_3([public_key, wallet_address, salt]);
+    const commitmentField = poseidon([publicKeyBigInt, walletAddressBigInt, saltBigInt]);
+    const commitment = poseidon.F.toString(commitmentField);
+    const commitmentBigInt = BigInt(commitment);
+    
+    logger.debug('[ZK Auth] Commitment computed', {
+      decimal: commitment,
+      hex: '0x' + commitmentBigInt.toString(16)
+    });
+    
+    // Convert to hex string with proper padding (32 bytes = 64 hex chars)
+    const commitmentHex = '0x' + commitmentBigInt.toString(16).padStart(64, '0');
+    
+    logger.info('[ZK Auth] ✅ Final commitment (Poseidon) computed', { commitmentHex });
+    
+    return commitmentHex;
+    
+  } catch (error) {
+    logger.error('[ZK Auth] Failed to compute commitment', error);
+    throw new Error(`Failed to compute commitment: ${error}`);
+  }
+}
+
+/**
+ * Encrypt credentials with wallet signature
+ * 
+ * @param credentials Credentials to encrypt
+ * @param signature Wallet signature for encryption key
+ * @returns Encrypted hex string
+ */
+export async function encryptCredentials(
+  credentials: ZKCredentials,
+  _signature: string,
+  walletAddress: string
+): Promise<string> {
+  // Derive a stable encryption key from wallet address.
+  // We still request a signature in the UX flow to prove wallet control,
+  // but we avoid using raw signature bytes as key material since signatures
+  // can differ across prompts/wallet implementations.
+  const key = deriveWalletScopedKey(walletAddress);
+  
+  // Simple XOR encryption (in production, use AES-GCM)
+  const data = JSON.stringify(credentials);
+  const encrypted = xorEncrypt(data, key);
+  
+  // Return as hex string (not UTF-8, since result is binary data)
+  return ethers.utils.hexlify(encrypted);
+}
+
+/**
+ * Decrypt credentials with wallet signature
+ * 
+ * @param encrypted Encrypted hex string
+ * @param signature Wallet signature for decryption key
+ * @returns Decrypted credentials
+ */
+export async function decryptCredentials(
+  encrypted: string,
+  _signature: string,
+  walletAddress: string
+): Promise<ZKCredentials> {
+  try {
+    const key = deriveWalletScopedKey(walletAddress);
+    
+    // Convert hex string back to bytes
+    const encryptedBytes = ethers.utils.arrayify(encrypted);
+    
+    // XOR decrypt
+    const decrypted = xorEncrypt(encryptedBytes, key);
+    
+    // Convert decrypted bytes to string and parse JSON
+    const decryptedString = ethers.utils.toUtf8String(decrypted);
+    
+    return JSON.parse(decryptedString);
+  } catch (error) {
+    // If decryption fails, credentials might be from old format or wrong wallet
+    // Silently clear them - this is expected during version upgrades or wallet switches
+    logger.info('[ZK Auth] Clearing outdated or incompatible stored credentials (this is normal after updates)');
+    clearStoredCredentials(walletAddress);
+    // Don't throw - just return null to indicate no valid credentials
+    throw new Error('CREDENTIALS_OUTDATED');
+  }
+}
+
+function deriveWalletScopedKey(walletAddress: string): string {
+  const normalized = walletAddress.toLowerCase();
+  return ethers.utils.keccak256(
+    ethers.utils.toUtf8Bytes(`zkcredentials:zkauth:v2:${normalized}`)
+  );
+}
+
+/**
+ * Simple XOR encryption (for demo - use AES in production)
+ * Works with byte arrays to avoid UTF-8 encoding issues
+ */
+function xorEncrypt(data: string | Uint8Array, key: string): Uint8Array {
+  const keyBytes = ethers.utils.arrayify(key);
+  const dataBytes = typeof data === 'string' ? ethers.utils.toUtf8Bytes(data) : data;
+  const result = new Uint8Array(dataBytes.length);
+  
+  for (let i = 0; i < dataBytes.length; i++) {
+    result[i] = dataBytes[i] ^ keyBytes[i % keyBytes.length];
+  }
+  
+  return result;
+}
+
+/**
+ * Generate ZK proof for authentication using Noir circuit
+ * 
+ * This function generates a cryptographic proof that the user knows the privateKey,
+ * walletAddress, and salt that produce the given commitment, without revealing them.
+ * 
+ * The proof is generated using the UltraPlonk backend (@aztec/bb.js) which is
+ * compatible with Noir 1.0.0+ and matches the circuit's Poseidon hash implementation.
+ * 
+ * @param credentials User credentials
+ * @param walletAddress Current wallet address
+ * @returns ZK proof (hex-encoded bytes)
+ */
+export async function generateAuthProof(
+  credentials: ZKCredentials,
+  walletAddress: string
+): Promise<string> {
+  try {
+    // CRITICAL: Normalize wallet address to lowercase to match commitment computation
+    // This MUST match the normalization in computeCommitment()
+    const normalizedAddress = walletAddress.toLowerCase();
+    
+    logger.debug('[ZK Auth] Generating proof', {
+      walletOriginal: walletAddress,
+      walletNormalized: normalizedAddress
+    });
+    
+    // Initialize the UltraPlonk Backend with circuit bytecode
+    // UltraPlonkBackend is the correct backend for Noir 1.0.0+ with UltraPlonk verifier
+    const backend = new UltraPlonkBackend(authCircuit.bytecode);
+    
+    // Initialize Noir with the circuit artifact
+    const noir = new Noir(authCircuit as any);
+    
+    // Prepare inputs for the circuit
+    // Convert all inputs to Field-compatible format (decimal strings)
+    // IMPORTANT: Use normalized address to match commitment
+    const inputs = {
+      private_key: hexToFieldString(credentials.privateKey),
+      wallet_address: addressToFieldString(normalizedAddress),
+      salt: hexToFieldString(credentials.salt),
+      commitment: hexToFieldString(credentials.commitment)
+    };
+    
+    logger.debug('[ZK Auth] Circuit inputs prepared', {
+      privateKey: inputs.private_key.substring(0, 10) + '...',
+      walletAddress: inputs.wallet_address,
+      salt: inputs.salt.substring(0, 10) + '...',
+      commitment: inputs.commitment.substring(0, 10) + '...'
+    });
+    
+    logger.info('[ZK Auth] Generating proof (this may take a few seconds)...');
+    
+    // Execute the circuit to get witness
+    const { witness } = await noir.execute(inputs);
+    logger.debug('[ZK Auth] Witness generated, creating proof...');
+    
+    // Generate proof from witness
+    const proofResult = await backend.generateProof(witness);
+    
+    logger.info('[ZK Auth] Proof generated successfully!');
+    
+    // UltraPlonkBackend returns {proof: Uint8Array} object
+    const proof = proofResult.proof || proofResult;
+    logger.debug('[ZK Auth] Proof length', {
+      proofLength: (proof as Uint8Array).length,
+    });
+    
+    // Convert proof to hex string for contract submission
+    const proofHex = ethers.utils.hexlify(proof);
+    
+    // Cleanup backend
+    await backend.destroy();
+    
+    return proofHex;
+    
+  } catch (error) {
+    logger.error('[ZK Auth] Proof generation failed', error);
+    
+    // Provide helpful error messages
+    if (error instanceof Error) {
+      if (error.message.includes('assertion') || error.message.includes('constraint')) {
+        throw new Error(
+          'Proof generation failed: Commitment mismatch. ' +
+          'The commitment computed in the circuit does not match the provided commitment. ' +
+          'This could indicate a hash function mismatch, corrupted credentials, or wallet address mismatch. ' +
+          'Try clearing your credentials and registering again.'
+        );
+      }
+    }
+    
+    throw new Error(`Failed to generate ZK proof: ${error}`);
+  }
+}
+
+/**
+ * Local storage key for encrypted credentials
+ */
+const LEGACY_STORAGE_KEY = 'zkauth_encrypted_credentials';
+const STORAGE_KEY_PREFIX = 'zkauth_encrypted_credentials_v2_';
+
+function getStorageKey(walletAddress: string): string {
+  return `${STORAGE_KEY_PREFIX}${walletAddress.toLowerCase()}`;
+}
+
+/**
+ * Store encrypted credentials in localStorage
+ */
+export function storeCredentials(encrypted: string, walletAddress: string): void {
+  localStorage.setItem(getStorageKey(walletAddress), encrypted);
+}
+
+/**
+ * Retrieve encrypted credentials from localStorage
+ */
+export function getStoredCredentials(walletAddress: string): string | null {
+  return localStorage.getItem(getStorageKey(walletAddress));
+}
+
+/**
+ * Clear stored credentials (logout)
+ */
+export function clearStoredCredentials(walletAddress?: string): void {
+  if (walletAddress) {
+    localStorage.removeItem(getStorageKey(walletAddress));
+    return;
+  }
+  localStorage.removeItem(LEGACY_STORAGE_KEY);
+}
+
+/**
+ * Check if user has stored credentials
+ */
+export function hasStoredCredentials(walletAddress?: string | null): boolean {
+  if (!walletAddress) {
+    return false;
+  }
+  return localStorage.getItem(getStorageKey(walletAddress)) !== null;
+}

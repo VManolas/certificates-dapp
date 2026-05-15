@@ -1,13 +1,17 @@
 // frontend/src/components/RoleSelectorModal.tsx
-import { memo, useState } from 'react';
+import { memo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuthStore, UserRole } from '@/store/authStore';
+import type { UserRole } from '@/types/auth';
+import { useAuthStore } from '@/store/authStore';
+import { logger } from '@/lib/logger';
 
 // All possible roles in display order
 const ALL_ROLES: NonNullable<UserRole>[] = ['admin', 'university', 'student', 'employer'];
 
-// Roles that support aspirational selection
-const ASPIRATIONAL_ROLES: Set<NonNullable<UserRole>> = new Set(['university', 'student']);
+// Roles that support aspirational selection.
+// University is intentionally excluded: institutions must be created/managed
+// through admin workflows, not self-selected from login.
+const ASPIRATIONAL_ROLES: Set<NonNullable<UserRole>> = new Set(['employer']);
 
 interface RoleSelectorModalProps {
   isOpen: boolean;
@@ -32,25 +36,21 @@ const ROLE_INFO: Record<NonNullable<UserRole>, {
     description: 'Manage institutions, approve registrations, and oversee platform operations',
     icon: '🛡️',
     color: 'from-red-500 to-orange-500',
-    disabledReason: 'Restricted to platform administrators with SUPER_ADMIN_ROLE',
+    disabledReason: 'Restricted to platform administrators with ADMIN_ROLE',
   },
   university: {
     title: 'Educational Institution',
     description: 'Issue and manage educational certificates for your students',
-    aspirationalDescription: 'Register your institution to start issuing certificates',
     icon: '🎓',
     color: 'from-blue-500 to-cyan-500',
-    disabledReason: 'Register your institution first to access this role',
-    aspirationalAction: 'Register Institution →',
+    disabledReason: 'Only admin-registered institutions can access this role',
   },
   student: {
     title: 'Student / Graduate',
     description: 'View and share your educational certificates with employers',
-    aspirationalDescription: 'Once you receive certificates, they will appear here',
     icon: '📜',
     color: 'from-green-500 to-emerald-500',
     disabledReason: 'You will gain access once you receive a certificate',
-    aspirationalAction: 'Explore as Student →',
   },
   employer: {
     title: 'Employer / Verifier',
@@ -72,23 +72,30 @@ export const RoleSelectorModal = memo(function RoleSelectorModal({
   canRegisterAsEmployer = false,
 }: RoleSelectorModalProps) {
   const { setRole, setHasSelectedRole, setShowRoleSelector } = useAuthStore();
-  const [showAspirational, setShowAspirational] = useState(false);
   const navigate = useNavigate();
 
   // Create a Set for O(1) lookup
   const availableRolesSet = new Set(availableRoles.filter(Boolean));
 
   const handleSelectRole = (role: NonNullable<UserRole>, isAspirational: boolean = false) => {
+    logger.debug('Role selection initiated', { role, isAspirational, canRegisterAsEmployer });
+    
     // For non-aspirational, must be in available roles
     if (!isAspirational && !availableRolesSet.has(role)) return;
     // For aspirational, must be in ASPIRATIONAL_ROLES
-    if (isAspirational && !ASPIRATIONAL_ROLES.has(role)) return;
-    
+    if (isAspirational && !ASPIRATIONAL_ROLES.has(role) && role !== 'employer') return;
+
     // Special handling for employer aspirational mode
-    if (isAspirational && role === 'employer' && canRegisterAsEmployer) {
-      navigate('/employer/register');
-      onClose();
-      return;
+    if (isAspirational && role === 'employer') {
+      logger.info('Navigating to employer registration', { canRegisterAsEmployer });
+      if (canRegisterAsEmployer) {
+        navigate('/employer/register');
+        onClose();
+        return;
+      } else {
+        logger.warn('Cannot register as employer - eligibility check failed');
+        return;
+      }
     }
     
     setRole(role, isAspirational);
@@ -126,6 +133,16 @@ export const RoleSelectorModal = memo(function RoleSelectorModal({
             const isAvailable = availableRolesSet.has(role);
             const canAspire = (ASPIRATIONAL_ROLES.has(role) && !isAvailable) || 
                               (role === 'employer' && canRegisterAsEmployer && !isAvailable);
+            
+            // Debug logging for employer role
+            if (role === 'employer') {
+              logger.debug('Employer role availability check', { 
+                isAvailable, 
+                canRegisterAsEmployer, 
+                canAspire,
+                willShowButton: canAspire && info.aspirationalAction
+              });
+            }
             
             // Add extra context for certain roles
             let extraInfo = '';
@@ -199,7 +216,7 @@ export const RoleSelectorModal = memo(function RoleSelectorModal({
                 </button>
 
                 {/* Aspirational option for locked roles */}
-                {canAspire && showAspirational && info.aspirationalAction && (
+                {canAspire && info.aspirationalAction && (
                   <button
                     onClick={() => handleSelectRole(role, true)}
                     className="w-full ml-4 p-3 rounded-lg border border-dashed border-surface-600 hover:border-primary-500/50 bg-surface-900/50 hover:bg-primary-500/5 transition-all text-left group"
@@ -223,31 +240,6 @@ export const RoleSelectorModal = memo(function RoleSelectorModal({
             );
           })}
         </div>
-
-        {/* Toggle aspirational roles */}
-        {!showAspirational && availableRoles.filter(r => r && !ASPIRATIONAL_ROLES.has(r as NonNullable<UserRole>)).length < ALL_ROLES.length && (
-          <button
-            onClick={() => setShowAspirational(true)}
-            className="w-full mt-4 py-3 text-sm text-primary-400 hover:text-primary-300 transition-colors flex items-center justify-center gap-2"
-          >
-            <span>I want to explore a different role</span>
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
-        )}
-
-        {showAspirational && (
-          <button
-            onClick={() => setShowAspirational(false)}
-            className="w-full mt-4 py-3 text-sm text-surface-500 hover:text-surface-400 transition-colors flex items-center justify-center gap-2"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-            </svg>
-            <span>Show only verified roles</span>
-          </button>
-        )}
 
         <p className="text-xs text-surface-500 mt-6 text-center">
           You can switch roles anytime from the header menu.

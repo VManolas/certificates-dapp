@@ -4,6 +4,7 @@ import { Routes, Route } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { RouteGuard } from './components/RouteGuard';
 import { ProtectedLayout } from './components/ProtectedLayout';
+import { SuspensionGuard } from './components/SuspensionGuard';
 import { useAccountChangeHandler } from './hooks';
 
 // Lazy load all route components for code splitting
@@ -11,7 +12,6 @@ const Home = lazy(() => import('./pages/Home'));
 const Verify = lazy(() => import('./pages/Verify'));
 const AccessDenied = lazy(() => import('./pages/AccessDenied'));
 const UniversityDashboard = lazy(() => import('./pages/university/Dashboard'));
-const UniversityRegister = lazy(() => import('./pages/university/Register'));
 const UniversityCertificates = lazy(() => import('./pages/university/Certificates'));
 const BulkUpload = lazy(() => import('./pages/university/BulkUpload'));
 const IssueCertificate = lazy(() => import('./pages/university/IssueCertificate'));
@@ -21,15 +21,27 @@ const BatchVerify = lazy(() => import('./pages/employer/BatchVerify'));
 const AdminDashboard = lazy(() => import('./pages/admin/Dashboard'));
 const ManageUniversities = lazy(() => import('./pages/admin/ManageUniversities'));
 const StudentCertificates = lazy(() => import('./pages/student/Certificates'));
+const ZKAuthPage = lazy(() => import('./pages/ZKAuth'));
 
-// Loading component for Suspense fallback
+// Loading component for Suspense fallback - enhanced with smooth transitions
 const PageLoader = () => (
-  <div className="flex items-center justify-center min-h-screen">
+  <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-surface-950 to-surface-900 animate-fade-in">
     <div className="text-center">
-      <div className="inline-block h-12 w-12 animate-spin rounded-full border-4 border-solid border-blue-600 border-r-transparent" role="status">
-        <span className="sr-only">Loading...</span>
+      {/* Animated spinner */}
+      <div className="relative">
+        <div className="inline-block h-16 w-16 animate-spin rounded-full border-4 border-solid border-primary-500/20 border-t-primary-500" role="status">
+          <span className="sr-only">Loading...</span>
+        </div>
+        {/* Pulsing background effect */}
+        <div className="absolute inset-0 -z-10 animate-ping rounded-full bg-primary-500/10"></div>
       </div>
-      <p className="mt-4 text-gray-600">Loading page...</p>
+      
+      {/* Loading text with animated dots */}
+      <p className="mt-6 text-sm text-surface-400 animate-pulse">
+        Loading page<span className="inline-block w-4 text-left">
+          <span className="animate-dots">...</span>
+        </span>
+      </p>
     </div>
   </div>
 );
@@ -39,15 +51,17 @@ function App() {
   useAccountChangeHandler();
 
   return (
-    <Suspense fallback={<PageLoader />}>
-      <Routes>
-        <Route path="/" element={<Layout />}>
-          <Route index element={<Home />} />
-          <Route path="verify" element={<Verify />} />
-          <Route path="access-denied" element={<AccessDenied />} />
-          
-          {/* University registration - PUBLIC (no protection) */}
-          <Route path="university/register" element={<UniversityRegister />} />
+    <>
+      {/* Suspension Guard - monitors for suspended institution wallets */}
+      <SuspensionGuard />
+      
+      <Suspense fallback={<PageLoader />}>
+        <Routes>
+          <Route path="/" element={<Layout />}>
+            <Route index element={<Home />} />
+            <Route path="verify" element={<Verify />} />
+            <Route path="zkauth" element={<ZKAuthPage />} />
+            <Route path="access-denied" element={<AccessDenied />} />
           
           {/* University routes - ALL other routes under /university/* are protected */}
           {/* Any URL like /university/login, /university/xyz will be blocked for non-university roles */}
@@ -81,9 +95,10 @@ function App() {
             {/* Catch-all for any other /admin/* routes */}
             <Route path="*" element={<AccessDenied />} />
           </Route>
-        </Route>
-      </Routes>
-    </Suspense>
+          </Route>
+        </Routes>
+      </Suspense>
+    </>
   );
 }
 

@@ -1,6 +1,6 @@
-import { useWriteContract, useWaitForTransactionReceipt, useReadContract } from 'wagmi';
+import { useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { decodeEventLog } from 'viem';
-import { useMemo, useEffect, useRef } from 'react';
+import { useMemo, useEffect, useRef, useState } from 'react';
 import { CERTIFICATE_REGISTRY_ADDRESS } from '@/lib/wagmi';
 import CertificateRegistryABI from '@/contracts/abis/CertificateRegistry.json';
 
@@ -11,6 +11,7 @@ export interface IssueCertificateParams {
   documentHash: `0x${string}`;
   studentWallet: `0x${string}`;
   metadataURI?: string;
+  graduationYear: number; // Required: Year of graduation (1900-2100)
 }
 
 /**
@@ -21,11 +22,14 @@ export interface UseCertificateIssuanceReturn {
   isPending: boolean;
   isConfirming: boolean;
   isSuccess: boolean;
+  transactionPhase: 'idle' | 'awaiting_wallet_confirmation' | 'pending_onchain' | 'confirmed' | 'failed';
   error: Error | null;
   transactionHash: `0x${string}` | undefined;
   certificateId: bigint | undefined;
   reset: () => void;
 }
+
+const MIN_PENDING_DISPLAY_MS = 1200;
 
 /**
  * Hook to issue certificates on the blockchain
@@ -49,16 +53,15 @@ export function useCertificateIssuance(): UseCertificateIssuanceReturn {
   // Contract write hook
   const { 
     data: hash, 
-    writeContract, 
-    isPending, 
+    writeContractAsync,
+    isPending: isWritePending, 
     error: writeError,
     reset: resetWrite
   } = useWriteContract();
 
   // Transaction confirmation hook
   const { 
-    isLoading: isConfirming, 
-    isSuccess,
+    isSuccess: isReceiptConfirmed,
     data: receipt,
     error: confirmError
   } = useWaitForTransactionReceipt({
@@ -76,12 +79,49 @@ export function useCertificateIssuance(): UseCertificateIssuanceReturn {
     },
   });
 
+  const [transactionPhase, setTransactionPhase] = useState<
+    'idle' | 'awaiting_wallet_confirmation' | 'pending_onchain' | 'confirmed' | 'failed'
+  >('idle');
+  const pendingStartRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (writeError || confirmError) {
+      setTransactionPhase('failed');
+      return;
+    }
+
+    if (isWritePending && !hash) {
+      setTransactionPhase('awaiting_wallet_confirmation');
+      pendingStartRef.current = null;
+      return;
+    }
+
+    if (hash && !isReceiptConfirmed) {
+      if (pendingStartRef.current === null) {
+        pendingStartRef.current = Date.now();
+      }
+      setTransactionPhase('pending_onchain');
+      return;
+    }
+
+    if (isReceiptConfirmed && hash) {
+      const pendingSince = pendingStartRef.current ?? Date.now();
+      const elapsed = Date.now() - pendingSince;
+      const waitRemaining = Math.max(0, MIN_PENDING_DISPLAY_MS - elapsed);
+      const timer = setTimeout(() => setTransactionPhase('confirmed'), waitRemaining);
+      return () => clearTimeout(timer);
+    }
+
+    setTransactionPhase('idle');
+    pendingStartRef.current = null;
+  }, [isWritePending, hash, isReceiptConfirmed, writeError, confirmError]);
+
   /**
    * Issue a certificate to a student
    * @param params - Certificate issuance parameters
    */
   const issueCertificate = async (params: IssueCertificateParams) => {
-    const { documentHash, studentWallet, metadataURI = '' } = params;
+    const { documentHash, studentWallet, metadataURI = '', graduationYear } = params;
 
     // Validate inputs
     if (!documentHash || documentHash === '0x0000000000000000000000000000000000000000000000000000000000000000') {
@@ -92,15 +132,24 @@ export function useCertificateIssuance(): UseCertificateIssuanceReturn {
       throw new Error('Valid student wallet address is required');
     }
 
+    // Validate graduation year (1900-2100)
+    if (!graduationYear || !Number.isInteger(graduationYear)) {
+      throw new Error('Graduation year must be a valid integer');
+    }
+    
+    if (graduationYear < 1900 || graduationYear > 2100) {
+      throw new Error('Graduation year must be between 1900 and 2100');
+    }
+
     if (!CERTIFICATE_REGISTRY_ADDRESS) {
       throw new Error('Certificate registry address not configured');
     }
 
-    writeContract({
+    await writeContractAsync({
       address: CERTIFICATE_REGISTRY_ADDRESS,
       abi: CertificateRegistryABI.abi,
       functionName: 'issueCertificate',
-      args: [documentHash, studentWallet, metadataURI],
+      args: [documentHash, studentWallet, metadataURI, graduationYear],
     });
   };
 
@@ -165,6 +214,8 @@ export function useCertificateIssuance(): UseCertificateIssuanceReturn {
    * ```
    */
   const reset = () => {
+    setTransactionPhase('idle');
+    pendingStartRef.current = null;
     resetWrite();
   };
 
@@ -177,9 +228,10 @@ export function useCertificateIssuance(): UseCertificateIssuanceReturn {
 
   return {
     issueCertificate,
-    isPending,
-    isConfirming,
-    isSuccess,
+    isPending: transactionPhase === 'awaiting_wallet_confirmation',
+    isConfirming: transactionPhase === 'pending_onchain',
+    isSuccess: transactionPhase === 'confirmed',
+    transactionPhase,
     error,
     transactionHash: hash,
     certificateId,
@@ -263,73 +315,4 @@ export function useCertificateIssuanceWithCallback(
   return hook;
 }
 
-/**
- * Hook with duplicate check support for certificate issuance
- * Uses the hashExists helper function for client-side validation
- * 
- * @param documentHash - The document hash to check for duplicates
- * @param enabled - Whether duplicate checking should be enabled
- * 
- * @example
- * ```tsx
- * const [pdfHash, setPdfHash] = useState<`0x${string}`>();
- * const { 
- *   issueCertificate, 
- *   isPending, 
- *   isDuplicate, 
- *   isCheckingDuplicate,
- *   error 
- * } = useCertificateIssuanceWithDuplicateCheck(pdfHash);
- * 
- * if (isDuplicate) {
- *   return <Alert variant="warning">This certificate has already been issued!</Alert>;
- * }
- * 
- * return (
- *   <Button 
- *     onClick={() => issueCertificate({ documentHash: pdfHash!, studentWallet, metadataURI })}
- *     disabled={isPending || isCheckingDuplicate || isDuplicate}
- *   >
- *     {isCheckingDuplicate ? 'Checking...' : 'Issue Certificate'}
- *   </Button>
- * );
- * ```
- */
-export function useCertificateIssuanceWithDuplicateCheck(
-  documentHash: `0x${string}` | undefined,
-  enabled: boolean = true
-): UseCertificateIssuanceReturn & {
-  isDuplicate: boolean | undefined;
-  isCheckingDuplicate: boolean;
-  duplicateCheckError: Error | null;
-} {
-  const hook = useCertificateIssuance();
-  
-  // Check for duplicate hash
-  const { 
-    data: exists, 
-    isLoading: isCheckingDuplicate, 
-    error: duplicateCheckError,
-  } = useReadContract({
-    address: CERTIFICATE_REGISTRY_ADDRESS,
-    abi: CertificateRegistryABI.abi,
-    functionName: 'hashExists',
-    args: documentHash ? [documentHash] : undefined,
-    query: {
-      enabled: !!documentHash && !!CERTIFICATE_REGISTRY_ADDRESS && enabled,
-    },
-  });
-
-  // Normalize duplicate check error
-  const normalizedDuplicateError = duplicateCheckError 
-    ? (duplicateCheckError instanceof Error ? duplicateCheckError : new Error(String(duplicateCheckError)))
-    : null;
-
-  return {
-    ...hook,
-    isDuplicate: exists as boolean | undefined,
-    isCheckingDuplicate,
-    duplicateCheckError: normalizedDuplicateError,
-  };
-}
 

@@ -1,22 +1,135 @@
 // src/pages/Home.tsx
 import { Link } from 'react-router-dom';
+import { useEffect, useState } from 'react';
 import { useAccount } from 'wagmi';
-import { ConnectButton } from '@rainbow-me/rainbowkit';
+import type { UserRole } from '@/types/auth';
 import { useAuthStore } from '@/store/authStore';
-import { useUserRoles } from '@/hooks/useUserRoles';
+import { useUnifiedAuth } from '@/hooks/useUnifiedAuth';
+import { UnifiedLoginModal } from '@/components/UnifiedLoginModal';
+import { RoleSelector } from '@/components/RoleSelector';
+import { ZKAuthUpgrade } from '@/components/zkauth/ZKAuthUpgrade';
+import { getSwitchTxProgressFromEvent } from '@/lib/authSwitchStatus';
+import { SwitchTxStatusPanel, getSwitchToStandardButtonLabel, isSwitchInFlight } from '@/components/SwitchTxStatusPanel';
+import { logger } from '@/lib/logger';
 
 export function Home() {
   const { isConnected } = useAccount();
-  const { role } = useAuthStore();
-  const userRoles = useUserRoles();
+  const { preSelectedRole, setPreSelectedRole } = useAuthStore();
+  const [showRoleSelector, setShowRoleSelector] = useState(true);
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [switchTxPhase, setSwitchTxPhase] = useState<'idle' | 'awaiting_wallet_confirmation' | 'pending_onchain' | 'confirmed' | 'failed'>('idle');
+  const [switchError, setSwitchError] = useState<string | null>(null);
+  const [switchSkippedOnchainTx, setSwitchSkippedOnchainTx] = useState(false);
+  const [showSwitchResultNotice, setShowSwitchResultNotice] = useState(false);
+  
+  // OPTIMIZATION: Only use unified auth when wallet is connected or login modal is shown
+  // This avoids unnecessary blockchain queries for anonymous visitors browsing the home page
+  const shouldInitializeAuth = isConnected || showLoginModal;
+  const unifiedAuth = useUnifiedAuth();
 
-  // Debug logging
-  console.log('Home - isConnected:', isConnected);
-  console.log('Home - role:', role);
-  console.log('Home - userRoles:', userRoles);
+  // Always show role selector when user is not authenticated, including right
+  // after disconnect. Keep it hidden while login modal is active.
+  useEffect(() => {
+    if (!unifiedAuth.isAuthenticated && !showLoginModal) {
+      setShowRoleSelector(true);
+      return;
+    }
+
+    setShowRoleSelector(false);
+  }, [isConnected, unifiedAuth.isAuthenticated, showLoginModal, preSelectedRole]);
+
+  // Effective authenticated role must always come from unified auth.
+  const role = unifiedAuth.isAuthenticated ? unifiedAuth.role : null;
+  const userRoles = shouldInitializeAuth ? unifiedAuth.web3Auth : {
+    primaryRole: null,
+    availableRoles: [],
+    canRegisterAsEmployer: false,
+    isAdmin: false,
+    isUniversity: false,
+    isStudent: false,
+    isEmployer: false,
+    universityData: null,
+  };
+
+  // Keep switch-state cleanup deterministic and avoid stale notices.
+  useEffect(() => {
+    if (unifiedAuth.authMethod !== 'zk' && switchTxPhase !== 'idle' && !showSwitchResultNotice) {
+      setSwitchTxPhase('idle');
+      setSwitchError(null);
+      setSwitchSkippedOnchainTx(false);
+    }
+  }, [unifiedAuth.authMethod, switchTxPhase, showSwitchResultNotice]);
+
+  const handleRoleSelection = (selectedRole: UserRole) => {
+    setPreSelectedRole(selectedRole);
+    setShowRoleSelector(false);
+    setShowLoginModal(true);
+  };
+
+  const openRoleSelector = () => {
+    if (!unifiedAuth.isAuthenticated) {
+      setShowRoleSelector(true);
+    }
+  };
+
+  // Handle successful login
+  const handleLoginSuccess = () => {
+    logger.info('Login successful, navigating to dashboard', { role: unifiedAuth.role });
+    
+    // Close the modal
+    setShowLoginModal(false);
+    
+    // DON'T auto-navigate - let the user see the home page with dashboard button
+    // This prevents navigation with stale/cached role data
+    // The dashboard buttons on the home page will use fresh role data when clicked
+  };
+
+  const handleSwitchToStandard = async () => {
+    try {
+      setSwitchError(null);
+      setSwitchSkippedOnchainTx(false);
+      setShowSwitchResultNotice(false);
+      setSwitchTxPhase('awaiting_wallet_confirmation');
+
+      await unifiedAuth.switchAuthMethod('web3', (event) => {
+        const progress = getSwitchTxProgressFromEvent(event);
+        if (progress) {
+          setSwitchSkippedOnchainTx(progress.skippedOnchainTx);
+          setSwitchTxPhase(progress.phase);
+        }
+      });
+
+      // Keep result visible before showing "Upgrade to ZK Authentication" again.
+      setShowSwitchResultNotice(true);
+      setTimeout(() => {
+        setShowSwitchResultNotice(false);
+        setSwitchTxPhase('idle');
+        setSwitchError(null);
+        setSwitchSkippedOnchainTx(false);
+      }, 3000);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to switch authentication method';
+      setSwitchError(message);
+      setSwitchTxPhase('failed');
+    }
+  };
 
   return (
     <div className="relative overflow-hidden">
+      {/* Role Selector Modal */}
+      <RoleSelector
+        isOpen={showRoleSelector}
+        onSelectRole={handleRoleSelection}
+      />
+
+      {/* Unified Login Modal - Handles complete auth flow */}
+      <UnifiedLoginModal
+        isOpen={showLoginModal}
+        onClose={() => setShowLoginModal(false)}
+        onSuccess={handleLoginSuccess}
+        preSelectedRole={preSelectedRole}
+      />
+
       {/* Background gradient */}
       <div className="absolute inset-0 bg-gradient-to-br from-primary-950/50 via-surface-950 to-accent-950/30" />
       
@@ -49,7 +162,7 @@ export function Home() {
           </p>
 
           {/* User-Specific Role Description */}
-          {isConnected && role && userRoles && role !== 'admin' && (
+          {isConnected && unifiedAuth.isAuthenticated && role && role !== 'admin' && (
             <p className="text-base md:text-lg font-medium mb-10 max-w-2xl mx-auto">
               {role === 'university' && userRoles.isUniversity && (
                 <span className="text-accent-400">
@@ -75,33 +188,23 @@ export function Home() {
 
           {/* CTA Buttons */}
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            {isConnected && role !== 'admin' ? (
-              <Link to="/verify" className="btn-primary text-lg px-8 py-4">
+            {!isConnected ? (
+              <button onClick={openRoleSelector} className="btn-primary text-lg px-8 py-4">
                 <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                 </svg>
-                Verify Certificate
-              </Link>
-            ) : !isConnected ? (
-              <ConnectButton.Custom>
-                {({ openConnectModal }) => (
-                  <button onClick={openConnectModal} className="btn-primary text-lg px-8 py-4">
-                    <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                    </svg>
-                    Connect Wallet
-                  </button>
-                )}
-              </ConnectButton.Custom>
+                Connect Wallet
+              </button>
             ) : null}
           </div>
         </div>
       </section>
 
       {/* User-Specific Welcome Section */}
-      {isConnected && role && userRoles && (
+      {isConnected && unifiedAuth.isAuthenticated && role && (
         <section className="relative container mx-auto px-4 pb-16">
-          <div className="max-w-2xl mx-auto">
+          <div className="max-w-2xl mx-auto space-y-6">
+            {/* Role-specific welcome card */}
             <div className="card bg-gradient-to-r from-primary-900/50 to-accent-900/50 border-primary-500/20 text-center py-8">
               {role === 'admin' && userRoles.isAdmin && (
                 <>
@@ -192,9 +295,135 @@ export function Home() {
                 </>
               )}
             </div>
+
+            {/* ZK Auth Upgrade Card - Only show for Web3 users */}
+            {showSwitchResultNotice && (
+              <div className="card bg-gradient-to-r from-green-900/40 to-emerald-800/30 border-green-500/30">
+                <div className="flex items-start gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-green-500/20 flex items-center justify-center flex-shrink-0">
+                    <svg className="w-6 h-6 text-green-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="text-lg font-semibold text-white mb-2">Switched to Standard Login</h4>
+                    <p className="text-sm text-surface-200">
+                      {switchSkippedOnchainTx
+                        ? 'No active private session found on-chain. Switched locally to standard login.'
+                        : 'Private session closure confirmed on-chain. You are now using standard login.'}
+                    </p>
+                    <p className="text-xs text-surface-400 mt-2">
+                      This message will close automatically in a moment.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {unifiedAuth.authMethod === 'web3' && !showSwitchResultNotice && (
+              <ZKAuthUpgrade
+                variant="card"
+                onUpgradeComplete={() => {
+                  // Keep Home page modal state aligned after upgrade completion.
+                  setShowLoginModal(false);
+                  logger.info('ZK auth upgrade completed from Home page');
+                  logger.debug('Current auth state after upgrade:', {
+                    authMethod: unifiedAuth.authMethod,
+                    isAuthenticated: unifiedAuth.isAuthenticated,
+                    role: unifiedAuth.role,
+                  });
+                }}
+              />
+            )}
+            
+            {/* ZK Auth Status Card - Show for ZK users who are ACTUALLY authenticated */}
+            {unifiedAuth.authMethod === 'zk' && unifiedAuth.isAuthenticated && (
+              <div className="card bg-gradient-to-r from-primary-900/50 to-primary-700/30 border-primary-500/20">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-primary-500/20 flex items-center justify-center">
+                    <svg className="w-6 h-6 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h4 className="font-semibold text-white">Private Login Active</h4>
+                      <span className="px-2 py-0.5 text-xs bg-green-500/20 text-green-400 rounded-full border border-green-500/30">
+                        ✓ Authenticated
+                      </span>
+                      <div className="relative group">
+                        <button
+                          type="button"
+                          className="text-primary-300/80 hover:text-primary-200 transition-colors cursor-help"
+                          aria-label="ZKP algorithm information"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </button>
+                        <div className="absolute left-1/2 -translate-x-1/2 top-6 z-50 hidden group-hover:block w-80 max-w-[80vw]">
+                          <div className="bg-surface-900 border border-surface-700 rounded-lg shadow-xl p-3 text-left">
+                            <p className="text-xs font-semibold text-white mb-1">ZKP algorithm used</p>
+                            <p className="text-xs text-surface-300 mb-2">
+                              This flow uses a Noir-based circuit with an <span className="text-primary-300 font-medium">UltraPlonk</span> verifier on-chain.
+                            </p>
+                            <p className="text-xs text-surface-400">
+                              Chosen for strong security with practical proof generation and verification performance for real user login flows.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <p className="text-sm text-surface-300">
+                      Your wallet address is hidden. You're using privacy-preserving authentication.
+                    </p>
+                    <div className="mt-3 mb-3">
+                      <SwitchTxStatusPanel
+                        phase={switchTxPhase}
+                        skippedOnchainTx={switchSkippedOnchainTx}
+                        error={switchError}
+                      />
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleSwitchToStandard}
+                    disabled={isSwitchInFlight(switchTxPhase)}
+                    className="btn-secondary text-sm disabled:opacity-50"
+                  >
+                    {getSwitchToStandardButtonLabel(switchTxPhase)}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </section>
       )}
+
+      {/* CTA Section */}
+      <section className="relative container mx-auto px-4 py-16">
+        <div className="card bg-gradient-to-r from-primary-900/50 to-accent-900/50 border-primary-500/20 text-center py-12">
+          <h2 className="text-2xl md:text-3xl font-bold text-white mb-4">
+            Ready to Get Started?
+          </h2>
+          <p className="text-surface-300 mb-8 max-w-xl mx-auto">
+            Whether you're an educational institution, student, or employer, 
+            zkCredentials makes credential verification simple and trustworthy.
+          </p>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            <Link to="/verify" className="btn-primary text-lg px-8 py-4 inline-flex">
+              Verify Certificate
+            </Link>
+            {!isConnected ? (
+              <button onClick={openRoleSelector} className="btn-primary text-lg px-8 py-4 inline-flex">
+                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                </svg>
+                Connect Wallet to Get Started
+              </button>
+            ) : null}
+          </div>
+        </div>
+      </section>
 
       {/* Features Section */}
       <section className="relative container mx-auto px-4 py-16">
@@ -260,34 +489,6 @@ export function Home() {
         </div>
       </section>
 
-      {/* CTA Section */}
-      <section className="relative container mx-auto px-4 py-16">
-        <div className="card bg-gradient-to-r from-primary-900/50 to-accent-900/50 border-primary-500/20 text-center py-12">
-          <h2 className="text-2xl md:text-3xl font-bold text-white mb-4">
-            Ready to Get Started?
-          </h2>
-          <p className="text-surface-300 mb-8 max-w-xl mx-auto">
-            Whether you're an educational institution, student, or employer, 
-            zkCredentials makes credential verification simple and trustworthy.
-          </p>
-          {isConnected && role !== 'admin' ? (
-            <Link to="/verify" className="btn-primary text-lg px-8 py-4 inline-flex">
-              Start Verifying
-            </Link>
-          ) : !isConnected ? (
-            <ConnectButton.Custom>
-              {({ openConnectModal }) => (
-                <button onClick={openConnectModal} className="btn-primary text-lg px-8 py-4 inline-flex">
-                  <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                  </svg>
-                  Connect Wallet to Get Started
-                </button>
-              )}
-            </ConnectButton.Custom>
-          ) : null}
-        </div>
-      </section>
     </div>
   );
 }

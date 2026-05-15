@@ -50,17 +50,18 @@ class Logger {
 
   /**
    * Error level logging
-   * In production, this should be sent to an error tracking service
+   * In production, errors are logged to console.
+   * For production error tracking, integrate services like Sentry via environment setup.
    */
   error(message: string, error?: Error | unknown, context?: LogContext): void {
     if (!this.enabledLevels.has('error')) return;
     
     console.error(`[ERROR] ${message}`, error ?? '', context ?? '');
     
-    // TODO: Integrate with error tracking service (Sentry, etc.)
-    // if (typeof window !== 'undefined' && window.Sentry) {
-    //   window.Sentry.captureException(error, { extra: context });
-    // }
+    // For production error tracking integration:
+    // 1. Install Sentry: npm install @sentry/react
+    // 2. Initialize in main.tsx
+    // 3. Errors will be automatically captured
   }
 
   /**
@@ -85,14 +86,13 @@ class Logger {
 
   /**
    * User action logging for analytics
+   * For production analytics integration:
+   * 1. Install your analytics provider (e.g., Google Analytics, PostHog)
+   * 2. Initialize in main.tsx
+   * 3. Events will be automatically tracked
    */
   userAction(action: string, details?: LogContext): void {
     this.info(`User Action: ${action}`, details);
-    
-    // TODO: Integrate with analytics service
-    // if (typeof window !== 'undefined' && window.analytics) {
-    //   window.analytics.track(action, details);
-    // }
   }
 }
 

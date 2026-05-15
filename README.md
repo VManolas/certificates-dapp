@@ -11,10 +11,11 @@ zkCredentials is a decentralized platform for issuing, managing, and verifying e
 
 ### Key Features
 
-- 🔐 **Tamper-Proof** - Certificates stored as cryptographic hashes on-chain
+- 🔐 **Role-Based Authentication** - Guided auth methods optimized for each user type
+- 🛡️ **Privacy-Preserving** - ZK-proof authentication for private login after one-time setup
+- 🔒 **Tamper-Proof** - Certificates stored as cryptographic hashes on-chain
 - ⚡ **Instant Verification** - Verify any certificate in seconds
 - 🏛️ **Institution Management** - Verified institutions issue credentials
-- 🔒 **Privacy-First** - Only document hashes stored, not content
 - 💰 **Low Cost** - zkSync Era enables affordable transactions
 
 ## Architecture
@@ -51,27 +52,39 @@ zkCredentials is a decentralized platform for issuing, managing, and verifying e
 - MetaMask or compatible Web3 wallet
 - (Optional) Testnet ETH for Sepolia deployment
 
-### Quick Start - Localhost Development
+### Quick Start - Local Development
 
-**Automated setup (recommended):**
+**Recommended: Hardhat local (`localHardhat`, chain `1337`)**
 
 ```bash
-# 1. Run quick start script
-./quick-start.sh
-
-# 2. Start Hardhat node (Terminal 1)
+# Terminal 1: start Hardhat local node
 cd contracts && npx hardhat node
 
-# 3. Deploy and auto-configure (Terminal 2)
-./deploy-and-configure.sh
+# Terminal 2: deploy and auto-configure frontend/.env.local
+cd contracts && npm run deploy:local
 
-# 4. Start frontend (Terminal 3)
+# Terminal 3: start frontend
 cd frontend && npm run dev
 ```
 
 **Your app will be running at http://localhost:5173** 🎉
 
-> 📖 **See [SETUP_CHECKLIST.md](SETUP_CHECKLIST.md) for detailed verification steps**
+**Alternative local modes**
+
+```bash
+# zkSync in-memory node (anvil-zksync, chain 260)
+cd contracts && npm run node:local:zksync
+cd contracts && npm run deploy:local:zksync
+
+# zkSync docker local L2 (chain 270)
+cd contracts && npm run deploy:local:docker
+```
+
+> 📖 **See [docs/SETUP_CHECKLIST.md](docs/SETUP_CHECKLIST.md) for detailed verification steps**
+>
+> 📚 **Documentation index:** See [docs/README.md](docs/README.md) for the current authoritative guides and the historical-docs policy.
+
+> ⚠️ **Development Mode**: The app includes a visual "Development Mode" indicator showing that ZK authentication is running with simplified proofs for testing. See [frontend/DEVELOPMENT_MODE.md](frontend/DEVELOPMENT_MODE.md) for details.
 
 ### Manual Installation
 
@@ -90,7 +103,7 @@ npm install
 
 ### Configuration
 
-**For Localhost (Development):**
+**For `localHardhat` (Development):**
 ```bash
 # Contracts - Use test private key
 cd contracts
@@ -98,10 +111,9 @@ cat > .env << 'EOF'
 DEPLOYER_PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 EOF
 
-# Frontend - Configure for localhost
+# Frontend
 cd ../frontend
-# Will be auto-configured by ./deploy-and-configure.sh
-# Or manually set VITE_CHAIN_ID=1337
+# Will be auto-configured by `cd ../contracts && npm run deploy:local`
 ```
 
 **For Sepolia Testnet:**
@@ -120,7 +132,7 @@ VITE_CHAIN_ID=300
 EOF
 ```
 
-> 📖 **See [ENVIRONMENT_SETUP.md](ENVIRONMENT_SETUP.md) for switching between environments**
+> 📖 **See [docs/ENVIRONMENT_SETUP.md](docs/ENVIRONMENT_SETUP.md) for switching between environments**
 
 ### Development
 
@@ -133,7 +145,7 @@ npm run compile
 npm test
 
 # Deploy to testnet
-npm run deploy:testnet
+npm run deploy:staging
 
 # Start frontend
 cd ../frontend
@@ -163,9 +175,61 @@ zksync-zzlogin-dapp/
 
 ## User Flows
 
+### Authentication
+
+zkCredentials implements **role-based authentication** with guided defaults for optimal security and user experience.
+
+#### Role-Based Auth Methods
+
+| User Type | Default Method | Available Methods | Rationale |
+|-----------|----------------|-------------------|-----------|
+| **Admin** | Web3 Only | Web3 | Public accountability and transparency |
+| **University** | Web3 Only | Web3 | Public institution + high transaction volume |
+| **Student** | ZKP (Privacy) | ZKP, Web3 | Privacy for authentication after one-time setup |
+| **Employer** | Web3 (Standard) | Web3, ZKP | Flexibility for different hiring contexts |
+
+#### First-Time Users Flow
+
+**For Students (Privacy-First):**
+1. Connect Web3 wallet
+2. System auto-detects student role (if certificate exists)
+3. **Private Login (ZK)** shown by default
+   - 🔐 One-time setup - wallet visible during registration
+   - 🛡️ Private authentication - ZK proofs hide wallet during login
+   - ⚙️ Setup takes ~30 seconds, then login forever privately
+   - 💡 Pro Tip: Use a dedicated "registration wallet" for maximum privacy
+4. Web3 fallback available if needed
+5. Access student dashboard
+
+**For Employers (Flexible):**
+1. Connect Web3 wallet
+2. **Standard Login (Web3)** shown by default
+   - 🔑 Simple & Fast - no setup required
+   - ⚡ Instant Access - login in seconds
+3. Upgrade to ZKP for executive search/competitive hiring
+4. Access verification dashboard
+
+**For Universities:**
+1. Connect Web3 wallet (required by admin)
+2. **Standard Login (Web3)** only
+   - Public accountability as educational institution
+   - Cost-efficient for high-volume certificate issuance
+3. Access institution dashboard
+
+**For Admin:**
+1. Connect Web3 wallet (predefined address)
+2. **Standard Login (Web3)** only
+   - Public accountability and transparency
+   - Administrative oversight requires visibility
+3. Access admin dashboard
+
+> 📖 **See [DUAL-AUTH-SYSTEM.md](docs/DUAL-AUTH-SYSTEM.md) for detailed authentication guide**  
+> 📖 **See [AUTH-WORKFLOWS-BY-USER-TYPE.md](docs/AUTH-WORKFLOWS-BY-USER-TYPE.md) for complete workflow definitions**
+
 ### For Educational Institutions
 
-1. Connect wallet
+1. Choose authentication method
+2. Connect wallet (if using Standard Login)
 2. Register institution with name and email domain
 3. Wait for admin approval
 4. Issue certificates by uploading PDF and entering student wallet
@@ -199,11 +263,89 @@ zksync-zzlogin-dapp/
 
 ## Security
 
+- **Role-Based Authentication** - ZK proofs for students, Web3 for institutions/admin
+- **Zero-Knowledge Privacy Model**:
+  - Setup Phase: Wallet visible during one-time commitment registration
+  - Auth Phase: Login privately with ZK proofs (wallet hidden)
+  - Usage Phase: User controls when to reveal wallet for specific actions
+  - Best Practice: Use dedicated registration wallet for maximum privacy
 - All contracts use OpenZeppelin's battle-tested libraries
 - UUPS upgradeable pattern for contract upgrades
 - AccessControl for role-based permissions
 - ReentrancyGuard on state-changing functions
 - Custom errors for gas-efficient reverts
+
+> 📖 **See [DUAL-AUTH-SYSTEM.md](docs/DUAL-AUTH-SYSTEM.md) for security details**
+
+### Privacy Best Practices
+
+**For Maximum Privacy with ZK Authentication:**
+
+1. **Use a Dedicated Registration Wallet**
+   - Create a fresh wallet specifically for ZK registration
+   - Don't use this wallet for any other transactions
+   - After registration, only login using ZK proofs (wallet stays hidden)
+
+2. **Understand the Privacy Model**
+   ```
+   Phase 1 - Registration (One-Time):
+   ├─ Your wallet IS visible on-chain
+   ├─ Commitment is registered publicly
+   └─ This is a necessary step for cryptographic setup
+   
+   Phase 2 - Authentication (Every Login):
+   ├─ Login using zero-knowledge proofs
+   ├─ Your wallet is NOT revealed
+   └─ Complete anonymity during authentication
+   
+   Phase 3 - Usage (Your Control):
+   ├─ Choose when to reveal wallet
+   ├─ Required for: receiving certificates, transactions
+   └─ Optional for: viewing, verification
+   ```
+
+3. **Transaction Privacy Tips**
+   - Use privacy-focused wallets for registration (e.g., fresh address)
+   - Consider using a relayer service in the future (Phase 2)
+   - Separate your "registration wallet" from your "usage wallet"
+
+4. **What's Private vs. What's Public**
+   
+   **Private (Hidden):**
+   - ✅ Login authentication (after setup)
+   - ✅ Session management
+   - ✅ Identity verification with ZK proofs
+   - ✅ Your private keys (never leave browser)
+   
+   **Public (Visible):**
+   - ⚠️ Registration transaction (commitment creation)
+   - ⚠️ Wallet that registered the commitment
+   - ⚠️ Any transactions you make after login (if you choose)
+
+5. **Why This Model?**
+   - One-time wallet exposure for cryptographic commitment is unavoidable in Phase 1
+   - After setup, you gain **permanent private authentication**
+   - Future enhancements (Phase 2) will add meta-transactions for truly anonymous registration
+   - This is more private than standard Web3 auth (100% wallet exposure)
+
+**Example Workflow:**
+```bash
+# 1. Create fresh wallet for registration
+New Wallet: 0xABC... (dedicated for registration only)
+
+# 2. Register with ZK Auth (wallet visible)
+On-chain: 0xABC... → registerCommitment(commitment123)
+Result: Public can see 0xABC registered commitment123
+
+# 3. Login privately (wallet hidden)
+ZK Proof: "I know the secret behind commitment123"
+Result: No one knows which wallet is logging in!
+
+# 4. Use the system
+Future actions: You choose when to reveal wallet
+```
+
+> 💡 **Coming in Phase 2**: Meta-transaction support for truly anonymous registration via relayers
 
 ## License
 
@@ -215,7 +357,10 @@ Contributions are welcome! Please read our contributing guidelines before submit
 
 ## Links
 
+- [Role-Based Auth Workflows](docs/AUTH-WORKFLOWS-BY-USER-TYPE.md)
+- [Dual Authentication Guide](docs/DUAL-AUTH-SYSTEM.md)
+- [ZK Auth Phase 1 Report](docs/PHASE-1-COMPLETE.md)
+- [Quick Start Guide](docs/QUICK-START.md)
 - [zkSync Era Documentation](https://docs.zksync.io/)
 - [OpenZeppelin Contracts](https://docs.openzeppelin.com/contracts/)
 - [wagmi Documentation](https://wagmi.sh/)
-

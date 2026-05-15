@@ -1,18 +1,22 @@
 // src/pages/Verify.tsx
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
+import { useAccount } from 'wagmi';
 import { generatePDFHash, formatFileSize, truncateHash, type HashResult } from '@/lib/pdfHash';
 import { useCertificateVerification, useHashExists, useCertificateDetails } from '@/hooks';
 import { useVerificationHistory } from '@/hooks/useVerificationHistory';
-import { useAuthStore } from '@/store/authStore';
+import { useAuthStore, useEffectiveRole, useIsAuthenticated } from '@/store/authStore';
+import { CERTIFICATE_REGISTRY_ADDRESS } from '@/lib/wagmi';
 import { QRScanner } from '@/components/QRScanner';
 import { VerificationReport } from '@/components/VerificationReport';
-// BlockExplorerLink import removed - not used in this component
 import { CertificateDetailModal } from '@/components/CertificateDetailModal';
+import { UnifiedLoginModal } from '@/components/UnifiedLoginModal';
 import { validatePdfFile, globalRateLimiter } from '@/lib/sanitization';
 import { parseError, withRetry } from '@/lib/errorHandling';
 import { logger } from '@/lib/logger';
+import type { UserRole } from '@/types/auth';
+import { verifyVerificationToken } from '@/lib/verificationToken';
 
 type VerificationState = 'idle' | 'hashing' | 'verifying' | 'complete' | 'verifying-id';
 
@@ -20,7 +24,12 @@ export function Verify() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const certIdParam = searchParams.get('cert');
-  const { role } = useAuthStore();
+  const hashParam = searchParams.get('hash');
+  const verificationTokenParam = searchParams.get('v');
+  const { isConnected } = useAccount();
+  const { preSelectedRole, setPreSelectedRole } = useAuthStore();
+  const effectiveRole = useEffectiveRole();
+  const isAuthenticated = useIsAuthenticated();
   const { addEntry } = useVerificationHistory();
   const queryClient = useQueryClient();
   
@@ -32,24 +41,119 @@ export function Verify() {
   const [hasLoggedVerification, setHasLoggedVerification] = useState(false);
   const [showQRScanner, setShowQRScanner] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
-  const [verificationSession, setVerificationSession] = useState(0);
   const [showLinkInput, setShowLinkInput] = useState(false);
+  const [isSecurityUpdateExpanded, setIsSecurityUpdateExpanded] = useState(false);
   const [linkInput, setLinkInput] = useState('');
+  const [verificationTokenSigner, setVerificationTokenSigner] = useState<string | null>(null);
+  const [verificationTokenAuthError, setVerificationTokenAuthError] = useState<string | null>(null);
+  
+  // Start login directly from employer role for disconnected/unknown wallets.
+  const [showLoginModal, setShowLoginModal] = useState(false);
 
-  // Certificate ID verification (from URL parameter)
-  const certificateIdFromUrl = certIdParam ? BigInt(certIdParam) : undefined;
+  const openEmployerLogin = () => {
+    if (!isConnected) {
+      setPreSelectedRole('employer' as UserRole);
+      setShowLoginModal(true);
+    }
+  };
+
+  // Handle successful login
+  const handleLoginSuccess = () => {
+    setShowLoginModal(false);
+    // User can now proceed with verification
+  };
+
+  // Security hardening:
+  // - Public verification uses signed token links (`?v=...`)
+  // - Hash links (`?hash=`) are allowed only for authenticated internal flows
+  // - Legacy cert-id links (`?cert=`) are blocked
+  const hashFromUrl =
+    hashParam && /^0x[a-fA-F0-9]{64}$/.test(hashParam)
+      ? (hashParam.toLowerCase() as `0x${string}`)
+      : undefined;
+  const tokenValidation = useMemo(
+    () => (verificationTokenParam ? verifyVerificationToken(verificationTokenParam) : null),
+    [verificationTokenParam]
+  );
+  const hashFromToken = tokenValidation?.valid ? tokenValidation.payload?.h : undefined;
+  const hasLegacyCertParam = !!certIdParam;
+  const canUseInternalHashMode = isConnected && isAuthenticated && !!effectiveRole;
+
+  // Legacy cert-id link verification is intentionally disabled (`cert` URLs are rejected in effects).
+  // Keep this explicitly undefined so legacy IDs never activate the certificate-by-id path.
+  const certificateIdFromUrl: bigint | undefined = undefined;
   const {
     certificate: certFromId,
     isLoading: isLoadingCertById,
     error: certByIdError,
   } = useCertificateDetails(certificateIdFromUrl, !!certificateIdFromUrl);
 
-  // Initialize state based on URL parameter
+  // Initialize state from secure token links (`?v=...`).
+  // Keep this effect independent from auth/role state so token verification
+  // does not reset when auth state updates in the background.
   useEffect(() => {
-    if (certificateIdFromUrl && !isLoadingCertById) {
-      setState('verifying-id');
+    if (!verificationTokenParam) {
+      return;
     }
-  }, [certificateIdFromUrl, isLoadingCertById]);
+
+    if (!tokenValidation?.valid || !hashFromToken) {
+      setError(tokenValidation?.reason || 'Invalid verification token');
+      setState('idle');
+      setHashResult(null);
+      return;
+    }
+
+    setVerificationTokenSigner(tokenValidation.signer || null);
+    setVerificationTokenAuthError(null);
+    setError(null);
+    setHashResult({
+      hash: hashFromToken,
+      fileName: 'Secure Verification Link',
+      fileSize: 0,
+      pageCount: 0,
+    });
+    setHasLoggedVerification(false);
+    setState('verifying');
+  }, [verificationTokenParam, tokenValidation, hashFromToken]);
+
+  // Initialize state from hash/legacy URL params when no token param exists.
+  useEffect(() => {
+    if (verificationTokenParam) {
+      return;
+    }
+
+    if (hashFromUrl) {
+      if (!canUseInternalHashMode) {
+        setError('Public hash links are disabled. Please use a secure verification link token (v=...).');
+        setState('idle');
+        setHashResult(null);
+        return;
+      }
+      setVerificationTokenSigner(null);
+      setVerificationTokenAuthError(null);
+      setError(null);
+      setHashResult({
+        hash: hashFromUrl,
+        fileName: 'Verification Link',
+        fileSize: 0,
+        pageCount: 0,
+      });
+      setHasLoggedVerification(false);
+      setState('verifying');
+      return;
+    }
+
+    if (hashParam && !hashFromUrl) {
+      setError('Invalid verification link format. Hash must be a 32-byte hex value.');
+      setState('idle');
+      return;
+    }
+
+    if (hasLegacyCertParam) {
+      setError('Legacy certificate-ID links are no longer supported. Please request a new secure verification link.');
+      setState('idle');
+    }
+  }, [verificationTokenParam, hashFromUrl, hashParam, hasLegacyCertParam, canUseInternalHashMode]);
 
   // Use the new hash exists helper hook for optimized duplicate check
   const {
@@ -66,11 +170,19 @@ export function Verify() {
     certificateId, 
     isLoading: isVerifying,
     error: verifyError,
+    refetch: refetchVerification,
+    verificationTimestamp,
+    verificationId,
   } = useCertificateVerification(
     hashResult?.hash,
-    state === 'verifying',
-    verificationSession
+    state === 'verifying'
   );
+
+  // 🔍 DEBUG: Log verification state changes
+  useEffect(() => {
+    if (hashResult) {
+    }
+  }, [state, hashResult, isValid, isRevoked, certificateId, isVerifying, verifyError, verificationId, verificationTimestamp]);
 
   // Fetch full certificate details when we have a certificateId from PDF verification
   const {
@@ -81,14 +193,37 @@ export function Verify() {
     state === 'complete' && !!certificateId && certificateId > 0n
   );
 
-  // Update state when verification completes
-  if ((isValid !== undefined || verifyError) && state === 'verifying' && !isVerifying && !isCheckingHash) {
-    setState('complete');
-  }
+  // For signed links, enforce that signer is certificate student or issuing institution.
+  useEffect(() => {
+    if (!verificationTokenSigner || !certFromPdfVerification || state !== 'complete') {
+      setVerificationTokenAuthError(null);
+      return;
+    }
+
+    const signer = verificationTokenSigner.toLowerCase();
+    const isAuthorizedSigner =
+      signer === certFromPdfVerification.studentWallet.toLowerCase() ||
+      signer === certFromPdfVerification.issuingInstitution.toLowerCase();
+
+    if (!isAuthorizedSigner) {
+      setVerificationTokenAuthError('This verification token is not authorized for this certificate.');
+    } else {
+      setVerificationTokenAuthError(null);
+    }
+  }, [verificationTokenSigner, certFromPdfVerification, state]);
+
+  // Fix: Update state when verification completes (using useEffect instead of imperative setState)
+  useEffect(() => {
+    if (state === 'verifying' && !isVerifying && !isCheckingHash) {
+      if (isValid !== undefined || verifyError) {
+        setState('complete');
+      }
+    }
+  }, [state, isVerifying, isCheckingHash, isValid, verifyError]);
 
   // Log verification to history (for employer role only)
   useEffect(() => {
-    if (role === 'employer' && state === 'complete' && !hasLoggedVerification && hashResult) {
+    if (effectiveRole === 'employer' && state === 'complete' && !hasLoggedVerification && hashResult) {
       if (isValid !== undefined) {
         addEntry({
           verificationType: 'pdf',
@@ -100,11 +235,11 @@ export function Verify() {
         setHasLoggedVerification(true);
       }
     }
-  }, [role, state, isValid, isRevoked, certificateId, hashResult, hasLoggedVerification, addEntry]);
+  }, [effectiveRole, state, isValid, isRevoked, certificateId, hashResult, hasLoggedVerification, addEntry]);
 
   // Log certificate ID verification to history
   useEffect(() => {
-    if (role === 'employer' && state === 'verifying-id' && !hasLoggedVerification && certFromId && !isLoadingCertById) {
+    if (effectiveRole === 'employer' && state === 'verifying-id' && !hasLoggedVerification && certFromId && !isLoadingCertById) {
       addEntry({
         verificationType: 'link',
         isValid: true,
@@ -115,12 +250,9 @@ export function Verify() {
       });
       setHasLoggedVerification(true);
     }
-  }, [role, state, certFromId, certificateIdFromUrl, isLoadingCertById, hasLoggedVerification, addEntry]);
+  }, [effectiveRole, state, certFromId, certificateIdFromUrl, isLoadingCertById, hasLoggedVerification, addEntry]);
 
   const handleFile = useCallback(async (selectedFile: File) => {
-    // Increment session to force new query with different key
-    setVerificationSession(prev => prev + 1);
-    
     // Clear any existing verification data first
     queryClient.removeQueries({ queryKey: ['readContract'] });
     
@@ -129,6 +261,7 @@ export function Verify() {
     setState('hashing');
     setFile(selectedFile);
     setHasLoggedVerification(false); // Reset logging flag
+
 
     // Validate file before processing
     const validation = validatePdfFile(selectedFile);
@@ -198,8 +331,21 @@ export function Verify() {
   );
 
   const resetVerification = () => {
-    // Force a full page refresh to clear all state and cache
-    window.location.href = '/verify';
+    // Clear verification state without full page reload
+    setFile(null);
+    setHashResult(null);
+    setState('idle');
+    setError(null);
+    setHasLoggedVerification(false);
+    setShowDetailModal(false);
+    
+    // Clear React Query cache for certificate data
+    queryClient.removeQueries({ queryKey: ['readContract'] });
+    
+    // If there's a cert parameter in URL, navigate to clean /verify route
+    if (certIdParam) {
+      navigate('/verify', { replace: true });
+    }
   };
 
   const handleLinkSubmit = () => {
@@ -210,34 +356,71 @@ export function Verify() {
     }
 
     try {
-      // Extract certificate ID from various link formats
-      let certId: string | null = null;
+      // Extract signed token/document hash from various link formats
+      let extractedToken: string | null = null;
+      let extractedHash: string | null = null;
 
       // Try to parse as URL
       try {
         const url = new URL(trimmedLink);
-        certId = url.searchParams.get('cert');
+        extractedToken = url.searchParams.get('v');
+        extractedHash = url.searchParams.get('hash');
+        if (!extractedHash && url.searchParams.get('cert')) {
+          setError('Legacy certificate-ID links are no longer supported. Please request a new secure verification link.');
+          return;
+        }
       } catch {
-        // Not a valid URL, try to extract just the number
-        const match = trimmedLink.match(/cert[=:](\d+)/i);
+        // Raw token paste
+        if (trimmedLink.startsWith('v1.')) {
+          extractedToken = trimmedLink;
+        }
+
+        // Not a valid URL, try to extract hash token from text
+        const match = trimmedLink.match(/hash[=:](0x[a-fA-F0-9]{64})/i);
         if (match) {
-          certId = match[1];
-        } else {
-          // Check if it's just a number
-          if (/^\d+$/.test(trimmedLink)) {
-            certId = trimmedLink;
-          }
+          extractedHash = match[1];
         }
       }
 
-      if (!certId || !/^\d+$/.test(certId)) {
-        setError('Invalid verification link format. Please paste a valid link containing cert=ID or just the certificate ID.');
+      if (!extractedToken) {
+        const tokenMatch = trimmedLink.match(/(?:\?|&)v=([^&\s]+)/);
+        if (tokenMatch) {
+          extractedToken = decodeURIComponent(tokenMatch[1]);
+        }
+      }
+
+      if (extractedToken) {
+        const decodedToken = decodeURIComponent(extractedToken);
+        const tokenResult = verifyVerificationToken(decodedToken);
+        if (!tokenResult.valid) {
+          setError(tokenResult.reason || 'Invalid verification token');
+          return;
+        }
+        logger.info('Navigating to token-based certificate verification');
+        navigate(`/verify?v=${encodeURIComponent(decodedToken)}`);
+        setShowLinkInput(false);
+        setLinkInput('');
+        setError(null);
         return;
       }
 
-      logger.info('Navigating to certificate verification', { certId });
-      // Navigate to the verify page with the cert parameter
-      navigate(`/verify?cert=${certId}`);
+      if (!extractedHash && /^0x[a-fA-F0-9]{64}$/.test(trimmedLink)) {
+        extractedHash = trimmedLink;
+      }
+
+      if (!extractedHash || !/^0x[a-fA-F0-9]{64}$/.test(extractedHash)) {
+        setError('Invalid verification link format. Please paste a valid link containing v=... or hash=0x....');
+        return;
+      }
+
+      if (!canUseInternalHashMode) {
+        setError('Public hash links are disabled. Please paste a secure verification link containing v=....');
+        return;
+      }
+
+      logger.info('Navigating to hash-based certificate verification');
+      // Navigate to the verify page with hash parameter
+      navigate(`/verify?hash=${extractedHash.toLowerCase()}`);
       setShowLinkInput(false);
       setLinkInput('');
       setError(null);
@@ -308,6 +491,32 @@ export function Verify() {
       <div className="min-h-[calc(100vh-4rem)] bg-gradient-to-br from-surface-950 via-primary-950/20 to-surface-950">
         <div className="container mx-auto px-4 py-16">
           <div className="max-w-2xl mx-auto space-y-6">
+            {/* Navigation Buttons */}
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => navigate(-1)}
+                className="btn-secondary flex items-center gap-2"
+                title="Go back to previous page"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+                Back
+              </button>
+              {effectiveRole === 'university' && (
+                <button
+                  onClick={() => navigate('/university/dashboard')}
+                  className="btn-primary flex items-center gap-2"
+                  title="Go to University Dashboard"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                  </svg>
+                  Dashboard
+                </button>
+              )}
+            </div>
+
             {/* Status Card */}
             <div
               className={`card ${
@@ -440,6 +649,14 @@ export function Verify() {
 
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-gradient-to-br from-surface-950 via-primary-950/20 to-surface-950">
+      {/* Unified Login Modal */}
+      <UnifiedLoginModal
+        isOpen={showLoginModal}
+        onClose={() => setShowLoginModal(false)}
+        onSuccess={handleLoginSuccess}
+        preSelectedRole={preSelectedRole}
+      />
+
       <div className="container mx-auto px-4 py-16">
         {/* Header */}
         <div className="text-center mb-12">
@@ -448,7 +665,55 @@ export function Verify() {
             Upload a PDF certificate to verify its authenticity. The document is processed 
             locally - only the hash is checked against the blockchain.
           </p>
+          <button
+            type="button"
+            onClick={() => setIsSecurityUpdateExpanded((prev) => !prev)}
+            aria-expanded={isSecurityUpdateExpanded}
+            className="max-w-2xl w-full mx-auto mb-6 rounded-lg border border-blue-500/30 bg-blue-500/10 p-4 text-left transition-colors hover:bg-blue-500/15"
+          >
+            <div className="flex items-start gap-3">
+              <svg className="w-5 h-5 text-blue-300 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <div className="flex-1">
+                {!isSecurityUpdateExpanded ? (
+                  <p className="text-sm text-blue-200">
+                    <strong className="text-white">Security update:</strong> public verification links now require a secure token
+                  </p>
+                ) : (
+                  <>
+                    <p className="text-sm text-blue-200">
+                      <strong className="text-white">Security update:</strong> public verification links now require a secure token
+                      (<span className="font-mono">verify?hash=...</span>) to protect against certificate enumeration.
+                    </p>
+                    <p className="text-xs text-surface-300 mt-1">
+                      Internal authenticated users can still use hash-based links for operational workflows.
+                    </p>
+                  </>
+                )}
+              </div>
+              <svg
+                className={`w-4 h-4 text-blue-300 mt-1 transition-transform ${isSecurityUpdateExpanded ? 'rotate-180' : ''}`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
+          </button>
           <div className="flex items-center justify-center gap-3">
+            {!isConnected && (
+              <button
+                onClick={openEmployerLogin}
+                className="btn-primary inline-flex items-center gap-2"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                </svg>
+                Login
+              </button>
+            )}
             <button
               onClick={() => setShowQRScanner(true)}
               className="btn-secondary inline-flex items-center gap-2"
@@ -506,12 +771,18 @@ export function Verify() {
                           handleLinkSubmit();
                         }
                       }}
-                      placeholder="https://example.com/verify?cert=123 or just 123"
+                      placeholder={
+                        canUseInternalHashMode
+                          ? 'https://example.com/verify?v=... or ?hash=0x...'
+                          : 'https://example.com/verify?v=...'
+                      }
                       className="input w-full"
                       autoFocus
                     />
                     <p className="text-xs text-surface-500 mt-2">
-                      Paste the full verification link or just the certificate ID number
+                      {canUseInternalHashMode
+                        ? 'Paste a secure token link (`v`) or internal hash link (`hash`)'
+                        : 'Paste a secure token link (`v`)'}
                     </p>
                   </div>
 
@@ -603,33 +874,115 @@ export function Verify() {
             </div>
           )}
 
-          {/* Error State */}
+          {/* Error State - Enhanced with retry and details */}
           {error && (
             <div className="card border-red-500/30 bg-red-500/10">
-              <div className="flex items-start gap-4">
+              <div className="flex items-start gap-4 mb-4">
                 <div className="flex-shrink-0 w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center">
                   <svg className="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                   </svg>
                 </div>
                 <div className="flex-1">
-                  <h3 className="text-lg font-semibold text-red-400 mb-1">Error</h3>
-                  <p className="text-surface-300">{error}</p>
+                  <h3 className="text-lg font-semibold text-red-400 mb-1">Verification Error</h3>
+                  <p className="text-surface-300 mb-3">{error}</p>
+                  
+                  {/* Technical Details */}
+                  {hashResult && (
+                    <details className="text-xs text-surface-400 mb-3">
+                      <summary className="cursor-pointer hover:text-surface-300 mb-2">Technical Details</summary>
+                      <div className="mt-2 p-3 bg-surface-900/50 rounded font-mono space-y-1">
+                        <div><span className="text-surface-500">Document Hash:</span> {truncateHash(hashResult.hash, 12, 10)}</div>
+                        <div><span className="text-surface-500">Network:</span> zkSync Era</div>
+                        <div><span className="text-surface-500">Contract:</span>{' '}
+                          {CERTIFICATE_REGISTRY_ADDRESS
+                            ? truncateHash(CERTIFICATE_REGISTRY_ADDRESS, 10, 8)
+                            : 'Not configured'}
+                        </div>
+                        {verifyError && <div><span className="text-surface-500">Error Type:</span> {verifyError.message}</div>}
+                      </div>
+                    </details>
+                  )}
                 </div>
               </div>
-              <button onClick={resetVerification} className="btn-secondary mt-4 w-full">
-                Try Again
-              </button>
+              
+              {/* Action Buttons */}
+              <div className="flex gap-3">
+                {hashResult && (
+                  <button 
+                    onClick={() => {
+                      setError(null);
+                      setState('verifying');
+                      refetchVerification();
+                    }} 
+                    className="btn-primary flex-1 flex items-center justify-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Retry Verification
+                  </button>
+                )}
+                <button onClick={resetVerification} className="btn-secondary flex-1">
+                  Try Different PDF
+                </button>
+              </div>
             </div>
           )}
 
           {/* Result State */}
           {state === 'complete' && hashResult && (
             <div className="space-y-6">
+              {verificationTokenAuthError && (
+                <div className="card border-red-500/30 bg-red-500/10">
+                  <div className="flex items-start gap-4">
+                    <div className="flex-shrink-0 w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center">
+                      <svg className="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-lg font-semibold text-red-400 mb-1">Unauthorized Verification Link</h3>
+                      <p className="text-surface-300">{verificationTokenAuthError}</p>
+                      <p className="text-surface-400 text-sm mt-2">
+                        Request a new verification link shared by the certificate holder or issuing institution.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Navigation Buttons */}
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => navigate(-1)}
+                  className="btn-secondary flex items-center gap-2"
+                  title="Go back to previous page"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                  Back
+                </button>
+                {effectiveRole === 'university' && (
+                  <button
+                    onClick={() => navigate('/university/dashboard')}
+                    className="btn-primary flex items-center gap-2"
+                    title="Go to University Dashboard"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                    </svg>
+                    Dashboard
+                  </button>
+                )}
+              </div>
+
               {/* Status Card */}
+              {!verificationTokenAuthError && (
               <div
                 className={`card ${
-                  isValid && !isRevoked
+                  isValid && !isRevoked && certificateId !== undefined && certificateId > 0n
                     ? 'border-accent-500/30 bg-accent-500/10 glow-accent'
                     : isRevoked
                     ? 'border-yellow-500/30 bg-yellow-500/10'
@@ -639,14 +992,14 @@ export function Verify() {
                 <div className="flex items-center gap-4 mb-6">
                   <div
                     className={`w-16 h-16 rounded-full flex items-center justify-center ${
-                      isValid && !isRevoked
+                      isValid && !isRevoked && certificateId !== undefined && certificateId > 0n
                         ? 'bg-accent-500/20'
                         : isRevoked
                         ? 'bg-yellow-500/20'
                         : 'bg-red-500/20'
                     }`}
                   >
-                    {isValid && !isRevoked ? (
+                    {isValid && !isRevoked && certificateId !== undefined && certificateId > 0n ? (
                       <svg className="w-8 h-8 text-accent-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                       </svg>
@@ -662,14 +1015,14 @@ export function Verify() {
                   </div>
                   <div>
                     <h2 className="text-2xl font-bold text-white">
-                      {isValid && !isRevoked
+                      {isValid && !isRevoked && certificateId !== undefined && certificateId > 0n
                         ? 'Valid Certificate'
                         : isRevoked
                         ? 'Certificate Revoked'
                         : 'Certificate Not Found'}
                     </h2>
-                    <p className={isValid && !isRevoked ? 'text-accent-400' : isRevoked ? 'text-yellow-400' : 'text-red-400'}>
-                      {isValid && !isRevoked
+                    <p className={isValid && !isRevoked && certificateId !== undefined && certificateId > 0n ? 'text-accent-400' : isRevoked ? 'text-yellow-400' : 'text-red-400'}>
+                      {isValid && !isRevoked && certificateId !== undefined && certificateId > 0n
                         ? 'This certificate is authentic and verified on-chain'
                         : isRevoked
                         ? 'This certificate was revoked by the issuing institution'
@@ -697,8 +1050,10 @@ export function Verify() {
                   </div>
                 )}
               </div>
+              )}
 
               {/* File Details Card */}
+              {!verificationTokenAuthError && (
               <div className="card">
                 <h3 className="text-lg font-semibold text-white mb-4">Document Details</h3>
                 <div className="space-y-3">
@@ -722,6 +1077,74 @@ export function Verify() {
                   </div>
                 </div>
               </div>
+              )}
+
+              {/* Blockchain Verification Status Card */}
+              {!verificationTokenAuthError && (
+              <div className="card bg-surface-800 border-surface-700">
+                <div className="flex items-center gap-3 mb-4">
+                  <svg className="w-5 h-5 text-accent-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                  </svg>
+                  <h3 className="text-sm font-semibold text-white">Blockchain Verification</h3>
+                </div>
+                
+                <div className="space-y-3 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-surface-400">Network</span>
+                    <span className="text-white font-mono">zkSync Era</span>
+                  </div>
+                  
+                  {CERTIFICATE_REGISTRY_ADDRESS ? (
+                  <div className="flex justify-between">
+                    <span className="text-surface-400">Smart Contract</span>
+                    <a 
+                      href={`https://explorer.zksync.io/address/${CERTIFICATE_REGISTRY_ADDRESS}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-accent-400 hover:text-accent-300 font-mono text-xs underline transition-colors"
+                      title="View contract on zkSync Era Block Explorer"
+                    >
+                      {truncateHash(CERTIFICATE_REGISTRY_ADDRESS, 8, 6)}
+                    </a>
+                  </div>
+                  ) : (
+                  <div className="flex justify-between">
+                    <span className="text-surface-400">Smart Contract</span>
+                    <span className="text-surface-500 text-xs">Not configured</span>
+                  </div>
+                  )}
+                  
+                  {verificationTimestamp && (
+                    <div className="flex justify-between">
+                      <span className="text-surface-400">Verified At</span>
+                      <span className="text-white">
+                        {verificationTimestamp.toLocaleTimeString('en-US', {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          second: '2-digit',
+                        })}
+                      </span>
+                    </div>
+                  )}
+                  
+                  <div className="flex justify-between items-center pt-3 border-t border-surface-700">
+                    <span className="text-surface-400">Query Status</span>
+                    <span className="flex items-center gap-2 text-accent-400">
+                      <span className="w-2 h-2 rounded-full bg-accent-400"></span>
+                      On-Chain Verified
+                    </span>
+                  </div>
+
+                  {verificationId && (
+                    <div className="flex justify-between text-xs pt-2 border-t border-surface-700/50">
+                      <span className="text-surface-500">Verification ID</span>
+                      <span className="text-surface-400 font-mono">{verificationId.split('-')[1]}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+              )}
 
               {/* Actions */}
               <div className="flex gap-4">
@@ -785,4 +1208,3 @@ export function Verify() {
 }
 
 export default Verify;
-

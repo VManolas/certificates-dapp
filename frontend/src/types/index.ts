@@ -1,19 +1,17 @@
 // src/types/index.ts
 
 /**
- * Certificate data structure matching the smart contract
+ * Re-export certificate types from certificate module
  */
-export interface Certificate {
-  documentHash: `0x${string}`;
-  studentWallet: `0x${string}`;
-  issuingInstitution: `0x${string}`;
-  issueDate: bigint;
-  certificateId: bigint;
-  metadataURI: string;
-  isRevoked: boolean;
-  revokedAt: bigint;
-  revocationReason: string;
-}
+export type { 
+  Certificate,
+  CertificateVerificationResult,
+  CertificateIssuanceForm,
+  BulkCertificateForm,
+  CSVRow,
+  PrivacySettings,
+  QRCodePayload
+} from './certificate';
 
 /**
  * Institution data structure matching the smart contract
@@ -29,9 +27,10 @@ export interface Institution {
 }
 
 /**
- * Certificate verification result
+ * Contract-level verification result (from smart contract reads)
+ * This is different from CertificateVerificationResult which includes full certificate data
  */
-export interface VerificationResult {
+export interface ContractVerificationResult {
   isValid: boolean;
   certificateId: bigint;
   isRevoked: boolean;
@@ -59,31 +58,4 @@ export interface RegisterInstitutionFormData {
  */
 export type TransactionStatus = 'idle' | 'pending' | 'confirming' | 'success' | 'error';
 
-/**
- * Generic API response wrapper
- */
-export interface ApiResponse<T> {
-  data: T | null;
-  error: string | null;
-  isLoading: boolean;
-}
-
-/**
- * Pagination parameters
- */
-export interface PaginationParams {
-  offset: number;
-  limit: number;
-}
-
-/**
- * Paginated response
- */
-export interface PaginatedResponse<T> {
-  items: T[];
-  total: number;
-  offset: number;
-  limit: number;
-  hasMore: boolean;
-}
 

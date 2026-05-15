@@ -44,8 +44,21 @@ declare global {
 }
 window.queryClient = queryClient;
 
+// Remove initial HTML loader once React is ready to render
+const removeInitialLoader = () => {
+  const loader = document.getElementById('initial-loader');
+  if (loader) {
+    loader.classList.add('loaded');
+    // Remove from DOM after fade-out animation completes
+    setTimeout(() => loader.remove(), 300);
+  }
+};
+
+// Conditionally use StrictMode only in development
+const AppWrapper = import.meta.env.DEV ? React.StrictMode : React.Fragment;
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
+  <AppWrapper>
     <ErrorBoundary>
       <WagmiProvider config={config}>
         <QueryClientProvider client={queryClient}>
@@ -63,6 +76,10 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         </QueryClientProvider>
       </WagmiProvider>
     </ErrorBoundary>
-  </React.StrictMode>
+  </AppWrapper>
 );
+
+// Remove loader immediately when React starts rendering
+// No delay needed - React is fast now!
+removeInitialLoader();
 
