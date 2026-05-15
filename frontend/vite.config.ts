@@ -24,25 +24,19 @@ export default defineConfig({
     }),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'icon-192.png', 'icon-512.png'],
+      includeAssets: ['favicon.svg'],
       manifest: {
         name: 'zkSync ZKP Certificate Manager',
         short_name: 'zkCredentials',
         description: 'Decentralized certificate management system powered by zkSync',
         theme_color: '#2563eb',
-        background_color: '#ffffff',
+        background_color: '#0a0e1a',
         display: 'standalone',
         icons: [
           {
-            src: '/icon-192.png',
-            sizes: '192x192',
-            type: 'image/png',
-            purpose: 'any maskable'
-          },
-          {
-            src: '/icon-512.png',
-            sizes: '512x512',
-            type: 'image/png',
+            src: '/favicon.svg',
+            sizes: 'any',
+            type: 'image/svg+xml',
             purpose: 'any maskable'
           }
         ]
@@ -157,7 +151,7 @@ export default defineConfig({
               return 'web3-reown';
             }
             if (id.includes('ox/') || id.includes('ox/_esm/')) {
-              return 'web3-ox';
+              return 'web3-viem'; // merged: ox is tightly coupled to viem; splitting causes TDZ errors
             }
             if (id.includes('wagmi')) {
               return 'web3-wagmi';
