@@ -81,7 +81,7 @@ export function Verify() {
 
   // Legacy cert-id link verification is intentionally disabled (`cert` URLs are rejected in effects).
   // Keep this explicitly undefined so legacy IDs never activate the certificate-by-id path.
-  const certificateIdFromUrl: bigint | undefined = undefined;
+  const certificateIdFromUrl = undefined as bigint | undefined;
   const {
     certificate: certFromId,
     isLoading: isLoadingCertById,

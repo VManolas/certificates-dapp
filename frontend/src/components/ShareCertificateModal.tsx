@@ -96,7 +96,6 @@ export function ShareCertificateModal({
     
     // Get the actual QR code size
     const svgWidth = svg.getAttribute('width') || qrSize.toString();
-    const svgHeight = svg.getAttribute('height') || qrSize.toString();
     const size = parseInt(svgWidth);
     
 

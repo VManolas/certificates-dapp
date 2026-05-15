@@ -12,13 +12,6 @@ const EXPECTED_VERSIONS = {
   institutionRegistry: '1.0.0',
 } as const;
 
-interface UpgradeInfo {
-  version: string;
-  timestamp: bigint;
-  upgrader: string;
-  notes: string;
-}
-
 interface VersionInfo {
   currentVersion: string | undefined;
   expectedVersion: string;
