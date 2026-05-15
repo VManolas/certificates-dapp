@@ -146,21 +146,15 @@ export default defineConfig({
         manualChunks: (id) => {
           // Create more granular chunks to reduce memory pressure
           if (id.includes('node_modules')) {
-            // Split large Web3 dependencies more aggressively
-            if (id.includes('@reown') || id.includes('@walletconnect')) {
-              return 'web3-reown';
-            }
-            if (id.includes('ox/') || id.includes('ox/_esm/')) {
-              return 'web3-viem'; // merged: ox is tightly coupled to viem; splitting causes TDZ errors
-            }
-            if (id.includes('wagmi')) {
-              return 'web3-wagmi';
-            }
-            if (id.includes('viem')) {
-              return 'web3-viem';
-            }
-            if (id.includes('@rainbow-me/rainbowkit')) {
-              return 'web3-rainbowkit';
+            // All web3 libs in one chunk: viem/wagmi/ox/rainbowkit share a tight
+            // dependency graph; splitting them causes TDZ init-order crashes.
+            if (
+              id.includes('@reown') || id.includes('@walletconnect') ||
+              id.includes('ox/') || id.includes('ox/_esm/') ||
+              id.includes('wagmi') || id.includes('viem') ||
+              id.includes('@rainbow-me/rainbowkit') || id.includes('abitype')
+            ) {
+              return 'web3';
             }
             if (id.includes('@tanstack/react-query')) {
               return 'react-query';
