@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "compile": "hardhat compile",
+    "compile:zk": "hardhat compile --network zkSyncSepoliaTestnet",
     "test": "hardhat test",
     "coverage": "hardhat coverage",
     "deploy:dev": "hardhat run scripts/deploy-unified.ts --network hardhat",

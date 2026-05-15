@@ -1,0 +1,52 @@
+# Git ignore file itself (keep local only)
+.gitignore
+
+# Documentation (internal notes and diagrams)
+docs/
+
+# Context and session files
+context/
+
+# AI and Development Tools
+.claude/
+.clinerules
+.cursor/
+
+# Shell scripts (deployment and setup)
+*.sh
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Python virtual environment (if using)
+venv/
+__pycache__/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Temporary files
+*.tmp
+*.temp
+
+# Build artifacts (if building at root level)
+dist/
+build/
+
+# Deprecated files and directories
+**/deprecated/
