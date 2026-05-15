@@ -7,6 +7,7 @@ import { wasmPlugin } from './vite-plugins/wasm-plugin';
 import path from 'path';
 
 export default defineConfig({
+  base: process.env.GITHUB_PAGES ? '/certificates-dapp/' : '/',
   plugins: [
     react(),
     wasmPlugin(), // Add WASM plugin FIRST

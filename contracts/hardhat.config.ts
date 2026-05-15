@@ -22,7 +22,6 @@ const config: HardhatUserConfig = {
             enabled: true,
             runs: 200,
           },
-          viaIR: true,
         },
       },
     ],
@@ -43,10 +42,11 @@ const config: HardhatUserConfig = {
   zksolc: {
     version: "1.4.1",
     settings: {
-      // Enable optimizer for better gas efficiency
+      // Optimizer disabled: UltraPlonkAuthVerifier (2778-line assembly) causes
+      // "stack layout after 1000 iterations" with any optimizer mode.
+      // Unoptimized bytecode is acceptable for staging.
       optimizer: {
-        enabled: true,
-        mode: "3",
+        enabled: false,
       },
     },
   },
