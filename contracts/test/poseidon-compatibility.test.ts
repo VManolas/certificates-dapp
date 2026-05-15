@@ -48,7 +48,7 @@ describe('Poseidon Hash Compatibility', function() {
     console.log('✅ Poseidon initialized\n');
   });
 
-  it('should produce identical outputs in JavaScript and Noir', async () => {
+  it('should produce identical outputs in JavaScript and Noir', async function() {
     console.log('🧪 Starting Poseidon Compatibility Test\n');
     console.log('📋 Test Values:');
     console.log(`   Private Key: ${TEST_VALUES.privateKey}`);
