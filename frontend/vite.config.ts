@@ -142,52 +142,7 @@ export default defineConfig({
         // Show all other warnings
         warn(warning);
       },
-      output: {
-        manualChunks: (id) => {
-          // Create more granular chunks to reduce memory pressure
-          if (id.includes('node_modules')) {
-            // All web3 libs in one chunk: viem/wagmi/ox/rainbowkit share a tight
-            // dependency graph; splitting them causes TDZ init-order crashes.
-            if (
-              id.includes('@reown') || id.includes('@walletconnect') ||
-              id.includes('ox/') || id.includes('ox/_esm/') ||
-              id.includes('wagmi') || id.includes('viem') ||
-              id.includes('@rainbow-me/rainbowkit') || id.includes('abitype')
-            ) {
-              return 'web3';
-            }
-            // PDF handling
-            if (id.includes('pdfjs-dist') || id.includes('@react-pdf/renderer')) {
-              return 'pdf-lib';
-            }
-            // ZK/Crypto libraries
-            if (id.includes('circomlibjs') || id.includes('poseidon') || id.includes('crypto-js')) {
-              return 'crypto-lib';
-            }
-            // Noir libraries
-            if (id.includes('@noir-lang')) {
-              return 'noir-lib';
-            }
-            // React core
-            if (id.includes('react') || id.includes('react-dom')) {
-              return 'react-vendor';
-            }
-            if (id.includes('react-router-dom')) {
-              return 'react-router';
-            }
-            // Form handling
-            if (id.includes('react-hook-form') || id.includes('@hookform')) {
-              return 'forms';
-            }
-            // UI utilities
-            if (id.includes('lucide-react') || id.includes('clsx') || id.includes('tailwind-merge')) {
-              return 'ui-utils';
-            }
-            // All other node_modules
-            return 'vendor';
-          }
-        },
-      },
+      output: {},
     },
     target: 'esnext',
     minify: 'esbuild', // Use esbuild instead of terser - much faster and less memory intensive
