@@ -146,13 +146,11 @@ export default defineConfig({
         manualChunks: (id) => {
           // Create more granular chunks to reduce memory pressure
           if (id.includes('node_modules')) {
-            // All web3 libs in one chunk: viem/wagmi/ox/rainbowkit share a tight
-            // dependency graph; splitting them causes TDZ init-order crashes.
+            // Pure web3 libs with no React dependency — safe to load independently.
             if (
               id.includes('@reown') || id.includes('@walletconnect') ||
               id.includes('ox/') || id.includes('ox/_esm/') ||
-              id.includes('wagmi') || id.includes('viem') ||
-              id.includes('@rainbow-me/rainbowkit') || id.includes('abitype')
+              id.includes('viem') || id.includes('abitype')
             ) {
               return 'web3';
             }
@@ -168,8 +166,12 @@ export default defineConfig({
             if (id.includes('@noir-lang')) {
               return 'noir-lib';
             }
-            // React core
-            if (id.includes('react') || id.includes('react-dom')) {
+            // React core + React-dependent web3 libs (wagmi/rainbowkit call
+            // createContext at module evaluation time and must share a chunk with React).
+            if (
+              id.includes('react') || id.includes('react-dom') ||
+              id.includes('wagmi') || id.includes('@rainbow-me/rainbowkit')
+            ) {
               return 'react-vendor';
             }
             if (id.includes('react-router-dom')) {
