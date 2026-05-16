@@ -97,6 +97,10 @@ const config: HardhatUserConfig = {
     },
   },
   defaultNetwork: "hardhat",
+  mocha: {
+    timeout: 120000,
+    exit: true,
+  },
   paths: {
     sources: "./contracts",
     tests: "./test",

@@ -34,7 +34,7 @@ export default defineConfig({
         display: 'standalone',
         icons: [
           {
-            src: '/favicon.svg',
+            src: 'favicon.svg',
             sizes: 'any',
             type: 'image/svg+xml',
             purpose: 'any maskable'
@@ -155,9 +155,6 @@ export default defineConfig({
               id.includes('@rainbow-me/rainbowkit') || id.includes('abitype')
             ) {
               return 'web3';
-            }
-            if (id.includes('@tanstack/react-query')) {
-              return 'react-query';
             }
             // PDF handling
             if (id.includes('pdfjs-dist') || id.includes('@react-pdf/renderer')) {
