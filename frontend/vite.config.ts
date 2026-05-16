@@ -146,27 +146,23 @@ export default defineConfig({
         manualChunks: (id) => {
           // Create more granular chunks to reduce memory pressure
           if (id.includes('node_modules')) {
-            // React core in its own isolated chunk with no deps on any other
-            // chunk. Precise path match avoids catching react-router-dom etc.
-            // scheduler is react-dom's only runtime dep so it lives here too.
+            // One chunk for React ecosystem + all web3 libs.
+            // Constraints that force everything together:
+            //   1. wagmi/rainbowkit CJS-require React — must share a chunk
+            //   2. wagmi+viem+ox+walletconnect have circular deps — TDZ if split
+            //   3. wagmi depends on @tanstack/react-query; @tanstack/query-core
+            //      CJS-requires React from vendor → circular init crash if split
+            // id.includes('react') catches react-router-dom, react-hook-form etc.
+            // so they don't create a vendor→react-web3 import edge either.
             if (
-              id.includes('/node_modules/react/') ||
-              id.includes('/node_modules/react-dom/') ||
-              id.includes('/node_modules/scheduler/')
-            ) {
-              return 'react-core';
-            }
-            // All web3 libs in one chunk: viem/wagmi/ox/rainbowkit/walletconnect
-            // share circular deps that cause TDZ crashes when split.
-            // wagmi/rainbowkit call React.createContext at eval time — safe here
-            // because react-core (no external deps) always initializes first.
-            if (
+              id.includes('react') ||
+              id.includes('@tanstack') ||
               id.includes('@reown') || id.includes('@walletconnect') ||
               id.includes('ox/') || id.includes('ox/_esm/') ||
               id.includes('wagmi') || id.includes('viem') ||
               id.includes('@rainbow-me/rainbowkit') || id.includes('abitype')
             ) {
-              return 'web3';
+              return 'react-web3';
             }
             // PDF handling
             if (id.includes('pdfjs-dist') || id.includes('@react-pdf/renderer')) {
