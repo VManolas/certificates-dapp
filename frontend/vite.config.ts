@@ -146,18 +146,27 @@ export default defineConfig({
         manualChunks: (id) => {
           // Create more granular chunks to reduce memory pressure
           if (id.includes('node_modules')) {
-            // React + all web3 libs must share one chunk. wagmi/rainbowkit call
-            // React.createContext at module evaluation time, and viem/wagmi/ox/
-            // walletconnect have circular dependencies that cause TDZ crashes
-            // when split across chunks.
+            // React core in its own isolated chunk with no deps on any other
+            // chunk. Precise path match avoids catching react-router-dom etc.
+            // scheduler is react-dom's only runtime dep so it lives here too.
             if (
-              id.includes('react') || id.includes('react-dom') ||
+              id.includes('/node_modules/react/') ||
+              id.includes('/node_modules/react-dom/') ||
+              id.includes('/node_modules/scheduler/')
+            ) {
+              return 'react-core';
+            }
+            // All web3 libs in one chunk: viem/wagmi/ox/rainbowkit/walletconnect
+            // share circular deps that cause TDZ crashes when split.
+            // wagmi/rainbowkit call React.createContext at eval time — safe here
+            // because react-core (no external deps) always initializes first.
+            if (
               id.includes('@reown') || id.includes('@walletconnect') ||
               id.includes('ox/') || id.includes('ox/_esm/') ||
               id.includes('wagmi') || id.includes('viem') ||
               id.includes('@rainbow-me/rainbowkit') || id.includes('abitype')
             ) {
-              return 'react-web3';
+              return 'web3';
             }
             // PDF handling
             if (id.includes('pdfjs-dist') || id.includes('@react-pdf/renderer')) {
