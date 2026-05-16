@@ -146,13 +146,18 @@ export default defineConfig({
         manualChunks: (id) => {
           // Create more granular chunks to reduce memory pressure
           if (id.includes('node_modules')) {
-            // Pure web3 libs with no React dependency — safe to load independently.
+            // React + all web3 libs must share one chunk. wagmi/rainbowkit call
+            // React.createContext at module evaluation time, and viem/wagmi/ox/
+            // walletconnect have circular dependencies that cause TDZ crashes
+            // when split across chunks.
             if (
+              id.includes('react') || id.includes('react-dom') ||
               id.includes('@reown') || id.includes('@walletconnect') ||
               id.includes('ox/') || id.includes('ox/_esm/') ||
-              id.includes('viem') || id.includes('abitype')
+              id.includes('wagmi') || id.includes('viem') ||
+              id.includes('@rainbow-me/rainbowkit') || id.includes('abitype')
             ) {
-              return 'web3';
+              return 'react-web3';
             }
             // PDF handling
             if (id.includes('pdfjs-dist') || id.includes('@react-pdf/renderer')) {
@@ -165,25 +170,6 @@ export default defineConfig({
             // Noir libraries
             if (id.includes('@noir-lang')) {
               return 'noir-lib';
-            }
-            // React core + React-dependent web3 libs (wagmi/rainbowkit call
-            // createContext at module evaluation time and must share a chunk with React).
-            if (
-              id.includes('react') || id.includes('react-dom') ||
-              id.includes('wagmi') || id.includes('@rainbow-me/rainbowkit')
-            ) {
-              return 'react-vendor';
-            }
-            if (id.includes('react-router-dom')) {
-              return 'react-router';
-            }
-            // Form handling
-            if (id.includes('react-hook-form') || id.includes('@hookform')) {
-              return 'forms';
-            }
-            // UI utilities
-            if (id.includes('lucide-react') || id.includes('clsx') || id.includes('tailwind-merge')) {
-              return 'ui-utils';
             }
             // All other node_modules
             return 'vendor';
