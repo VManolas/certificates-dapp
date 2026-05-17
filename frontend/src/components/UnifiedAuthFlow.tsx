@@ -999,6 +999,36 @@ export function UnifiedAuthFlow({
             <div className="flex justify-center py-4">
               <ConnectButton />
             </div>
+
+            {/* Role detection feedback — shown once wallet is connected */}
+            {isConnected && !isUnregisteredUniversityWallet && !isUnregisteredEmployerWallet && !isWeb3RoleMismatch && (
+              <div className="mt-4">
+                {(unifiedAuth.authContextResolving || unifiedAuth.isLoading) ? (
+                  <div className="flex items-center justify-center gap-2 text-surface-400 text-sm py-2">
+                    <svg className="animate-spin h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Checking wallet role on-chain…
+                  </div>
+                ) : unifiedAuth.isAuthenticated && unifiedAuth.role === selectedRole ? (
+                  <button
+                    onClick={completeFlow}
+                    className="w-full py-3 px-4 bg-primary-500 hover:bg-primary-600 text-white rounded-lg font-medium transition-colors"
+                  >
+                    Continue as {selectedRole?.charAt(0).toUpperCase()}{selectedRole?.slice(1)}
+                  </button>
+                ) : (
+                  <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-sm">
+                    <p className="text-red-400 font-medium">Could not detect the <span className="capitalize">{selectedRole}</span> role for this wallet.</p>
+                    <p className="text-surface-400 text-xs mt-1">
+                      Make sure contracts are deployed to the local node (<code>npm run deploy:local</code> in <code>contracts/</code>), then refresh.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
             {isUnregisteredUniversityWallet && (
               <div className="mt-4 p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
                 <p className="text-red-300 text-sm font-medium">

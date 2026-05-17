@@ -23,28 +23,23 @@ vi.mock('@aztec/bb.js', () => ({ UltraPlonkBackend: vi.fn() }));
 vi.mock('circomlibjs', () => ({ buildPoseidon: vi.fn(async () => ({})) }));
 vi.mock('@/lib/circuits/auth_login.json', () => ({ default: { bytecode: '' }, bytecode: '' }));
 
-// Minimal ethers mock — only the utils actually called by the tested functions
+// Minimal ethers mock — only the utils actually called by the tested functions.
+// encrypt/decrypt now use the native Web Crypto API so only hexlify is needed
+// here (for generateRandomKey).
 vi.mock('ethers', () => {
-  const toUtf8Bytes = (str: string) => new TextEncoder().encode(str);
-  const arrayify = (hex: string) => {
-    const clean = hex.startsWith('0x') ? hex.slice(2) : hex;
-    const bytes = new Uint8Array(clean.length / 2);
-    for (let i = 0; i < bytes.length; i++) {
-      bytes[i] = parseInt(clean.slice(i * 2, i * 2 + 2), 16);
-    }
-    return bytes;
-  };
   const hexlify = (bytes: Uint8Array | number[]) =>
     '0x' +
-    Array.from(typeof bytes === 'object' && !ArrayBuffer.isView(bytes) ? new Uint8Array(bytes as number[]) : bytes as Uint8Array)
+    Array.from(
+      typeof bytes === 'object' && !ArrayBuffer.isView(bytes)
+        ? new Uint8Array(bytes as number[])
+        : (bytes as Uint8Array),
+    )
       .map((b) => b.toString(16).padStart(2, '0'))
       .join('');
-  const keccak256 = (_bytes: Uint8Array) => '0x' + 'ab'.repeat(32);
-  const toUtf8String = (bytes: Uint8Array) => new TextDecoder().decode(bytes);
 
   return {
     ethers: {
-      utils: { toUtf8Bytes, arrayify, hexlify, keccak256, toUtf8String },
+      utils: { hexlify },
     },
   };
 });
@@ -127,7 +122,7 @@ describe('zkAuth', () => {
     it('roundtrips credentials correctly', async () => {
       const encrypted = await encryptCredentials(SAMPLE_CREDENTIALS, 'sig', WALLET);
       expect(typeof encrypted).toBe('string');
-      expect(encrypted.startsWith('0x')).toBe(true);
+      expect(encrypted.startsWith('v3:')).toBe(true);
 
       const decrypted = await decryptCredentials(encrypted, 'sig', WALLET);
       expect(decrypted.privateKey).toBe(SAMPLE_CREDENTIALS.privateKey);
@@ -136,16 +131,32 @@ describe('zkAuth', () => {
       expect(decrypted.role).toBe(SAMPLE_CREDENTIALS.role);
     });
 
-    it('encryption is deterministic for the same wallet (same derived key)', async () => {
-      const enc1 = await encryptCredentials(SAMPLE_CREDENTIALS, 'sig1', WALLET);
-      const enc2 = await encryptCredentials(SAMPLE_CREDENTIALS, 'sig2', WALLET);
-      // The XOR key is derived from wallet address, not signature → same result
-      expect(enc1).toBe(enc2);
+    it('produces different ciphertext on every call (non-deterministic IV)', async () => {
+      const enc1 = await encryptCredentials(SAMPLE_CREDENTIALS, 'sig', WALLET);
+      const enc2 = await encryptCredentials(SAMPLE_CREDENTIALS, 'sig', WALLET);
+      expect(enc1).not.toBe(enc2);
     });
 
-    it('decryptCredentials throws CREDENTIALS_OUTDATED for tampered ciphertext', async () => {
+    it('rejects legacy 0x XOR ciphertext with CREDENTIALS_OUTDATED', async () => {
       await expect(
-        decryptCredentials('0xdeadbeef', 'sig', WALLET)
+        decryptCredentials('0xdeadbeef', 'sig', WALLET),
+      ).rejects.toThrow('CREDENTIALS_OUTDATED');
+    });
+
+    it('rejects tampered AES-GCM ciphertext with CREDENTIALS_OUTDATED', async () => {
+      const encrypted = await encryptCredentials(SAMPLE_CREDENTIALS, 'sig', WALLET);
+      // Flip a byte near the end of the base64 payload to corrupt the auth tag
+      const tampered = encrypted.slice(0, -4) + 'AAAA';
+      await expect(
+        decryptCredentials(tampered, 'sig', WALLET),
+      ).rejects.toThrow('CREDENTIALS_OUTDATED');
+    });
+
+    it('rejects ciphertext encrypted for a different wallet', async () => {
+      const OTHER_WALLET = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8';
+      const encrypted = await encryptCredentials(SAMPLE_CREDENTIALS, 'sig', WALLET);
+      await expect(
+        decryptCredentials(encrypted, 'sig', OTHER_WALLET),
       ).rejects.toThrow('CREDENTIALS_OUTDATED');
     });
   });

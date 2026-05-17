@@ -199,36 +199,74 @@ export async function computeCommitment(
 }
 
 /**
- * Encrypt credentials with wallet signature
- * 
+ * Derive an AES-GCM CryptoKey from the wallet address.
+ * SHA-256 of a domain-separated string gives 32 bytes of key material.
+ * The domain string is versioned (v3) so that it is independent of the
+ * former XOR key derivation path (v2).
+ */
+async function deriveAesKey(walletAddress: string): Promise<CryptoKey> {
+  const keyMaterial = new TextEncoder().encode(
+    `zkcredentials:zkauth:v3:${walletAddress.toLowerCase()}`
+  );
+  const rawKey = await crypto.subtle.digest('SHA-256', keyMaterial);
+  return crypto.subtle.importKey('raw', rawKey, { name: 'AES-GCM' }, false, [
+    'encrypt',
+    'decrypt',
+  ]);
+}
+
+function uint8ToBase64(bytes: Uint8Array): string {
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary);
+}
+
+function base64ToUint8(b64: string): Uint8Array {
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+/**
+ * Encrypt credentials with AES-GCM (256-bit key, 96-bit IV).
+ *
+ * The wallet signature is still requested by the UX flow to prove wallet
+ * control, but the encryption key is derived from the wallet address alone
+ * so that it remains stable across signature prompts.
+ *
+ * Stored format: "v3:<base64(12-byte IV || ciphertext+tag)>"
+ *
  * @param credentials Credentials to encrypt
- * @param signature Wallet signature for encryption key
- * @returns Encrypted hex string
+ * @param _signature  Wallet signature (unused for key derivation; kept for API compat)
+ * @param walletAddress User's wallet address
+ * @returns Opaque encrypted string
  */
 export async function encryptCredentials(
   credentials: ZKCredentials,
   _signature: string,
   walletAddress: string
 ): Promise<string> {
-  // Derive a stable encryption key from wallet address.
-  // We still request a signature in the UX flow to prove wallet control,
-  // but we avoid using raw signature bytes as key material since signatures
-  // can differ across prompts/wallet implementations.
-  const key = deriveWalletScopedKey(walletAddress);
-  
-  // Simple XOR encryption (in production, use AES-GCM)
-  const data = JSON.stringify(credentials);
-  const encrypted = xorEncrypt(data, key);
-  
-  // Return as hex string (not UTF-8, since result is binary data)
-  return ethers.utils.hexlify(encrypted);
+  const key = await deriveAesKey(walletAddress);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const plaintext = new TextEncoder().encode(JSON.stringify(credentials));
+  const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, plaintext);
+
+  // Pack: IV (12 bytes) || ciphertext+tag
+  const combined = new Uint8Array(12 + ciphertext.byteLength);
+  combined.set(iv, 0);
+  combined.set(new Uint8Array(ciphertext), 12);
+  return 'v3:' + uint8ToBase64(combined);
 }
 
 /**
- * Decrypt credentials with wallet signature
- * 
- * @param encrypted Encrypted hex string
- * @param signature Wallet signature for decryption key
+ * Decrypt credentials encrypted by encryptCredentials.
+ * Legacy "0x…" XOR-encrypted values are detected by the absence of the
+ * "v3:" prefix and treated as outdated so the user re-registers.
+ *
+ * @param encrypted   Value previously returned by encryptCredentials
+ * @param _signature  Wallet signature (unused; kept for API compat)
+ * @param walletAddress User's wallet address
  * @returns Decrypted credentials
  */
 export async function decryptCredentials(
@@ -237,49 +275,25 @@ export async function decryptCredentials(
   walletAddress: string
 ): Promise<ZKCredentials> {
   try {
-    const key = deriveWalletScopedKey(walletAddress);
-    
-    // Convert hex string back to bytes
-    const encryptedBytes = ethers.utils.arrayify(encrypted);
-    
-    // XOR decrypt
-    const decrypted = xorEncrypt(encryptedBytes, key);
-    
-    // Convert decrypted bytes to string and parse JSON
-    const decryptedString = ethers.utils.toUtf8String(decrypted);
-    
-    return JSON.parse(decryptedString);
+    if (!encrypted.startsWith('v3:')) {
+      // Legacy XOR format — clear and force re-registration
+      clearStoredCredentials(walletAddress);
+      throw new Error('CREDENTIALS_OUTDATED');
+    }
+
+    const combined = base64ToUint8(encrypted.slice(3));
+    const iv = combined.slice(0, 12);
+    const ciphertext = combined.slice(12);
+
+    const key = await deriveAesKey(walletAddress);
+    const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ciphertext);
+    return JSON.parse(new TextDecoder().decode(plaintext));
   } catch (error) {
-    // If decryption fails, credentials might be from old format or wrong wallet
-    // Silently clear them - this is expected during version upgrades or wallet switches
+    if (error instanceof Error && error.message === 'CREDENTIALS_OUTDATED') throw error;
     logger.info('[ZK Auth] Clearing outdated or incompatible stored credentials (this is normal after updates)');
     clearStoredCredentials(walletAddress);
-    // Don't throw - just return null to indicate no valid credentials
     throw new Error('CREDENTIALS_OUTDATED');
   }
-}
-
-function deriveWalletScopedKey(walletAddress: string): string {
-  const normalized = walletAddress.toLowerCase();
-  return ethers.utils.keccak256(
-    ethers.utils.toUtf8Bytes(`zkcredentials:zkauth:v2:${normalized}`)
-  );
-}
-
-/**
- * Simple XOR encryption (for demo - use AES in production)
- * Works with byte arrays to avoid UTF-8 encoding issues
- */
-function xorEncrypt(data: string | Uint8Array, key: string): Uint8Array {
-  const keyBytes = ethers.utils.arrayify(key);
-  const dataBytes = typeof data === 'string' ? ethers.utils.toUtf8Bytes(data) : data;
-  const result = new Uint8Array(dataBytes.length);
-  
-  for (let i = 0; i < dataBytes.length; i++) {
-    result[i] = dataBytes[i] ^ keyBytes[i % keyBytes.length];
-  }
-  
-  return result;
 }
 
 /**
