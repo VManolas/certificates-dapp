@@ -93,74 +93,85 @@ export async function computeCommitment(
   return commitmentHex;
 }
 
+export interface AuthProofResult {
+  proof: string;
+  nullifier: string;
+  nullifierNonce: string; // hex string (bytes32-compatible)
+}
+
 /**
  * Generate a ZK proof for authentication
- * 
- * @param privateKey - User's private authentication key
- * @param walletAddress - User's blockchain wallet address (as string)
- * @param salt - Random salt
- * @param commitment - Public commitment to verify against
- * @returns Proof as hex string
+ *
+ * Returns the proof bytes AND the nullifier/nonce so callers can pass them to
+ * the contract's registerCommitment / startSession functions.
+ *
+ * @param privateKey  - User's private authentication key
+ * @param walletAddress - User's blockchain wallet address
+ * @param salt        - Random salt
+ * @param commitment  - Public commitment (hex string)
+ * @param nullifierNonceSeed - Optional nonce; a random one is generated if omitted
  */
 export async function generateAuthProof(
   privateKey: bigint,
   walletAddress: string,
   salt: bigint,
-  commitment: string
-): Promise<string> {
+  commitment: string,
+  nullifierNonceSeed?: bigint
+): Promise<AuthProofResult> {
   console.log('[Test Helper] Generating ZK proof...');
-  
-  // Normalize wallet address
+
+  const poseidon = await getPoseidon();
+
   const normalizedAddress = walletAddress.toLowerCase().replace('0x', '');
   const walletAddressBigInt = BigInt('0x' + normalizedAddress);
-  
-  // Remove 0x prefix from commitment
   const commitmentBigInt = BigInt(commitment);
-  
-  // Prepare circuit inputs (all as decimal strings)
+
+  // Generate or use provided nonce
+  const BN254 = BigInt('21888242871839275222246405745257275088548364400416034343698204186575808495617');
+  const nullifierNonce = nullifierNonceSeed !== undefined
+    ? nullifierNonceSeed
+    : BigInt('0x' + Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('hex')) % BN254;
+
+  // Compute nullifier: Poseidon(privateKey, nullifierNonce)
+  const nullifierField = poseidon([privateKey, nullifierNonce]);
+  const nullifierBigInt = BigInt(poseidon.F.toString(nullifierField));
+  const nullifierHex = '0x' + nullifierBigInt.toString(16).padStart(64, '0');
+
   const inputs = {
-    private_key: privateKey.toString(),
-    wallet_address: walletAddressBigInt.toString(),
-    salt: salt.toString(),
-    commitment: commitmentBigInt.toString()
+    private_key:     privateKey.toString(),
+    wallet_address:  walletAddressBigInt.toString(),
+    salt:            salt.toString(),
+    commitment:      commitmentBigInt.toString(),
+    nullifier_nonce: nullifierNonce.toString(),
+    nullifier:       nullifierBigInt.toString(),
   };
-  
-  console.log('[Test Helper] Circuit inputs:', inputs);
-  
-  // Initialize backend with UltraPlonkBackend (compatible with Noir 1.0.0+ and UltraPlonk verifier)
+
+  console.log('[Test Helper] Circuit inputs (non-secret):', {
+    commitment: inputs.commitment,
+    nullifier_nonce: inputs.nullifier_nonce.slice(0, 10) + '...',
+    nullifier: inputs.nullifier.slice(0, 10) + '...',
+  });
+
   const backend = new UltraPlonkBackend(authCircuit.bytecode);
-  
+
   try {
-    // Generate proof - NoirJS v1.0.0-beta.0 API
     console.log('[Test Helper] Generating proof with Noir...');
-    
-    // Create Noir instance
+
     const noir = new Noir(authCircuit as any);
-    
-    // Execute the circuit to get witness
     const { witness } = await noir.execute(inputs);
     console.log('[Test Helper] Witness generated, creating proof...');
-    
-    // Generate proof from witness using backend
+
     const proof = await backend.generateProof(witness);
-    
     console.log('[Test Helper] Proof generated successfully!');
-    console.log('[Test Helper] Proof type:', typeof proof);
-    console.log('[Test Helper] Proof keys:', proof ? Object.keys(proof) : 'null');
-    console.log('[Test Helper] Proof.proof?:', proof?.proof ? 'yes' : 'no');
-    console.log('[Test Helper] Proof is Uint8Array?:', proof instanceof Uint8Array);
-    
-    // UltraPlonkBackend returns {proof: Uint8Array} object
+
     const proofBytes = proof.proof instanceof Uint8Array ? proof.proof : proof;
     console.log('[Test Helper] Proof length:', proofBytes.length);
-    
-    // Convert to hex string
+
     const proofHex = '0x' + Buffer.from(proofBytes).toString('hex');
-    
-    // Cleanup
+    const nullifierNonceHex = '0x' + nullifierNonce.toString(16).padStart(64, '0');
     await backend.destroy();
-    
-    return proofHex;
+
+    return { proof: proofHex, nullifier: nullifierHex, nullifierNonce: nullifierNonceHex };
   } catch (error) {
     console.error('[Test Helper] Proof generation failed:', error);
     await backend.destroy();
@@ -184,33 +195,35 @@ export function generateRandomCredentials(): { privateKey: bigint; salt: bigint 
 
 /**
  * Verify a proof locally (for debugging)
- * 
- * @param proof - Proof to verify (hex string)
- * @param commitment - Public commitment (hex string)
- * @returns True if proof is valid
+ *
+ * @param proof          - Proof hex string
+ * @param commitment     - Public commitment hex string
+ * @param nullifierNonce - Nonce used when generating the proof (bigint)
+ * @param nullifier      - Nullifier hex string
  */
 export async function verifyProofLocally(
   proof: string,
-  commitment: string
+  commitment: string,
+  nullifierNonce: string, // hex string
+  nullifier: string
 ): Promise<boolean> {
   console.log('[Test Helper] Verifying proof locally...');
-  
+
   const backend = new UltraPlonkBackend(authCircuit.bytecode);
-  
+
   try {
-    // Convert hex proof to Uint8Array
-    const proofBytes = Uint8Array.from(
-      Buffer.from(proof.replace('0x', ''), 'hex')
-    );
-    
-    // Verify proof - UltraPlonkBackend expects just proof bytes and public inputs
+    const proofBytes = Uint8Array.from(Buffer.from(proof.replace('0x', ''), 'hex'));
+
     const isValid = await backend.verifyProof({
       proof: proofBytes,
-      publicInputs: [commitment.replace('0x', '')]
+      publicInputs: [
+        commitment.replace('0x', ''),
+        nullifierNonce.replace('0x', '').padStart(64, '0'),
+        nullifier.replace('0x', ''),
+      ],
     });
-    
+
     console.log('[Test Helper] Proof verification result:', isValid);
-    
     await backend.destroy();
     return isValid;
   } catch (error) {

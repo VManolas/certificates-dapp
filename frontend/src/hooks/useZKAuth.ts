@@ -30,8 +30,8 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { useAccount, useWriteContract } from 'wagmi';
 import { ethers } from 'ethers';
 import type { UserRole } from '@/types/auth';
-import { 
-  generateRandomKey, 
+import {
+  generateRandomKey,
   computeCommitment,
   encryptCredentials,
   decryptCredentials,
@@ -39,6 +39,7 @@ import {
   getStoredCredentials,
   clearStoredCredentials,
   hasStoredCredentials,
+  type AuthProofResult,
 } from '@/lib/zkAuth';
 import ZKAuthRegistryABI from '@/contracts/abis/ZKAuthRegistry.json';
 import { logger } from '@/lib/logger';
@@ -160,16 +161,26 @@ export function useZKAuth() {
       // Step 3: Generate ZK proof using Noir circuit
       logger.info('🔐 Generating secure authentication proof...');
       const { generateAuthProof } = await import('@/lib/zkAuth');
-      const proof = await generateAuthProof(
+      const { proof, nullifier, nullifierNonce } = await generateAuthProof(
         { privateKey, salt, commitment, role },
         address
-      );
+      ) as AuthProofResult;
 
       logger.debug('Authentication proof generated for registration');
 
       // Step 4: Encrypt and store credentials locally
       // Request signature for encryption
       const provider = new ethers.providers.Web3Provider(window.ethereum as any);
+
+      // Guard: detect if the Hardhat node was restarted (contract no longer deployed)
+      const contractCode = await provider.getCode(ZK_AUTH_REGISTRY_ADDRESS);
+      if (contractCode === '0x') {
+        throw new Error(
+          'ZKAuthRegistry contract not found at ' + ZK_AUTH_REGISTRY_ADDRESS + '. ' +
+          'The local Hardhat node may have been restarted. Run: cd contracts && npm run deploy:local'
+        );
+      }
+
       const signer = provider.getSigner();
       const message = 'Sign this message to encrypt your zkAuth credentials.\n\nThis signature is used locally and never leaves your device.';
       emitProgress('register_signature_required');
@@ -186,20 +197,27 @@ export function useZKAuth() {
 
       // Step 5: Register commitment on-chain
       // Map role to enum: None=0, Student=1, Employer=2
-      const roleEnum = 
-        role === 'student' ? 1 : 
-        role === 'employer' ? 2 : 
-        1; // Default to student if unknown
+      const roleEnum =
+        role === 'student' ? 1 :
+        role === 'employer' ? 2 :
+        1;
 
       emitProgress('register_transaction_required');
       const registrationTxHash = await writeContractAsync({
         address: ZK_AUTH_REGISTRY_ADDRESS,
         abi: ZKAuthRegistryABI.abi,
         functionName: 'registerCommitment',
-        args: [commitment, roleEnum, proof],
+        args: [commitment, roleEnum, proof, nullifierNonce, nullifier],
       });
       emitProgress('register_transaction_submitted');
-      await provider.waitForTransaction(registrationTxHash);
+      const registrationReceipt = await provider.waitForTransaction(registrationTxHash);
+      if (registrationReceipt?.status === 0) {
+        throw new Error(
+          'Registration transaction reverted on-chain. ' +
+          'The ZK proof was rejected by the verifier (InvalidProof). ' +
+          'Ensure the circuit was compiled with the same version used to deploy the verifier.'
+        );
+      }
       emitProgress('register_transaction_confirmed');
 
       // Persist credentials only after on-chain registration succeeds.
@@ -325,19 +343,28 @@ export function useZKAuth() {
       // Step 3: Generate login proof using Noir circuit
       logger.info('🔐 Generating secure authentication proof...');
       const { generateAuthProof } = await import('@/lib/zkAuth');
-      const proof = await generateAuthProof(credentials, accounts[0]);
+      const { proof, nullifier, nullifierNonce } = await generateAuthProof(
+        credentials,
+        accounts[0]
+      ) as AuthProofResult;
       logger.debug('Authentication proof generated for login');
 
-      // Step 4: Start session on-chain
+      // Step 4: Start session on-chain (nullifier prevents proof replay)
       emitProgress('login_transaction_required');
       const loginTxHash = await writeContractAsync({
         address: ZK_AUTH_REGISTRY_ADDRESS,
         abi: ZKAuthRegistryABI.abi,
         functionName: 'startSession',
-        args: [credentials.commitment, proof],
+        args: [credentials.commitment, proof, nullifierNonce, nullifier],
       });
       emitProgress('login_transaction_submitted');
-      await provider.waitForTransaction(loginTxHash);
+      const loginReceipt = await provider.waitForTransaction(loginTxHash);
+      if (loginReceipt?.status === 0) {
+        throw new Error(
+          'Login transaction reverted on-chain. ' +
+          'The ZK proof was rejected or the nullifier was already used (NullifierAlreadyUsed).'
+        );
+      }
       emitProgress('login_transaction_confirmed');
 
       updateStateIfCurrent(s => ({

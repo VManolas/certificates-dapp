@@ -296,86 +296,87 @@ export async function decryptCredentials(
   }
 }
 
+export interface AuthProofResult {
+  proof: string;
+  nullifier: string;
+  nullifierNonce: string;
+}
+
 /**
- * Generate ZK proof for authentication using Noir circuit
- * 
- * This function generates a cryptographic proof that the user knows the privateKey,
- * walletAddress, and salt that produce the given commitment, without revealing them.
- * 
- * The proof is generated using the UltraPlonk backend (@aztec/bb.js) which is
- * compatible with Noir 1.0.0+ and matches the circuit's Poseidon hash implementation.
- * 
- * @param credentials User credentials
- * @param walletAddress Current wallet address
- * @returns ZK proof (hex-encoded bytes)
+ * Generate ZK proof for authentication using Noir circuit.
+ *
+ * Produces a UltraPlonk proof that covers three public inputs:
+ *   [commitment, nullifierNonce, nullifier]
+ *
+ * A fresh nullifierNonce is generated on every call so each session yields a
+ * distinct nullifier.  The nullifier is derived as
+ *   Poseidon(privateKey, nullifierNonce)
+ * and must be submitted to the contract, which stores it to prevent replay.
+ *
+ * @param credentials User credentials (commitment + private key + salt)
+ * @param walletAddress Current wallet address (must match the one used at registration)
+ * @returns proof hex, nullifier hex, nullifierNonce hex
  */
 export async function generateAuthProof(
   credentials: ZKCredentials,
   walletAddress: string
-): Promise<string> {
+): Promise<AuthProofResult> {
   try {
-    // CRITICAL: Normalize wallet address to lowercase to match commitment computation
-    // This MUST match the normalization in computeCommitment()
     const normalizedAddress = walletAddress.toLowerCase();
-    
-    logger.debug('[ZK Auth] Generating proof', {
-      walletOriginal: walletAddress,
-      walletNormalized: normalizedAddress
-    });
-    
-    // Initialize the UltraPlonk Backend with circuit bytecode
-    // UltraPlonkBackend is the correct backend for Noir 1.0.0+ with UltraPlonk verifier
+
+    logger.debug('[ZK Auth] Generating proof', { walletNormalized: normalizedAddress });
+
+    // Generate a fresh nonce for this session's nullifier
+    const nullifierNonceHex = generateRandomKey();
+    const nullifierNonceBigInt = BigInt(nullifierNonceHex);
+
+    // Compute nullifier client-side using Poseidon (must match circuit)
+    const poseidon = await getPoseidon();
+    const privateKeyBigInt = BigInt(credentials.privateKey);
+    const nullifierField = poseidon([privateKeyBigInt, nullifierNonceBigInt]);
+    const nullifierBigInt = BigInt(poseidon.F.toString(nullifierField));
+    const nullifierHex = '0x' + nullifierBigInt.toString(16).padStart(64, '0');
+
     const backend = new UltraPlonkBackend(authCircuit.bytecode);
-    
-    // Initialize Noir with the circuit artifact
     const noir = new Noir(authCircuit as any);
-    
-    // Prepare inputs for the circuit
-    // Convert all inputs to Field-compatible format (decimal strings)
-    // IMPORTANT: Use normalized address to match commitment
+
     const inputs = {
-      private_key: hexToFieldString(credentials.privateKey),
+      private_key:    hexToFieldString(credentials.privateKey),
       wallet_address: addressToFieldString(normalizedAddress),
-      salt: hexToFieldString(credentials.salt),
-      commitment: hexToFieldString(credentials.commitment)
+      salt:           hexToFieldString(credentials.salt),
+      commitment:     hexToFieldString(credentials.commitment),
+      nullifier_nonce: nullifierNonceBigInt.toString(10),
+      nullifier:       nullifierBigInt.toString(10),
     };
-    
+
     logger.debug('[ZK Auth] Circuit inputs prepared', {
-      privateKey: inputs.private_key.substring(0, 10) + '...',
-      walletAddress: inputs.wallet_address,
-      salt: inputs.salt.substring(0, 10) + '...',
-      commitment: inputs.commitment.substring(0, 10) + '...'
+      privateKey:      inputs.private_key.substring(0, 10) + '...',
+      walletAddress:   inputs.wallet_address,
+      salt:            inputs.salt.substring(0, 10) + '...',
+      commitment:      inputs.commitment.substring(0, 10) + '...',
+      nullifierNonce:  inputs.nullifier_nonce.substring(0, 10) + '...',
+      nullifier:       inputs.nullifier.substring(0, 10) + '...',
     });
-    
+
     logger.info('[ZK Auth] Generating proof (this may take a few seconds)...');
-    
-    // Execute the circuit to get witness
+
     const { witness } = await noir.execute(inputs);
     logger.debug('[ZK Auth] Witness generated, creating proof...');
-    
-    // Generate proof from witness
+
     const proofResult = await backend.generateProof(witness);
-    
     logger.info('[ZK Auth] Proof generated successfully!');
-    
-    // UltraPlonkBackend returns {proof: Uint8Array} object
-    const proof = proofResult.proof || proofResult;
-    logger.debug('[ZK Auth] Proof length', {
-      proofLength: (proof as Uint8Array).length,
-    });
-    
-    // Convert proof to hex string for contract submission
-    const proofHex = ethers.utils.hexlify(proof);
-    
-    // Cleanup backend
+
+    const proofBytes = proofResult.proof || proofResult;
+    logger.debug('[ZK Auth] Proof length', { proofLength: (proofBytes as Uint8Array).length });
+
+    const proofHex = ethers.utils.hexlify(proofBytes);
     await backend.destroy();
-    
-    return proofHex;
-    
+
+    return { proof: proofHex, nullifier: nullifierHex, nullifierNonce: nullifierNonceHex };
+
   } catch (error) {
     logger.error('[ZK Auth] Proof generation failed', error);
-    
-    // Provide helpful error messages
+
     if (error instanceof Error) {
       if (error.message.includes('assertion') || error.message.includes('constraint')) {
         throw new Error(
@@ -386,7 +387,7 @@ export async function generateAuthProof(
         );
       }
     }
-    
+
     throw new Error(`Failed to generate ZK proof: ${error}`);
   }
 }

@@ -45,6 +45,7 @@ vi.mock('ethers', () => ({
         getSigner: vi.fn(() => ({
           signMessage: vi.fn(() => Promise.resolve('mock_signature')),
         })),
+        getCode: vi.fn(() => Promise.resolve('0x1234')),
         waitForTransaction: vi.fn(() => Promise.resolve({ status: 1 })),
       };
       }),
@@ -113,7 +114,11 @@ describe('useZKAuth', () => {
       commitment: '0xcommitment',
       role: 'student',
     });
-    (zkAuthLib.generateAuthProof as any).mockResolvedValue('0xproof');
+    (zkAuthLib.generateAuthProof as any).mockResolvedValue({
+      proof: '0xproof',
+      nullifier: '0xnullifier',
+      nullifierNonce: '0xnonce',
+    });
   });
 
   afterEach(() => {
@@ -294,6 +299,7 @@ describe('useZKAuth', () => {
       // Override the signer's signMessage to reject
       (ethers.providers.Web3Provider as any).mockImplementationOnce(function () {
         return {
+          getCode: vi.fn(() => Promise.resolve('0x1234')),
           getSigner: vi.fn(() => ({
             signMessage: vi.fn().mockRejectedValue(new Error('MetaMask signature rejected')),
           })),
