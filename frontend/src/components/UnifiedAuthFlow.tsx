@@ -309,10 +309,27 @@ export function UnifiedAuthFlow({
         setIsOnchainPending(false);
         setContractInteractionStatus('idle');
         setCurrentStep('zk-generate-proof');
-        await unifiedAuth.zkAuth.login((event) => handleZKLoginProgress(event, runId));
-        if (!isCurrentRun(runId)) return;
-        completeFlow();
-        return;
+        try {
+          await unifiedAuth.zkAuth.login((event) => handleZKLoginProgress(event, runId));
+          if (!isCurrentRun(runId)) return;
+          completeFlow();
+          return;
+        } catch (fastLoginErr) {
+          if (!isCurrentRun(runId)) return;
+          const err = fastLoginErr as Error;
+          if (err.message === 'CREDENTIALS_OUTDATED' || err.message === 'COMMITMENT_NOT_REGISTERED') {
+            // Stored credentials are stale (old encryption format or commitment gone from chain).
+            // decryptCredentials already cleared them — fall through to fresh registration below.
+            logger.info('Stored credentials invalid, falling through to fresh registration', { reason: err.message });
+            setWalletInteractionMode('setup');
+            setWalletInteractionStep(1);
+            setWalletInteractionHint('One-time setup requires three wallet confirmations for secure enrollment.');
+            setIsOnchainPending(false);
+            setContractInteractionStatus('idle');
+          } else {
+            throw fastLoginErr;
+          }
+        }
       }
 
       setWalletInteractionMode('setup');

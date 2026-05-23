@@ -74,7 +74,10 @@ contract ZKAuthRegistry is
     
     /// @notice Mapping: commitment => registration timestamp
     mapping(bytes32 => uint256) public registrationTime;
-    
+
+    /// @notice Mapping: nullifier => spent flag (prevents proof replay across sessions)
+    mapping(bytes32 => bool) public usedNullifiers;
+
     /// @notice Session duration (24 hours)
     uint256 public constant SESSION_DURATION = 24 hours;
     
@@ -105,6 +108,7 @@ contract ZKAuthRegistry is
     error CommitmentNotFound();
     error InvalidProof();
     error InvalidRole();
+    error NullifierAlreadyUsed();
     error SessionExpired();
     error SessionNotFound();
     error UnauthorizedRole();
@@ -138,85 +142,77 @@ contract ZKAuthRegistry is
     
     /**
      * @notice Register a new commitment with role
-     * @param commitment Hash(publicKey, walletAddress, salt)
+     * @param commitment Hash(publicKey, walletAddress, salt) — public anchor of identity
      * @param role User role (Student or Employer only)
      * @param proof ZK proof of commitment ownership
-     * @dev Users prove they know the private key for the commitment
-     * @dev Only Student and Employer roles can use ZK authentication
+     * @param nullifierNonce Fresh random nonce chosen by the prover for this proof
+     * @param nullifier Poseidon(privateKey, nullifierNonce) — proved inside the circuit
+     * @dev The circuit enforces that nullifier = Poseidon(privateKey, nullifierNonce).
+     *      Registration does not enforce nullifier uniqueness; the commitment itself
+     *      already prevents double-registration.
      */
     function registerCommitment(
         bytes32 commitment,
         UserRole role,
-        bytes calldata proof
+        bytes calldata proof,
+        bytes32 nullifierNonce,
+        bytes32 nullifier
     ) external {
-        // Validate inputs
         if (commitments[commitment]) revert CommitmentAlreadyExists();
         if (role == UserRole.None) revert InvalidRole();
-        
-        // Security: Only Student and Employer roles allowed for ZK auth
-        // Admins and Universities use Web3 authentication only
-        if (role != UserRole.Student && role != UserRole.Employer) {
-            revert InvalidRole();
-        }
-        
-        // Verify ZK proof
-        // The proof proves: "I know privateKey and walletAddress such that
-        // commitment = hash(hash(privateKey), walletAddress, salt)"
-        bytes32[] memory publicInputs = new bytes32[](1);
+        if (role != UserRole.Student && role != UserRole.Employer) revert InvalidRole();
+
+        bytes32[] memory publicInputs = new bytes32[](3);
         publicInputs[0] = commitment;
-        if (!authVerifier.verify(proof, publicInputs)) {
-            revert InvalidProof();
-        }
-        
-        // Register commitment
+        publicInputs[1] = nullifierNonce;
+        publicInputs[2] = nullifier;
+        if (!authVerifier.verify(proof, publicInputs)) revert InvalidProof();
+
         commitments[commitment] = true;
         roles[commitment] = role;
         registrationTime[commitment] = block.timestamp;
-        
+
         emit CommitmentRegistered(commitment, role, block.timestamp);
     }
     
     /**
      * @notice Start authenticated session with ZK proof
-     * @param commitment User's commitment
+     * @param commitment User's registered commitment
      * @param proof ZK proof of ownership
+     * @param nullifierNonce Fresh random nonce chosen by the prover for this session
+     * @param nullifier Poseidon(privateKey, nullifierNonce) — proved inside the circuit
      * @return sessionId Unique session identifier
-     * @dev Users authenticate without revealing wallet or private key
+     * @dev The nullifier is stored after first use, preventing proof replay: the same
+     *      proof bytes cannot open a second session even after the first one expires.
+     *      Each session requires a fresh nonce, producing a fresh unlinkable nullifier.
      */
     function startSession(
         bytes32 commitment,
-        bytes calldata proof
+        bytes calldata proof,
+        bytes32 nullifierNonce,
+        bytes32 nullifier
     ) external returns (bytes32 sessionId) {
-        // Verify commitment is registered
         if (!commitments[commitment]) revert CommitmentNotFound();
-        
-        // Verify ZK proof of ownership
-        bytes32[] memory publicInputs = new bytes32[](1);
+        if (usedNullifiers[nullifier]) revert NullifierAlreadyUsed();
+
+        bytes32[] memory publicInputs = new bytes32[](3);
         publicInputs[0] = commitment;
-        if (!authVerifier.verify(proof, publicInputs)) {
-            revert InvalidProof();
-        }
-        
-        // Generate unique session ID
+        publicInputs[1] = nullifierNonce;
+        publicInputs[2] = nullifier;
+        if (!authVerifier.verify(proof, publicInputs)) revert InvalidProof();
+
+        // Mark nullifier as spent before creating the session (checks-effects-interactions)
+        usedNullifiers[nullifier] = true;
+
         sessionId = keccak256(
-            abi.encodePacked(
-                commitment, 
-                block.timestamp, 
-                msg.sender,
-                blockhash(block.number - 1)
-            )
+            abi.encodePacked(commitment, block.timestamp, msg.sender, blockhash(block.number - 1))
         );
-        
-        // Create session
+
         uint256 expiry = block.timestamp + SESSION_DURATION;
-        sessions[sessionId] = Session({
-            commitment: commitment,
-            expiry: expiry,
-            active: true
-        });
-        
+        sessions[sessionId] = Session({ commitment: commitment, expiry: expiry, active: true });
+
         emit SessionStarted(sessionId, commitment, expiry);
-        
+
         return sessionId;
     }
     
@@ -335,8 +331,8 @@ contract ZKAuthRegistry is
     
     /**
      * @notice Storage gap for future upgrades
-     * @dev Reserves 50 slots
+     * @dev Reduced from 50 to 49 to account for usedNullifiers mapping
      */
-    uint256[50] private __gap;
+    uint256[49] private __gap;
 }
 

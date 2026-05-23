@@ -4,6 +4,15 @@ import { ethers, upgrades } from "hardhat";
 import { ZKAuthRegistry, MockAuthVerifier } from "../typechain-types";
 import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 
+// Dummy values for registerCommitment (mock verifier ignores all inputs)
+const DUMMY_NONCE     = ethers.ZeroHash;
+const DUMMY_NULLIFIER = ethers.id("dummy_nullifier");
+// Unique nullifiers for startSession calls (nullifier uniqueness IS enforced)
+const SESSION_NONCE_1     = ethers.id("session_nonce_1");
+const SESSION_NULLIFIER_1 = ethers.id("session_nullifier_1");
+const SESSION_NONCE_2     = ethers.id("session_nonce_2");
+const SESSION_NULLIFIER_2 = ethers.id("session_nullifier_2");
+
 describe("ZKAuthRegistry - Edge Cases", function () {
   let zkAuthRegistry: ZKAuthRegistry;
   let mockVerifier: MockAuthVerifier;
@@ -95,7 +104,9 @@ describe("ZKAuthRegistry - Edge Cases", function () {
       const tx = await zkAuthRegistry.connect(user1).registerCommitment(
         commitment1,
         1, // Student
-        mockProof
+        mockProof,
+        DUMMY_NONCE,
+        DUMMY_NULLIFIER
       );
       const receipt = await tx.wait();
       const block = await ethers.provider.getBlock(receipt!.blockNumber);
@@ -108,7 +119,9 @@ describe("ZKAuthRegistry - Edge Cases", function () {
       const tx = await zkAuthRegistry.connect(user1).registerCommitment(
         commitment1,
         1, // Student
-        mockProof
+        mockProof,
+        DUMMY_NONCE,
+        DUMMY_NULLIFIER
       );
       const receipt = await tx.wait();
       const block = await ethers.provider.getBlock(receipt!.blockNumber);
@@ -119,23 +132,31 @@ describe("ZKAuthRegistry - Edge Cases", function () {
     });
 
     it("Should prevent re-registration of same commitment after full session lifecycle", async function () {
-      await zkAuthRegistry.connect(user1).registerCommitment(commitment1, 1, mockProof);
+      await zkAuthRegistry.connect(user1).registerCommitment(
+        commitment1, 1, mockProof, DUMMY_NONCE, DUMMY_NULLIFIER
+      );
 
-      const tx = await zkAuthRegistry.connect(user1).startSession(commitment1, mockProof);
+      const tx = await zkAuthRegistry.connect(user1).startSession(
+        commitment1, mockProof, SESSION_NONCE_1, SESSION_NULLIFIER_1
+      );
       const receipt = await tx.wait();
       const sessionId = await extractSessionId(zkAuthRegistry, receipt);
 
       await zkAuthRegistry.connect(user1).endSession(sessionId);
 
       await expect(
-        zkAuthRegistry.connect(user1).registerCommitment(commitment1, 1, mockProof)
+        zkAuthRegistry.connect(user1).registerCommitment(
+          commitment1, 1, mockProof, DUMMY_NONCE, DUMMY_NULLIFIER
+        )
       ).to.be.revertedWithCustomError(zkAuthRegistry, "CommitmentAlreadyExists");
     });
 
     it("Should allow zero-value bytes32 commitment to be registered (no guard)", async function () {
       const zeroCommitment = ethers.ZeroHash;
       await expect(
-        zkAuthRegistry.connect(user1).registerCommitment(zeroCommitment, 1, mockProof)
+        zkAuthRegistry.connect(user1).registerCommitment(
+          zeroCommitment, 1, mockProof, DUMMY_NONCE, DUMMY_NULLIFIER
+        )
       ).to.not.be.reverted;
 
       expect(await zkAuthRegistry.isRegistered(zeroCommitment)).to.be.true;
@@ -150,8 +171,12 @@ describe("ZKAuthRegistry - Edge Cases", function () {
     let sessionId: string;
 
     beforeEach(async function () {
-      await zkAuthRegistry.connect(user1).registerCommitment(commitment1, 1, mockProof);
-      const tx = await zkAuthRegistry.connect(user1).startSession(commitment1, mockProof);
+      await zkAuthRegistry.connect(user1).registerCommitment(
+        commitment1, 1, mockProof, DUMMY_NONCE, DUMMY_NULLIFIER
+      );
+      const tx = await zkAuthRegistry.connect(user1).startSession(
+        commitment1, mockProof, SESSION_NONCE_1, SESSION_NULLIFIER_1
+      );
       const receipt = await tx.wait();
       sessionId = await extractSessionId(zkAuthRegistry, receipt);
     });
@@ -174,7 +199,10 @@ describe("ZKAuthRegistry - Edge Cases", function () {
     });
 
     it("Should emit SessionStarted with expiry equal to block.timestamp + SESSION_DURATION", async function () {
-      const tx2 = await zkAuthRegistry.connect(user1).startSession(commitment1, mockProof);
+      // SESSION_NONCE_1 already used in beforeEach; use SESSION_NONCE_2 here
+      const tx2 = await zkAuthRegistry.connect(user1).startSession(
+        commitment1, mockProof, SESSION_NONCE_2, SESSION_NULLIFIER_2
+      );
       const receipt2 = await tx2.wait();
       const block = await ethers.provider.getBlock(receipt2!.blockNumber);
       const expectedExpiry = block!.timestamp + TWENTY_FOUR_HOURS;
@@ -198,18 +226,24 @@ describe("ZKAuthRegistry - Edge Cases", function () {
 
   describe("Multiple concurrent sessions per commitment", function () {
     beforeEach(async function () {
-      await zkAuthRegistry.connect(user1).registerCommitment(commitment1, 1, mockProof);
+      await zkAuthRegistry.connect(user1).registerCommitment(
+        commitment1, 1, mockProof, DUMMY_NONCE, DUMMY_NULLIFIER
+      );
     });
 
     it("Should allow multiple active sessions for the same commitment", async function () {
-      const tx1 = await zkAuthRegistry.connect(user1).startSession(commitment1, mockProof);
+      const tx1 = await zkAuthRegistry.connect(user1).startSession(
+        commitment1, mockProof, SESSION_NONCE_1, SESSION_NULLIFIER_1
+      );
       const receipt1 = await tx1.wait();
       const sessionId1 = await extractSessionId(zkAuthRegistry, receipt1);
 
       // mine a block so blockhash differs
       await ethers.provider.send("evm_mine", []);
 
-      const tx2 = await zkAuthRegistry.connect(user1).startSession(commitment1, mockProof);
+      const tx2 = await zkAuthRegistry.connect(user1).startSession(
+        commitment1, mockProof, SESSION_NONCE_2, SESSION_NULLIFIER_2
+      );
       const receipt2 = await tx2.wait();
       const sessionId2 = await extractSessionId(zkAuthRegistry, receipt2);
 
@@ -222,13 +256,17 @@ describe("ZKAuthRegistry - Edge Cases", function () {
     });
 
     it("Should invalidate sessions independently", async function () {
-      const tx1 = await zkAuthRegistry.connect(user1).startSession(commitment1, mockProof);
+      const tx1 = await zkAuthRegistry.connect(user1).startSession(
+        commitment1, mockProof, SESSION_NONCE_1, SESSION_NULLIFIER_1
+      );
       const receipt1 = await tx1.wait();
       const sessionId1 = await extractSessionId(zkAuthRegistry, receipt1);
 
       await ethers.provider.send("evm_mine", []);
 
-      const tx2 = await zkAuthRegistry.connect(user1).startSession(commitment1, mockProof);
+      const tx2 = await zkAuthRegistry.connect(user1).startSession(
+        commitment1, mockProof, SESSION_NONCE_2, SESSION_NULLIFIER_2
+      );
       const receipt2 = await tx2.wait();
       const sessionId2 = await extractSessionId(zkAuthRegistry, receipt2);
 
@@ -241,13 +279,19 @@ describe("ZKAuthRegistry - Edge Cases", function () {
     });
 
     it("Should validate each session with its own commitment's role", async function () {
-      await zkAuthRegistry.connect(user2).registerCommitment(commitment2, 2, mockProof); // Employer
+      await zkAuthRegistry.connect(user2).registerCommitment(
+        commitment2, 2, mockProof, DUMMY_NONCE, DUMMY_NULLIFIER
+      ); // Employer
 
-      const tx1 = await zkAuthRegistry.connect(user1).startSession(commitment1, mockProof);
+      const tx1 = await zkAuthRegistry.connect(user1).startSession(
+        commitment1, mockProof, SESSION_NONCE_1, SESSION_NULLIFIER_1
+      );
       const receipt1 = await tx1.wait();
       const sessionId1 = await extractSessionId(zkAuthRegistry, receipt1);
 
-      const tx2 = await zkAuthRegistry.connect(user2).startSession(commitment2, mockProof);
+      const tx2 = await zkAuthRegistry.connect(user2).startSession(
+        commitment2, mockProof, SESSION_NONCE_2, SESSION_NULLIFIER_2
+      );
       const receipt2 = await tx2.wait();
       const sessionId2 = await extractSessionId(zkAuthRegistry, receipt2);
 
@@ -272,8 +316,12 @@ describe("ZKAuthRegistry - Edge Cases", function () {
     });
 
     it("Should revert when ending an already-ended session", async function () {
-      await zkAuthRegistry.connect(user1).registerCommitment(commitment1, 1, mockProof);
-      const tx = await zkAuthRegistry.connect(user1).startSession(commitment1, mockProof);
+      await zkAuthRegistry.connect(user1).registerCommitment(
+        commitment1, 1, mockProof, DUMMY_NONCE, DUMMY_NULLIFIER
+      );
+      const tx = await zkAuthRegistry.connect(user1).startSession(
+        commitment1, mockProof, SESSION_NONCE_1, SESSION_NULLIFIER_1
+      );
       const receipt = await tx.wait();
       const sessionId = await extractSessionId(zkAuthRegistry, receipt);
 
@@ -285,8 +333,12 @@ describe("ZKAuthRegistry - Edge Cases", function () {
     });
 
     it("Any address can end any session (no ownership guard)", async function () {
-      await zkAuthRegistry.connect(user1).registerCommitment(commitment1, 1, mockProof);
-      const tx = await zkAuthRegistry.connect(user1).startSession(commitment1, mockProof);
+      await zkAuthRegistry.connect(user1).registerCommitment(
+        commitment1, 1, mockProof, DUMMY_NONCE, DUMMY_NULLIFIER
+      );
+      const tx = await zkAuthRegistry.connect(user1).startSession(
+        commitment1, mockProof, SESSION_NONCE_1, SESSION_NULLIFIER_1
+      );
       const receipt = await tx.wait();
       const sessionId = await extractSessionId(zkAuthRegistry, receipt);
 
@@ -333,8 +385,12 @@ describe("ZKAuthRegistry - Edge Cases", function () {
 
   describe("Verifier upgrade during active session", function () {
     it("Active session remains valid after verifier is changed", async function () {
-      await zkAuthRegistry.connect(user1).registerCommitment(commitment1, 1, mockProof);
-      const tx = await zkAuthRegistry.connect(user1).startSession(commitment1, mockProof);
+      await zkAuthRegistry.connect(user1).registerCommitment(
+        commitment1, 1, mockProof, DUMMY_NONCE, DUMMY_NULLIFIER
+      );
+      const tx = await zkAuthRegistry.connect(user1).startSession(
+        commitment1, mockProof, SESSION_NONCE_1, SESSION_NULLIFIER_1
+      );
       const receipt = await tx.wait();
       const sessionId = await extractSessionId(zkAuthRegistry, receipt);
 
@@ -361,7 +417,9 @@ describe("ZKAuthRegistry - Edge Cases", function () {
       await zkAuthRegistry.connect(admin).setVerifier(await rejectingVerifier.getAddress());
 
       await expect(
-        zkAuthRegistry.connect(user1).registerCommitment(commitment1, 1, mockProof)
+        zkAuthRegistry.connect(user1).registerCommitment(
+          commitment1, 1, mockProof, DUMMY_NONCE, DUMMY_NULLIFIER
+        )
       ).to.be.revertedWithCustomError(zkAuthRegistry, "InvalidProof");
     });
   });
