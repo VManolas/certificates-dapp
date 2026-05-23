@@ -8,6 +8,7 @@ import { useCertificateVerification, useHashExists, useCertificateDetails } from
 import { useVerificationHistory } from '@/hooks/useVerificationHistory';
 import { useAuthStore, useEffectiveRole, useIsAuthenticated } from '@/store/authStore';
 import { CERTIFICATE_REGISTRY_ADDRESS } from '@/lib/wagmi';
+import { getContractExplorerUrl } from '@/lib/blockExplorer';
 import { QRScanner } from '@/components/QRScanner';
 import { VerificationReport } from '@/components/VerificationReport';
 import { CertificateDetailModal } from '@/components/CertificateDetailModal';
@@ -1099,11 +1100,11 @@ export function Verify() {
                   <div className="flex justify-between">
                     <span className="text-surface-400">Smart Contract</span>
                     <a 
-                      href={`https://explorer.zksync.io/address/${CERTIFICATE_REGISTRY_ADDRESS}`}
+                      href={getContractExplorerUrl(CERTIFICATE_REGISTRY_ADDRESS, Number(import.meta.env.VITE_CHAIN_ID)) ?? '#'}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-accent-400 hover:text-accent-300 font-mono text-xs underline transition-colors"
-                      title="View contract on zkSync Era Block Explorer"
+                      title="View contract on zkSync Block Explorer"
                     >
                       {truncateHash(CERTIFICATE_REGISTRY_ADDRESS, 8, 6)}
                     </a>

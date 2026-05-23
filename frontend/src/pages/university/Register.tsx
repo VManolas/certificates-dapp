@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAccount } from 'wagmi';
 import { useRegisterUniversity } from '@/hooks/useInstitutionRegistry';
+import { getTxExplorerUrl } from '@/lib/blockExplorer';
 import { useAuthStore } from '@/store/authStore';
 
 interface FormData {
@@ -149,7 +150,7 @@ export function UniversityRegister() {
               </p>
               {transactionHash && (
                 <a
-                  href={`https://sepolia.explorer.zksync.io/tx/${transactionHash}`}
+                  href={getTxExplorerUrl(transactionHash, Number(import.meta.env.VITE_CHAIN_ID)) ?? '#'}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-primary-400 hover:text-primary-300 text-sm inline-flex items-center gap-1"
