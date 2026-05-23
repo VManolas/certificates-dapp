@@ -52,7 +52,7 @@ const config: HardhatUserConfig = {
       // Required for UltraPlonkAuthVerifier: without this, zksolc's Yul→LLVM→zkEVM
       // translation corrupts the inline assembly memory layout, causing proof
       // verification to silently return false on zkSync Era (works fine on standard EVM).
-      forceEvmla: true,
+      forceEVMLA: true,
     },
   },
   // anvil-zksync binary for `hardhat node-zksync` — use 0.6+ so bytecode format matches current zksolc (e.g. Version29).
