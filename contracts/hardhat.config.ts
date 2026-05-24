@@ -44,15 +44,14 @@ const config: HardhatUserConfig = {
     settings: {
       // Optimizer disabled: UltraPlonkAuthVerifier (2778-line assembly) causes
       // "stack layout after 1000 iterations" with any optimizer mode.
-      // Unoptimized bytecode is acceptable for staging.
+      // Acceptable for staging; enable with caution for production.
       optimizer: {
         enabled: false,
       },
-      // forceEvmla: use EVM legacy assembly path instead of Yul IR for all contracts.
-      // Required for UltraPlonkAuthVerifier: without this, zksolc's Yul→LLVM→zkEVM
-      // translation corrupts the inline assembly memory layout, causing proof
-      // verification to silently return false on zkSync Era (works fine on standard EVM).
-      forceEVMLA: true,
+      // forceEVMLA removed: it caused "stack too deep" errors in the Groth16 verifier's
+      // inline assembly (ecPairing precompile calls). The Groth16 verifier works correctly
+      // with zksolc's default Yul IR path. forceEVMLA was only needed for UltraPlonk,
+      // which is no longer deployed.
     },
   },
   // anvil-zksync binary for `hardhat node-zksync` — use 0.6+ so bytecode format matches current zksolc (e.g. Version29).

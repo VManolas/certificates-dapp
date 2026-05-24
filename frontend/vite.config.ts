@@ -111,9 +111,8 @@ export default defineConfig({
     ],
     // Exclude heavy libraries that should load on-demand
     exclude: [
-      // ZK and WASM libraries - load when needed
-      '@noir-lang/noir_js',
-      '@noir-lang/backend_barretenberg',
+      // snarkjs is large and loaded dynamically; keep it out of the initial bundle
+      'snarkjs',
     ],
     // Force dependency re-bundling optimization
     force: false, // Only set to true if you're debugging dep issues

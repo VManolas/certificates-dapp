@@ -13,7 +13,7 @@
 
 export type DeploymentEnvironment = 'development' | 'staging' | 'production';
 export type NetworkType = 'hardhat' | 'zksync-local' | 'zksync-sepolia' | 'zksync-mainnet';
-export type VerifierType = 'mock' | 'ultraplonk';
+export type VerifierType = 'mock' | 'ultraplonk' | 'groth16';
 
 export interface DeploymentConfig {
   environment: DeploymentEnvironment;
@@ -31,26 +31,26 @@ export const deploymentConfigs: Record<DeploymentEnvironment, DeploymentConfig> 
   development: {
     environment: 'development',
     network: 'hardhat',
-    verifier: 'ultraplonk', // Default to production verifier for testing
+    verifier: 'groth16',
     gasLimit: 30000000,
-    skipVerification: true, // Skip block explorer verification (local only)
-    description: 'Local Hardhat development with UltraPlonk verifier',
+    skipVerification: true,
+    description: 'Local Hardhat development with Groth16 verifier',
   },
   staging: {
     environment: 'staging',
     network: 'zksync-sepolia',
-    verifier: 'ultraplonk', // Production-grade verifier for testing
+    verifier: 'groth16',
     gasLimit: 50000000,
     skipVerification: false,
-    description: 'zkSync Sepolia testnet with production verifier',
+    description: 'zkSync Sepolia testnet with Groth16 verifier',
   },
   production: {
     environment: 'production',
     network: 'zksync-mainnet',
-    verifier: 'ultraplonk', // Production verifier required
+    verifier: 'groth16',
     gasLimit: 50000000,
     skipVerification: false,
-    description: 'zkSync Era mainnet with production verifier',
+    description: 'zkSync Era mainnet with Groth16 verifier',
   },
 };
 
@@ -77,22 +77,13 @@ export function getDeploymentConfig(
   // Allow verifier type override via environment variable
   const verifierOverride = process.env.VERIFIER_TYPE as VerifierType;
   if (verifierOverride) {
-    if (verifierOverride !== 'mock' && verifierOverride !== 'ultraplonk') {
-      throw new Error(`Invalid VERIFIER_TYPE: ${verifierOverride}. Valid options: mock, ultraplonk`);
+    if (verifierOverride !== 'mock' && verifierOverride !== 'ultraplonk' && verifierOverride !== 'groth16') {
+      throw new Error(`Invalid VERIFIER_TYPE: ${verifierOverride}. Valid options: mock, groth16, ultraplonk`);
     }
-    
-    // Update description based on override
-    let updatedDescription = config.description;
-    if (verifierOverride === 'ultraplonk') {
-      updatedDescription = updatedDescription.replace('mock verifier', 'UltraPlonk verifier');
-    } else if (verifierOverride === 'mock') {
-      updatedDescription = updatedDescription.replace('UltraPlonk verifier', 'mock verifier');
-    }
-    
+
     return {
       ...config,
       verifier: verifierOverride,
-      description: updatedDescription,
     };
   }
   
@@ -107,8 +98,8 @@ export function getDeploymentConfig(
 export function validateDeploymentConfig(config: DeploymentConfig): void {
   // Production checks
   if (config.environment === 'production') {
-    if (config.verifier !== 'ultraplonk') {
-      throw new Error('Production deployments must use UltraPlonk verifier');
+    if (config.verifier !== 'groth16' && config.verifier !== 'ultraplonk') {
+      throw new Error('Production deployments must use groth16 or ultraplonk verifier');
     }
     if (config.skipVerification) {
       throw new Error('Production deployments must enable contract verification');
@@ -134,7 +125,8 @@ export function printDeploymentConfig(config: DeploymentConfig): void {
   console.log('═'.repeat(60));
   console.log(`Environment:    ${config.environment.toUpperCase()}`);
   console.log(`Network:        ${config.network}`);
-  console.log(`Verifier Type:  ${config.verifier.toUpperCase()} ${config.verifier === 'ultraplonk' ? '✅ (Production-Grade)' : '⚠️ (Development Only)'}`);
+  const verifierLabel = config.verifier === 'mock' ? '⚠️ (Development Only)' : '✅ (Production-Grade)';
+  console.log(`Verifier Type:  ${config.verifier.toUpperCase()} ${verifierLabel}`);
   console.log(`Gas Limit:      ${config.gasLimit.toLocaleString()}`);
   console.log(`Block Explorer: ${config.skipVerification ? 'Verification Disabled (local network)' : 'Verification Enabled'}`);
   console.log(`Description:    ${config.description}`);

@@ -2,13 +2,13 @@
 /**
  * Tests for the pure / localStorage functions in zkAuth.ts.
  * The heavy crypto functions (computeCommitment, generateAuthProof) depend on
- * circomlibjs (Poseidon), Noir, and @aztec/bb.js which are not available in
- * jsdom. Those are integration-tested by the useZKAuth hook tests via mocks.
+ * circomlibjs (Poseidon) and snarkjs which are not suitable for jsdom.
+ * Those are integration-tested by the useZKAuth hook tests via mocks.
  *
  * This file covers:
- *  - generateRandomKey        (uses Web Crypto + ethers utils)
+ *  - generateRandomKey        (uses Web Crypto)
  *  - encryptCredentials +
- *    decryptCredentials        (XOR roundtrip, ethers utils)
+ *    decryptCredentials        (AES-GCM roundtrip)
  *  - storeCredentials          (localStorage write)
  *  - getStoredCredentials      (localStorage read)
  *  - clearStoredCredentials    (localStorage remove, with + without address)
@@ -18,31 +18,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ─── Heavy dependency mocks (must come before the import) ─────────────────────
 
-vi.mock('@noir-lang/noir_js', () => ({ Noir: vi.fn() }));
-vi.mock('@aztec/bb.js', () => ({ UltraPlonkBackend: vi.fn() }));
 vi.mock('circomlibjs', () => ({ buildPoseidon: vi.fn(async () => ({})) }));
-vi.mock('@/lib/circuits/auth_login.json', () => ({ default: { bytecode: '' }, bytecode: '' }));
-
-// Minimal ethers mock — only the utils actually called by the tested functions.
-// encrypt/decrypt now use the native Web Crypto API so only hexlify is needed
-// here (for generateRandomKey).
-vi.mock('ethers', () => {
-  const hexlify = (bytes: Uint8Array | number[]) =>
-    '0x' +
-    Array.from(
-      typeof bytes === 'object' && !ArrayBuffer.isView(bytes)
-        ? new Uint8Array(bytes as number[])
-        : (bytes as Uint8Array),
-    )
-      .map((b) => b.toString(16).padStart(2, '0'))
-      .join('');
-
-  return {
-    ethers: {
-      utils: { hexlify },
-    },
-  };
-});
+vi.mock('snarkjs', () => ({ groth16: { fullProve: vi.fn() } }));
 
 vi.mock('@/lib/logger', () => ({
   logger: { debug: vi.fn(), info: vi.fn(), error: vi.fn(), warn: vi.fn() },

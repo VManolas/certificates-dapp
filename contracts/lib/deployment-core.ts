@@ -24,6 +24,8 @@ const FQN = {
   certificateRegistry: 'contracts/CertificateRegistry.sol:CertificateRegistry',
   employerRegistry: 'contracts/EmployerRegistry.sol:EmployerRegistry',
   zkAuthRegistry: 'contracts/ZKAuthRegistry.sol:ZKAuthRegistry',
+  groth16Verifier: 'contracts/Groth16AuthVerifier.sol:Groth16Verifier',
+  groth16Adapter: 'contracts/Groth16AuthVerifierAdapter.sol:Groth16AuthVerifierAdapter',
   ultraVerifier: 'contracts/UltraPlonkAuthVerifier.sol:UltraVerifier',
   ultraPlonkAuthVerifierAdapter:
     'contracts/UltraPlonkAuthVerifierAdapter.sol:UltraPlonkAuthVerifierAdapter',
@@ -74,52 +76,64 @@ export async function deployVerifier(
   verifierType: VerifierType
 ): Promise<{ verifier: string; adapter: string }> {
   
-  if (verifierType === 'mock') {
+  if (verifierType === 'groth16') {
+    console.log('📝 Deploying Groth16Verifier (Production)...');
+    console.log('   Pure Solidity (~7.7KB), no assembly — works on any EVM including zkSync Era\n');
+
+    const { address: verifierAddress } = await deployer.deployContract(FQN.groth16Verifier, []);
+
+    console.log(`✅ Groth16Verifier deployed to: ${verifierAddress}`);
+    console.log('   Proving System: Groth16');
+    console.log('   Curve: BN254\n');
+
+    console.log('📝 Deploying Groth16AuthVerifierAdapter...');
+    const { address: adapterAddress } = await deployer.deployContract(
+      FQN.groth16Adapter,
+      [verifierAddress]
+    );
+
+    console.log(`✅ Groth16AuthVerifierAdapter deployed to: ${adapterAddress}`);
+    console.log('   ✅ Production-ready cryptographic verifier\n');
+
+    return {
+      verifier: verifierAddress,
+      adapter: adapterAddress,
+    };
+  } else if (verifierType === 'mock') {
     console.log('📝 Deploying Mock Auth Verifier (Development Only)...');
-    
-    // For development, we use a mock verifier that validates format only
-    // ⚠️ WARNING: The contract name 'NoirAuthVerifier' no longer exists
-    // This is a placeholder - in production, use 'ultraplonk' verifier type
-    // NOTE: Real UltraPlonk verifier is production-ready and should be used instead
-    // This mock deployment path is kept for backwards compatibility only
-    
+
     try {
       const { address: mockAddress } = await deployer.deployContract('NoirAuthVerifier', []);
-      
+
       console.log(`✅ Mock Verifier deployed to: ${mockAddress}`);
       console.log('   ⚠️  Development verifier (format check only)');
       console.log('   ⚠️  Does NOT verify cryptographic correctness\n');
-      
+
       return {
         verifier: mockAddress,
-        adapter: mockAddress, // Mock acts as its own adapter
+        adapter: mockAddress,
       };
     } catch (error) {
       console.error('❌ Failed to deploy mock verifier (NoirAuthVerifier not found)');
-      console.log('   ℹ️  Use VERIFIER_TYPE=ultraplonk for production verifier');
-      throw new Error('Mock verifier deployment failed. NoirAuthVerifier contract does not exist. Use ultraplonk verifier instead.');
+      console.log('   ℹ️  Use VERIFIER_TYPE=groth16 for production verifier');
+      throw new Error('Mock verifier deployment failed. Use groth16 verifier instead.');
     }
   } else {
-    // UltraPlonk verifier (production)
-    console.log('📝 Deploying UltraVerifier (Production)...');
-    console.log('   ⚠️  Large contract (~140KB) - this may take 1-2 minutes...\n');
-    
+    // ultraplonk — kept for reference; not compatible with zkSync Era
+    console.log('📝 Deploying UltraVerifier...');
+    console.log('   ⚠️  WARNING: UltraPlonk is NOT compatible with zkSync Era\n');
+
     const { address: verifierAddress } = await deployer.deployContract(FQN.ultraVerifier, []);
-    
+
     console.log(`✅ UltraVerifier deployed to: ${verifierAddress}`);
-    console.log('   Size: ~140KB (2,778 lines of Solidity)');
-    console.log('   Proving System: UltraPlonk');
-    console.log('   Curve: BN254\n');
-    
-    console.log('📝 Deploying UltraPlonkAuthVerifierAdapter...');
-    const { address: adapterAddress, contract: adapter } = await deployer.deployContract(
+
+    const { address: adapterAddress } = await deployer.deployContract(
       FQN.ultraPlonkAuthVerifierAdapter,
       [verifierAddress]
     );
-    
-    console.log(`✅ UltraPlonkAuthVerifierAdapter deployed to: ${adapterAddress}`);
-    console.log('   ✅ Production-ready cryptographic verifier\n');
-    
+
+    console.log(`✅ UltraPlonkAuthVerifierAdapter deployed to: ${adapterAddress}\n`);
+
     return {
       verifier: verifierAddress,
       adapter: adapterAddress,
@@ -325,11 +339,16 @@ export function printDeploymentSummary(result: DeploymentResult): void {
     console.log('\n⚠️  NOTE: Using mock verifier (development only)');
     console.log('   - Validates proof format (length, structure)');
     console.log('   - Does NOT verify cryptographic correctness');
-    console.log('   - For production: redeploy with VERIFIER_TYPE=ultraplonk');
-  } else {
-    console.log('\n✅ Using production UltraPlonk verifier');
-    console.log('   - Real cryptographic ZK-SNARK verification');
+    console.log('   - For production: redeploy with VERIFIER_TYPE=groth16');
+  } else if (result.config.verifier === 'groth16') {
+    console.log('\n✅ Using Groth16 verifier');
+    console.log('   - Real cryptographic ZK-SNARK verification (circom/snarkjs)');
+    console.log('   - EVM-compatible — works on zkSync Era');
     console.log('   - Production-grade security');
+  } else {
+    console.log('\n⚠️  Using UltraPlonk verifier');
+    console.log('   - NOT compatible with zkSync Era');
+    console.log('   - Migrate to groth16 for zkSync deployments');
   }
   
   console.log('\n' + '═'.repeat(60) + '\n');
