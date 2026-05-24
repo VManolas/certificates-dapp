@@ -2,35 +2,17 @@
 /**
  * ZK Authentication Library for zkCredentials
  * ============================================
- * 
- * This library provides client-side cryptographic primitives for
- * privacy-preserving authentication using zero-knowledge proofs.
- * 
- * Key Features:
- * - Generate keypairs locally (never touch blockchain)
- * - Compute commitments for registration using Poseidon hash
- * - Encrypt/decrypt credentials with wallet signatures
- * - Generate ZK proofs for authentication using Noir
- * 
- * Security:
- * - Private keys stored encrypted in localStorage
- * - Encryption key derived from wallet signature
- * - No sensitive data leaves the browser unencrypted
- * 
- * Hash Function: Poseidon (matching Noir circuit, BN254-compatible)
+ *
+ * Provides client-side cryptographic primitives for privacy-preserving
+ * authentication using zero-knowledge proofs (Groth16/circom).
+ *
+ * Hash Function: Poseidon (BN254-compatible, matches circom circuit)
+ * Proof System:  Groth16 (snarkjs, EVM-compatible including zkSync Era)
  */
 
-import { ethers } from 'ethers';
-import { Noir } from '@noir-lang/noir_js';
-import { UltraPlonkBackend } from '@aztec/bb.js';
-import type { CompiledCircuit } from '@noir-lang/types';
-import authCircuitJson from './circuits/auth_login.json';
-// Import Poseidon from circomlibjs (proven compatibility with Noir)
+import { encodeAbiParameters } from 'viem';
 import { buildPoseidon } from 'circomlibjs';
 import { logger } from './logger';
-
-// Type the circuit properly
-const authCircuit = authCircuitJson as CompiledCircuit;
 
 /**
  * User credentials stored locally (encrypted)
@@ -44,14 +26,9 @@ export interface ZKCredentials {
 
 /**
  * Poseidon hash instance (cached at module level)
- * Initialization is async and takes ~100ms, so we cache it
  */
 let poseidonInstance: any = null;
 
-/**
- * Get or initialize Poseidon hasher instance
- * Uses circomlibjs which is proven compatible with Noir's Poseidon
- */
 async function getPoseidon() {
   if (!poseidonInstance) {
     logger.debug('[ZK Auth] Initializing Poseidon hasher (circomlibjs)...');
@@ -62,75 +39,29 @@ async function getPoseidon() {
 }
 
 /**
- * Generate a secure random 256-bit key that fits within the BN254 field modulus
- * 
- * CRITICAL: The key must be less than the BN254 field modulus used by Noir
- * to ensure it can be used in ZK circuits.
- * 
- * @returns Hex-encoded private key (guaranteed to be < field modulus)
+ * Generate a secure random 256-bit key within the BN254 field modulus.
  */
 export function generateRandomKey(): string {
   const BN254_FIELD_MODULUS = BigInt('21888242871839275222246405745257275088548364400416034343698204186575808495617');
-  
-  // Generate random bytes
+
   const array = new Uint8Array(32);
   crypto.getRandomValues(array);
-  
-  // Convert to BigInt
-  let keyBigInt = BigInt(ethers.utils.hexlify(array));
-  
-  // If the key exceeds the field modulus, reduce it
-  // This is safe because:
-  // 1. The modulo operation preserves randomness
-  // 2. The resulting key is still cryptographically secure
-  // 3. The key space is still enormous (> 2^250 possible values)
+
+  let keyBigInt = BigInt('0x' + Array.from(array).map(b => b.toString(16).padStart(2, '0')).join(''));
+
   if (keyBigInt >= BN254_FIELD_MODULUS) {
     keyBigInt = keyBigInt % BN254_FIELD_MODULUS;
-    logger.debug('[ZK Auth] Generated key exceeded field modulus, applied modulo reduction');
   }
-  
-  // Convert back to hex
-  const keyHex = keyBigInt.toString(16);
-  const result = '0x' + keyHex.padStart(64, '0');
-  
-  logger.debug('[ZK Auth] Generated random key within field bounds');
-  
-  return result;
+
+  return '0x' + keyBigInt.toString(16).padStart(64, '0');
 }
 
 /**
- * Helper function to convert hex string to Field-compatible string
- * Noir Field expects decimal string representation
- */
-function hexToFieldString(hex: string): string {
-  // Remove '0x' prefix if present
-  const cleanHex = hex.startsWith('0x') ? hex.slice(2) : hex;
-  // Convert to BigInt then to string
-  return BigInt('0x' + cleanHex).toString(10);
-}
-
-/**
- * Helper function to convert Ethereum address to Field-compatible string
- */
-function addressToFieldString(address: string): string {
-  // Remove '0x' prefix and convert to BigInt
-  const cleanAddr = address.startsWith('0x') ? address.slice(2) : address;
-  return BigInt('0x' + cleanAddr).toString(10);
-}
-
-/**
- * Compute commitment from credentials using Poseidon hash
- * 
- * This matches the Noir circuit implementation exactly:
- * 1. public_key = poseidon_hash_1([private_key])
- * 2. commitment = poseidon_hash_3([public_key, wallet_address, salt])
- * 
- * Uses circomlibjs which is proven compatible with Noir's Poseidon (BN254 curve)
- * 
- * @param privateKey User's private authentication key (hex string)
- * @param walletAddress User's blockchain wallet (hex string)
- * @param salt Random salt (hex string)
- * @returns Commitment (hex string)
+ * Compute commitment from credentials using Poseidon hash.
+ *
+ * Matches the circom circuit:
+ *   publicKey  = Poseidon(privateKey)
+ *   commitment = Poseidon(publicKey, walletAddress, salt)
  */
 export async function computeCommitment(
   privateKey: string,
@@ -138,60 +69,26 @@ export async function computeCommitment(
   salt: string
 ): Promise<string> {
   try {
-    // Get Poseidon hasher instance (cached after first call)
     const poseidon = await getPoseidon();
-    
-    // Normalize wallet address to lowercase to ensure consistency
     const normalizedAddress = walletAddress.toLowerCase();
-    
-    logger.debug('[ZK Auth] Computing commitment using Poseidon hash (circomlibjs)...', {
-      privateKey,
-      walletAddressOriginal: walletAddress,
+
+    logger.debug('[ZK Auth] Computing commitment using Poseidon hash...', {
       walletAddress: normalizedAddress,
-      salt
     });
-    
-    // Convert inputs to BigInt for Poseidon
+
     const privateKeyBigInt = BigInt(privateKey);
     const walletAddressBigInt = BigInt(normalizedAddress);
     const saltBigInt = BigInt(salt);
-    
-    logger.debug('[ZK Auth] BigInt inputs (DECIMAL):', {
-      privateKey: privateKeyBigInt.toString(),
-      wallet: walletAddressBigInt.toString(),
-      salt: saltBigInt.toString()
-    });
-    
-    // Step 1: Derive public key from private key using Poseidon single-input hash
-    // Matches Noir: let public_key = poseidon_hash_1([private_key]);
-    // circomlibjs returns field element, convert to string then to BigInt
+
     const publicKeyField = poseidon([privateKeyBigInt]);
-    const publicKey = poseidon.F.toString(publicKeyField);
-    const publicKeyBigInt = BigInt(publicKey);
-    
-    logger.debug('[ZK Auth] Public key computed', {
-      decimal: publicKey,
-      hex: '0x' + publicKeyBigInt.toString(16)
-    });
-    
-    // Step 2: Compute commitment from public key, wallet address, and salt
-    // Matches Noir: let commitment = poseidon_hash_3([public_key, wallet_address, salt]);
+    const publicKeyBigInt = BigInt(poseidon.F.toString(publicKeyField));
+
     const commitmentField = poseidon([publicKeyBigInt, walletAddressBigInt, saltBigInt]);
-    const commitment = poseidon.F.toString(commitmentField);
-    const commitmentBigInt = BigInt(commitment);
-    
-    logger.debug('[ZK Auth] Commitment computed', {
-      decimal: commitment,
-      hex: '0x' + commitmentBigInt.toString(16)
-    });
-    
-    // Convert to hex string with proper padding (32 bytes = 64 hex chars)
+    const commitmentBigInt = BigInt(poseidon.F.toString(commitmentField));
+
     const commitmentHex = '0x' + commitmentBigInt.toString(16).padStart(64, '0');
-    
-    logger.info('[ZK Auth] ✅ Final commitment (Poseidon) computed', { commitmentHex });
-    
+    logger.info('[ZK Auth] ✅ Commitment computed', { commitmentHex });
     return commitmentHex;
-    
   } catch (error) {
     logger.error('[ZK Auth] Failed to compute commitment', error);
     throw new Error(`Failed to compute commitment: ${error}`);
@@ -200,9 +97,6 @@ export async function computeCommitment(
 
 /**
  * Derive an AES-GCM CryptoKey from the wallet address.
- * SHA-256 of a domain-separated string gives 32 bytes of key material.
- * The domain string is versioned (v3) so that it is independent of the
- * former XOR key derivation path (v2).
  */
 async function deriveAesKey(walletAddress: string): Promise<CryptoKey> {
   const keyMaterial = new TextEncoder().encode(
@@ -230,17 +124,7 @@ function base64ToUint8(b64: string): Uint8Array {
 
 /**
  * Encrypt credentials with AES-GCM (256-bit key, 96-bit IV).
- *
- * The wallet signature is still requested by the UX flow to prove wallet
- * control, but the encryption key is derived from the wallet address alone
- * so that it remains stable across signature prompts.
- *
  * Stored format: "v3:<base64(12-byte IV || ciphertext+tag)>"
- *
- * @param credentials Credentials to encrypt
- * @param _signature  Wallet signature (unused for key derivation; kept for API compat)
- * @param walletAddress User's wallet address
- * @returns Opaque encrypted string
  */
 export async function encryptCredentials(
   credentials: ZKCredentials,
@@ -252,7 +136,6 @@ export async function encryptCredentials(
   const plaintext = new TextEncoder().encode(JSON.stringify(credentials));
   const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, plaintext);
 
-  // Pack: IV (12 bytes) || ciphertext+tag
   const combined = new Uint8Array(12 + ciphertext.byteLength);
   combined.set(iv, 0);
   combined.set(new Uint8Array(ciphertext), 12);
@@ -261,13 +144,7 @@ export async function encryptCredentials(
 
 /**
  * Decrypt credentials encrypted by encryptCredentials.
- * Legacy "0x…" XOR-encrypted values are detected by the absence of the
- * "v3:" prefix and treated as outdated so the user re-registers.
- *
- * @param encrypted   Value previously returned by encryptCredentials
- * @param _signature  Wallet signature (unused; kept for API compat)
- * @param walletAddress User's wallet address
- * @returns Decrypted credentials
+ * Legacy values without the "v3:" prefix are cleared and treated as outdated.
  */
 export async function decryptCredentials(
   encrypted: string,
@@ -276,7 +153,6 @@ export async function decryptCredentials(
 ): Promise<ZKCredentials> {
   try {
     if (!encrypted.startsWith('v3:')) {
-      // Legacy XOR format — clear and force re-registration
       clearStoredCredentials(walletAddress);
       throw new Error('CREDENTIALS_OUTDATED');
     }
@@ -303,19 +179,13 @@ export interface AuthProofResult {
 }
 
 /**
- * Generate ZK proof for authentication using Noir circuit.
+ * Generate a Groth16 ZK proof for authentication.
  *
- * Produces a UltraPlonk proof that covers three public inputs:
- *   [commitment, nullifierNonce, nullifier]
+ * Public inputs: [commitment, nullifierNonce, nullifier]
+ * Proof encoding: abi.encode(uint[2] pA, uint[2][2] pB, uint[2] pC) = 256 bytes
  *
- * A fresh nullifierNonce is generated on every call so each session yields a
- * distinct nullifier.  The nullifier is derived as
- *   Poseidon(privateKey, nullifierNonce)
- * and must be submitted to the contract, which stores it to prevent replay.
- *
- * @param credentials User credentials (commitment + private key + salt)
- * @param walletAddress Current wallet address (must match the one used at registration)
- * @returns proof hex, nullifier hex, nullifierNonce hex
+ * A fresh nullifierNonce is generated per call so each session yields a
+ * distinct nullifier. The contract stores used nullifiers to prevent replay.
  */
 export async function generateAuthProof(
   credentials: ZKCredentials,
@@ -323,10 +193,9 @@ export async function generateAuthProof(
 ): Promise<AuthProofResult> {
   try {
     const normalizedAddress = walletAddress.toLowerCase();
+    logger.debug('[ZK Auth] Generating Groth16 proof', { walletNormalized: normalizedAddress });
 
-    logger.debug('[ZK Auth] Generating proof', { walletNormalized: normalizedAddress });
-
-    // Generate a fresh nonce for this session's nullifier
+    // Fresh nonce for this session
     const nullifierNonceHex = generateRandomKey();
     const nullifierNonceBigInt = BigInt(nullifierNonceHex);
 
@@ -337,40 +206,48 @@ export async function generateAuthProof(
     const nullifierBigInt = BigInt(poseidon.F.toString(nullifierField));
     const nullifierHex = '0x' + nullifierBigInt.toString(16).padStart(64, '0');
 
-    const backend = new UltraPlonkBackend(authCircuit.bytecode);
-    const noir = new Noir(authCircuit as any);
-
-    const inputs = {
-      private_key:    hexToFieldString(credentials.privateKey),
-      wallet_address: addressToFieldString(normalizedAddress),
-      salt:           hexToFieldString(credentials.salt),
-      commitment:     hexToFieldString(credentials.commitment),
-      nullifier_nonce: nullifierNonceBigInt.toString(10),
-      nullifier:       nullifierBigInt.toString(10),
+    // Circuit inputs (decimal strings — circom field elements)
+    const input = {
+      privateKey:    privateKeyBigInt.toString(),
+      walletAddress: BigInt(normalizedAddress).toString(),
+      salt:          BigInt(credentials.salt).toString(),
+      commitment:    BigInt(credentials.commitment).toString(),
+      nullifierNonce: nullifierNonceBigInt.toString(),
+      nullifier:     nullifierBigInt.toString(),
     };
 
-    logger.debug('[ZK Auth] Circuit inputs prepared', {
-      privateKey:      inputs.private_key.substring(0, 10) + '...',
-      walletAddress:   inputs.wallet_address,
-      salt:            inputs.salt.substring(0, 10) + '...',
-      commitment:      inputs.commitment.substring(0, 10) + '...',
-      nullifierNonce:  inputs.nullifier_nonce.substring(0, 10) + '...',
-      nullifier:       inputs.nullifier.substring(0, 10) + '...',
-    });
+    logger.info('[ZK Auth] Generating Groth16 proof (this may take a few seconds)...');
 
-    logger.info('[ZK Auth] Generating proof (this may take a few seconds)...');
+    // Circuit artifacts served from public/circuits/
+    const base = import.meta.env.BASE_URL ?? '/';
+    const wasmUrl = `${base}circuits/auth_login.wasm`;
+    const zkeyUrl = `${base}circuits/auth_login_final.zkey`;
 
-    const { witness } = await noir.execute(inputs);
-    logger.debug('[ZK Auth] Witness generated, creating proof...');
+    // Dynamic import keeps snarkjs out of the initial bundle
+    const snarkjs = await import('snarkjs');
+    const { proof } = await snarkjs.groth16.fullProve(input, wasmUrl, zkeyUrl);
 
-    const proofResult = await backend.generateProof(witness);
     logger.info('[ZK Auth] Proof generated successfully!');
 
-    const proofBytes = proofResult.proof || proofResult;
-    logger.debug('[ZK Auth] Proof length', { proofLength: (proofBytes as Uint8Array).length });
+    // ABI-encode as abi.encode(uint[2] pA, uint[2][2] pB, uint[2] pC)
+    // pB coordinates are stored reversed in snarkjs output vs Solidity convention
+    const pA: readonly [bigint, bigint] = [BigInt(proof.pi_a[0]), BigInt(proof.pi_a[1])];
+    const pB: readonly [readonly [bigint, bigint], readonly [bigint, bigint]] = [
+      [BigInt(proof.pi_b[0][1]), BigInt(proof.pi_b[0][0])],
+      [BigInt(proof.pi_b[1][1]), BigInt(proof.pi_b[1][0])],
+    ];
+    const pC: readonly [bigint, bigint] = [BigInt(proof.pi_c[0]), BigInt(proof.pi_c[1])];
 
-    const proofHex = ethers.utils.hexlify(proofBytes);
-    await backend.destroy();
+    const proofHex = encodeAbiParameters(
+      [
+        { type: 'uint256[2]' },
+        { type: 'uint256[2][2]' },
+        { type: 'uint256[2]' },
+      ],
+      [pA, pB, pC]
+    );
+
+    logger.debug('[ZK Auth] Proof ABI-encoded', { proofBytes: (proofHex.length - 2) / 2 });
 
     return { proof: proofHex, nullifier: nullifierHex, nullifierNonce: nullifierNonceHex };
 
@@ -381,8 +258,7 @@ export async function generateAuthProof(
       if (error.message.includes('assertion') || error.message.includes('constraint')) {
         throw new Error(
           'Proof generation failed: Commitment mismatch. ' +
-          'The commitment computed in the circuit does not match the provided commitment. ' +
-          'This could indicate a hash function mismatch, corrupted credentials, or wallet address mismatch. ' +
+          'The commitment in the circuit does not match the registered commitment. ' +
           'Try clearing your credentials and registering again.'
         );
       }
@@ -392,9 +268,6 @@ export async function generateAuthProof(
   }
 }
 
-/**
- * Local storage key for encrypted credentials
- */
 const LEGACY_STORAGE_KEY = 'zkauth_encrypted_credentials';
 const STORAGE_KEY_PREFIX = 'zkauth_encrypted_credentials_v2_';
 
@@ -402,23 +275,14 @@ function getStorageKey(walletAddress: string): string {
   return `${STORAGE_KEY_PREFIX}${walletAddress.toLowerCase()}`;
 }
 
-/**
- * Store encrypted credentials in localStorage
- */
 export function storeCredentials(encrypted: string, walletAddress: string): void {
   localStorage.setItem(getStorageKey(walletAddress), encrypted);
 }
 
-/**
- * Retrieve encrypted credentials from localStorage
- */
 export function getStoredCredentials(walletAddress: string): string | null {
   return localStorage.getItem(getStorageKey(walletAddress));
 }
 
-/**
- * Clear stored credentials (logout)
- */
 export function clearStoredCredentials(walletAddress?: string): void {
   if (walletAddress) {
     localStorage.removeItem(getStorageKey(walletAddress));
@@ -427,12 +291,7 @@ export function clearStoredCredentials(walletAddress?: string): void {
   localStorage.removeItem(LEGACY_STORAGE_KEY);
 }
 
-/**
- * Check if user has stored credentials
- */
 export function hasStoredCredentials(walletAddress?: string | null): boolean {
-  if (!walletAddress) {
-    return false;
-  }
+  if (!walletAddress) return false;
   return localStorage.getItem(getStorageKey(walletAddress)) !== null;
 }
