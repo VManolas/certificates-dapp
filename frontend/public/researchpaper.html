@@ -122,7 +122,7 @@
       Department of Informatics and Computer Engineering<br />
       University of West Attica &mdash; Diploma Thesis
     </div>
-    <div class="date">Submitted: [Month 2026] &nbsp;&bull;&nbsp; Supervisor: Dimitrios Kogias, Adjunct Lecturer</div>
+    <div class="date">Submitted: May 2026 &nbsp;&bull;&nbsp; Supervisor: Dimitrios Kogias, Adjunct Lecturer</div>
   </div>
 
   <!-- ══════════════════════════════════════════════
@@ -130,30 +130,22 @@
   ══════════════════════════════════════════════ -->
   <div class="abstract-block">
     <span class="label">Abstract&mdash;</span>
-    The global proliferation of digital credentials has intensified demand for
-    verification mechanisms that are simultaneously trustworthy and
-    privacy-preserving. Existing systems expose sensitive identity information
-    during verification, creating unnecessary privacy risks and violating the
-    data-minimisation principle of GDPR. This paper presents
-    <em>zkCredentials</em>, a decentralised educational credential management
-    and verification system deployed on the zkSync Era Layer-2 blockchain. The
-    system employs Groth16 zero-knowledge proofs (ZKPs) to authenticate users
-    and allow credential verification without revealing private keys or
-    credential contents to on-chain observers. A set of four upgradeable smart
-    contracts manages institution registration, certificate issuance, employer
-    access, and ZK-based session management. The Groth16 proof system, built
-    on the BN254 pairing-friendly elliptic curve, enables constant-size proofs
-    (192&nbsp;bytes) and O(1) on-chain verification. A Poseidon-based commitment
-    and nullifier scheme provides computational hiding at approximately 128-bit
-    security while remaining efficient inside arithmetic circuits
-    (&sim;1,200&nbsp;R1CS constraints). Empirical evaluation on the zkSync
-    Sepolia testnet shows proof generation completing in 2.1&ndash;7.8&nbsp;s
-    depending on device (desktop to mobile), with on-chain ZK verification
-    consuming approximately 210,000&nbsp;gas &mdash; substantially less than
-    the prior UltraPlonk-based approach which required over 21,000,000&nbsp;gas.
-    Security properties, known limitations, and directions for future work
-    including Merkle-tree-based anonymity sets and selective disclosure are
-    discussed.
+    This paper presents <em>zkCredentials</em>, a decentralised educational
+    credential management and verification system deployed on zkSync Era. The
+    system uses Groth16 zero-knowledge proofs to provide ZK-authenticated
+    credential access: a user proves knowledge of a secret key corresponding to
+    a registered on-chain commitment without revealing the key. Fresh
+    Poseidon-based nullifiers prevent replay and avoid linkage through nullifier
+    values, while credential content privacy is handled separately through
+    hash-only on-chain storage. The current circuit does not prove credential
+    possession directly; credential validity is checked through registry logic.
+    Four UUPS upgradeable smart contracts manage institution registration,
+    certificate issuance, employer access, and ZK-based session management.
+    Evaluation on zkSync Sepolia shows proof generation in 2.1&ndash;7.8&nbsp;s
+    across representative devices and on-chain ZK verification at approximately
+    210,000&nbsp;gas. We also document a zksolc compatibility finding that
+    blocked a prior UltraPlonk-based approach, explaining why Groth16
+    over BN254 was selected for this deployment target.
   </div>
 
   <div class="index-terms">
@@ -188,10 +180,14 @@
       credential records, eliminating intermediary trust. However, naively placing
       credentials on a public chain exposes student identities to any observer,
       conflicting with the GDPR data-minimisation principle (Article&nbsp;5(1)(c))&nbsp;[18].
-      Zero-knowledge proofs provide a cryptographic primitive that resolves this
-      tension: a prover can convince a verifier that a statement is true (e.g.,
-      &ldquo;I hold a valid certificate from this institution&rdquo;) without
-      revealing the underlying witness (the certificate data or private key).
+      Zero-knowledge proofs provide a cryptographic primitive that can resolve
+      this tension: in a full ZK credential system, a prover would convince a
+      verifier of a statement such as &ldquo;I hold a valid certificate from
+      this institution&rdquo; without revealing the underlying certificate data.
+      This paper implements a narrower but deployable first step: a
+      ZK-authenticated access protocol in which the user proves knowledge of a
+      secret key bound to an on-chain commitment, while credential validity is
+      checked separately through registry lookups.
     </p>
 
     <h2 class="subsection">B. Research Objectives</h2>
@@ -211,14 +207,15 @@
     <h2 class="subsection">C. Contributions</h2>
     <p>The principal contributions of this work are:</p>
     <ul>
-      <li>A Circom circuit implementing a Poseidon-based commitment and nullifier
+      <li>      A Circom circuit implementing a Poseidon-based commitment and nullifier
           scheme for replay-resistant ZK authentication
-          (&sim;1,200&nbsp;R1CS constraints).</li>
+          (1,537&nbsp;R1CS constraints).</li>
       <li>A Groth16 on-chain verifier adapted for zkSync Era&rsquo;s zkEVM,
           resolving incompatibility between the snarkjs-generated verifier&rsquo;s
           inline assembly and the zksolc compiler&rsquo;s EVMLA translation path.</li>
-      <li>Four production-deployed UUPS upgradeable contracts with role-based
-          access control, cross-contract authorisation, and safe storage layouts.</li>
+      <li>Four UUPS upgradeable contracts deployed on zkSync Era Sepolia testnet,
+          with role-based access control, cross-contract authorisation, and safe
+          storage layouts.</li>
       <li>A React/TypeScript frontend integrating snarkjs proof generation with
           wagmi wallet connection, supporting both ZK-native and standard
           Web3 authentication flows.</li>
@@ -339,13 +336,16 @@
       </thead>
       <tbody>
         <tr><td>Blockcerts&nbsp;[19]</td><td>None</td><td>Hash</td><td>No</td><td>No</td><td>&mdash;</td></tr>
-        <tr><td>Semaphore&nbsp;[9]</td><td>Full ZK</td><td>Yes</td><td>No</td><td>Partial</td><td>Groth16</td></tr>
+        <tr><td>Semaphore&nbsp;[9]</td><td>Full ZK</td><td>Yes</td><td>No</td><td>Multi-network</td><td>Groth16</td></tr>
         <tr><td>Polygon ID&nbsp;[20]</td><td>ZK-selective</td><td>Yes</td><td>No</td><td>Polygon</td><td>Groth16</td></tr>
         <tr><td>Zcash&nbsp;[10]</td><td>Full ZK</td><td>Yes</td><td>No</td><td>No</td><td>Groth16</td></tr>
         <tr><td>SBT (ERC-5192)&nbsp;[27]</td><td>None</td><td>Yes</td><td>No</td><td>No</td><td>&mdash;</td></tr>
-        <tr><td><strong>This work</strong></td><td><strong>ZK-auth</strong></td><td><strong>Yes</strong></td><td><strong>UUPS</strong></td><td><strong>zkSync Era</strong></td><td><strong>Groth16</strong></td></tr>
+        <tr><td><strong>This work</strong></td><td><strong>ZK-auth*</strong></td><td><strong>Yes</strong></td><td><strong>UUPS</strong></td><td><strong>zkSync Era</strong></td><td><strong>Groth16</strong></td></tr>
       </tbody>
     </table>
+    <p style="font-size:9pt; color:var(--muted); margin-top:0.3rem;">
+      *ZK-auth: the ZK proof authenticates the user (proves knowledge of sk bound to a commitment) but does not itself prove credential possession. Credential validity is checked separately through registry lookups. This is distinct from "Full ZK" (Semaphore: anonymous group membership) and "ZK-selective" (Polygon ID: selective attribute disclosure).
+    </p>
 
     <p>
       <em>Blockcerts</em>&nbsp;[19] anchors credential hashes on Bitcoin or
@@ -449,8 +449,8 @@ Ethereum L1 settlement</div>
       The ZK proof system consists of:
     </p>
     <ol>
-      <li>A Circom circuit (<code>zkAuth.circom</code>) expressing the
-          commitment and nullifier relations as &sim;1,200 R1CS constraints.</li>
+      <li>A Circom circuit (<code>auth_login.circom</code>) expressing the
+          commitment and nullifier relations as 1,537 R1CS constraints.</li>
       <li>A Groth16 trusted setup producing a proving key
           (<code>zkauth_final.zkey</code>, &sim;2.4&nbsp;MB) and a verification key
           embedded in the on-chain verifier.</li>
@@ -548,15 +548,28 @@ Ethereum L1 settlement</div>
       is used in the commitment but never stored on-chain.
     </p>
     <p>
-      The secret key is encrypted client-side using AES-GCM with a key derived
-      from a deterministic wallet signature: the user signs a fixed domain string
-      (e.g., <code>"zkCredentials key derivation v1"</code>) with their wallet
-      via <code>eth_sign</code>, and the 64-byte signature is passed through
-      HKDF-SHA-256 to produce the AES-GCM key. This ties key persistence to
-      wallet ownership without uploading <em>sk</em> to any server, while ensuring
-      the encryption key has sufficient entropy. Deriving the AES key from the
-      public wallet address alone would be insecure, as addresses are public
-      knowledge.
+      The secret key is encrypted client-side using AES-GCM with a 256-bit
+      key. In the current prototype, the AES key is derived deterministically
+      from the wallet address string via SHA-256; a wallet signature is
+      requested as a UX gate but is not used as key material. This provides
+      localStorage-level protection only. The recommended production approach
+      is to derive the AES key from a deterministic wallet signature: the user
+      signs a fixed domain string (e.g., <code>"zkCredentials key derivation
+      v1"</code>) with their wallet via <code>personal_sign</code>, and the
+      64-byte signature is passed through HKDF-SHA-256 to produce the AES-GCM
+      key. This would tie key persistence to wallet ownership without uploading
+      <em>sk</em> to any server, while ensuring the encryption key has
+      sufficient entropy. The prototype's weaker key derivation is explicitly
+      acknowledged as a known limitation (Section&nbsp;VII-D).
+    </p>
+    <p>
+      <em>Limitation:</em> The current prototype derives the AES key from the
+      wallet address rather than from a wallet signature, meaning any party who
+      knows the address could derive the same key. A production deployment
+      should use the signature-based HKDF derivation described above.
+      Additionally, migrating from <code>personal_sign</code> to EIP-712
+      structured signing would display a human-readable description of what is
+      being signed, improving user clarity and reducing phishing risk.
     </p>
 
     <h2 class="subsection">C. Commitment Scheme</h2>
@@ -609,34 +622,35 @@ Ethereum L1 settlement</div>
 
     <h2 class="subsection">E. Circuit Design</h2>
     <p>
-      The Circom circuit (<code>zkAuth.circom</code>) defines the following
-      private inputs: <code>sk</code>, <code>walletAddress</code>,
-      <code>salt</code>; and public inputs/outputs: <code>commitment</code>,
-      <code>nullifierNonce</code>, <code>nullifier</code>. Note that
-      <code>walletAddress</code> is a <em>private</em> input: it binds the proof
-      to a specific wallet without revealing it in the authentication transaction.
+      The Circom circuit (<code>auth_login.circom</code>) defines the following
+      private inputs: <code>privateKey</code>, <code>walletAddress</code>,
+      <code>salt</code>; and public inputs:
+      <code>commitment</code>, <code>nullifierNonce</code>,
+      <code>nullifier</code>. The wallet binding is enforced at the contract
+      level: the contract retrieves the stored commitment for
+      <code>msg.sender</code> and passes it as a public input to the verifier,
+      ensuring that only the address that registered a commitment can
+      authenticate against it. As a consequence, the authenticating wallet address
+      is visible on-chain in every authentication transaction; authentication is
+      pseudonymous at the wallet level, not anonymous (see Section&nbsp;IV-A).
       The circuit enforces three relations:
     </p>
     <ol>
-      <li><span class="formula">sk_hash = Poseidon(sk)</span></li>
+      <li><span class="formula">sk_hash = Poseidon(privateKey)</span></li>
       <li><span class="formula">commitment === Poseidon(sk_hash, walletAddress, salt)</span></li>
-      <li><span class="formula">nullifier === Poseidon(sk, nullifierNonce)</span></li>
+      <li><span class="formula">nullifier === Poseidon(privateKey, nullifierNonce)</span></li>
     </ol>
     <p>
-      A fourth sub-circuit enforces a 248-bit range check on <em>sk</em>
-      via <code>Num2Bits(248)</code> to prevent field-overflow attacks.
-      Total constraint count:
+      Total constraint count (as reported by <code>snarkjs r1cs info</code>):
     </p>
     <table>
       <caption>TABLE II. Circuit Constraint Breakdown</caption>
       <thead><tr><th>Sub-circuit</th><th>Constraints</th></tr></thead>
       <tbody>
-        <tr><td>Poseidon([sk]) &mdash; inner hash</td><td>&sim;295</td></tr>
-        <tr><td>Poseidon([sk_hash, addr, salt]) &mdash; commitment</td><td>&sim;310</td></tr>
-        <tr><td>Poseidon([sk, nonce]) &mdash; nullifier</td><td>&sim;295</td></tr>
-        <tr><td>Num2Bits(248) &mdash; range check</td><td>&sim;250</td></tr>
-        <tr><td>Wiring / overhead</td><td>&sim;50</td></tr>
-        <tr><td><strong>Total</strong></td><td><strong>&sim;1,200</strong></td></tr>
+        <tr><td>Poseidon(1) &mdash; inner hash (t=2 state)</td><td>&sim;474</td></tr>
+        <tr><td>Poseidon(3) &mdash; commitment (t=4 state)</td><td>&sim;589</td></tr>
+        <tr><td>Poseidon(2) &mdash; nullifier (t=3 state)</td><td>&sim;474</td></tr>
+        <tr><td><strong>Total</strong></td><td><strong>1,537</strong></td></tr>
       </tbody>
     </table>
 
@@ -831,14 +845,17 @@ Ethereum L1 settlement</div>
     <p>
       The snarkjs-generated <code>Groth16Verifier.sol</code> uses dense inline
       assembly to call the ecPairing precompile (EIP-197&nbsp;[15]).
-      Compiling with <code>forceEVMLA: true</code> causes a
-      &ldquo;stack too deep: variable is 1 slot(s) too deep&rdquo; error,
-      because the EVMLA path translates EVM assembly directly to LLVM IR
-      and cannot handle the large number of stack variables in the pairing loop.
-      The fix is to omit <code>forceEVMLA</code> and use zksolc&rsquo;s
-      default Yul IR compilation path, which handles deep stacks via its IR
-      lowering pass. This change is documented in the repository&rsquo;s
-      <code>hardhat.config.ts</code> with an explanatory comment.
+      In this project&rsquo;s configuration, compiling the verifier with
+      <code>forceEVMLA: true</code> produced a &ldquo;stack too deep: variable
+      is 1&nbsp;slot(s) too deep&rdquo; error, because the EVMLA path
+      translates EVM assembly directly to LLVM IR and cannot handle the large
+      number of stack variables in the pairing loop. Removing
+      <code>forceEVMLA</code> and using zksolc&rsquo;s default Yul IR
+      compilation path resolved the issue; the IR lowering pass handles deep
+      stacks correctly. This is an empirical finding for this verifier and
+      toolchain version, not a universal zkSync Era limitation. The change is
+      documented in <code>hardhat.config.ts</code> with an explanatory
+      comment.
     </p>
 
     <h2 class="subsection">C. Proof Generation Pipeline</h2>
@@ -846,10 +863,12 @@ Ethereum L1 settlement</div>
       The client-side proof generation pipeline proceeds as follows:
     </p>
     <ol>
-      <li>Request a deterministic wallet signature over a fixed domain string;
-          derive the AES-GCM key via HKDF-SHA-256 from the signature bytes.</li>
+      <li>Request a wallet signature (UX gate confirming user intent);
+          derive the AES-GCM decryption key. (In the prototype, the key is
+          derived from the wallet address; in a production deployment, it
+          should be derived from the signature via HKDF-SHA-256.)</li>
       <li>Decrypt <em>sk</em> from <code>localStorage</code> using the
-          derived AES-GCM key.</li>
+          AES-GCM key.</li>
       <li>Compute <em>sk_hash</em>&nbsp;=&nbsp;Poseidon(<em>sk</em>) using
           <code>circomlibjs</code> (pre-bundled for fast load).</li>
       <li>Generate a fresh <em>nullifierNonce</em> via
@@ -888,7 +907,7 @@ Ethereum L1 settlement</div>
 
     <h2 class="subsection">A. Proof Generation Performance</h2>
     <p>
-      Proof generation time was measured over 10 trials per device,
+      Proof generation time was measured over 5 trials per device,
       reporting mean values. Times include WASM witness generation and
       Groth16 proof generation but exclude the initial download of the
       proving key (a one-time 2.4&nbsp;MB fetch, cached by the browser
@@ -908,7 +927,7 @@ Ethereum L1 settlement</div>
     <p>
       End-to-end proof generation ranges from 2.1&nbsp;s (desktop) to
       7.8&nbsp;s (mobile). On-chain verification latency is hardware-independent
-      and determined by block time. The circuit&rsquo;s &sim;1,200 constraints
+      and determined by block time. The circuit&rsquo;s 1,537 constraints
       are the primary determinant of proving time; circuits of this size are
       well within the practical range of consumer hardware.
     </p>
@@ -928,15 +947,19 @@ Ethereum L1 settlement</div>
       </tbody>
     </table>
     <p>
-      Gas costs on zkSync Sepolia are 25&ndash;35% lower than the local
-      Hardhat EVM for equivalent operations, consistent with L2 compression.
+      Gas costs on zkSync Sepolia were lower than equivalent Hardhat EVM
+      measurements for all operations; the observed differential in these
+      benchmarks was 25&ndash;35%. This reflects the specific deployment,
+      network conditions, and zksolc version used; it should not be generalised
+      as a fixed L2 compression ratio.
       USD cost depends on ETH price and prevailing L2 gas prices and is
       therefore not reported here. The Groth16 verifier&rsquo;s dominant cost
-      is the ecPairing precompile. By contrast, the UltraPlonk verifier that
-      this system replaced estimated over 21,000,000&nbsp;gas on zkSync Era due
-      to incompatibility with the zkEVM&rsquo;s precompile handling &mdash;
-      rendering it economically infeasible. This confirms Groth16 with BN254
-      as the correct choice for this deployment target.
+      is the ecPairing precompile. The predecessor UltraPlonk implementation was
+      incompatible with zkSync Era&rsquo;s zksolc compilation path and could not
+      be deployed to testnet, so a direct on-chain gas comparison is not available.
+      Groth16 with BN254 avoids this incompatibility entirely, leveraging the
+      native EIP-197 precompile, which confirms it as the correct choice for this
+      deployment target.
     </p>
 
     <h2 class="subsection">C. Security Analysis</h2>
@@ -988,9 +1011,11 @@ Ethereum L1 settlement</div>
     </p>
     <p>
       <em>No forward secrecy.</em> If <em>sk</em> is compromised, all past
-      sessions are retroactively linkable (by re-deriving all possible
-      nullifiers) and future impersonation is possible. The system provides
-      no mechanism for key rotation without creating a new commitment.
+      sessions become retroactively linkable — an attacker can compute
+      Poseidon(<em>sk</em>,&nbsp;<em>n</em>) for each observed public nonce
+      <em>n</em> and match the results against on-chain nullifiers — and
+      future impersonation is possible. The system provides no mechanism
+      for key rotation without creating a new commitment.
     </p>
     <p>
       <em>Single-party trusted setup.</em> The circuit-specific setup phase
@@ -998,9 +1023,31 @@ Ethereum L1 settlement</div>
       reduce the trust assumption to the weakest honest participant.
     </p>
     <p>
+      <em>Prototype key storage weakness.</em> The current implementation
+      derives the AES encryption key for <em>sk</em> from the public wallet
+      address rather than from a wallet signature. This means any party with
+      access to the user&rsquo;s <code>localStorage</code> and knowledge of
+      their wallet address can decrypt the stored secret key. A production
+      deployment must derive the key from a wallet signature via HKDF-SHA-256,
+      ensuring only the wallet holder can decrypt.
+    </p>
+    <p>
       <em>No Sybil resistance.</em> Any address can register a commitment.
       The system does not prevent a single individual from creating multiple
       ZK identities with different wallets.
+    </p>
+    <p>
+      <em>Admin and verifier upgrade trust.</em> The
+      <code>authVerifier</code> address in <code>ZKAuthRegistry</code> is
+      updateable by the admin via <code>setVerifier()</code>, and all four
+      contracts support UUPS logic upgrades restricted to
+      <code>DEFAULT_ADMIN_ROLE</code>. A compromised admin key can therefore
+      swap the verifier for a trivial one — causing all proof submissions to
+      pass — or replace contract logic entirely. In the current prototype the
+      admin is a single externally owned account. A production deployment
+      should replace this with a multi-signature wallet and a timelock
+      controller so that upgrade proposals are publicly visible before taking
+      effect.
     </p>
     <p>
       <em>Batch issuance cross-contract overhead.</em> As noted in
@@ -1022,8 +1069,9 @@ Ethereum L1 settlement</div>
       authentication on a production EVM-compatible Layer-2 network. Proof
       generation completes in 2.1&ndash;7.8&nbsp;s across representative
       hardware, and on-chain ZK verification consumes approximately
-      210,000&nbsp;gas on zkSync Sepolia &mdash; a reduction of two orders of
-      magnitude relative to the UltraPlonk-based predecessor. The key
+      210,000&nbsp;gas on zkSync Sepolia. The predecessor UltraPlonk
+      implementation could not be deployed to testnet due to zksolc
+      incompatibility, making Groth16 the viable choice for this target. The key
       engineering contribution is the identification and resolution of the
       <code>forceEVMLA</code> compilation incompatibility that blocked
       Groth16 verifier deployment on zkSync Era.
@@ -1073,7 +1121,7 @@ Ethereum L1 settlement</div>
         <li>[5] iden3, &ldquo;snarkjs: zkSNARK implementation in JavaScript &amp; WASM,&rdquo; GitHub, 2023. [Online]. Available: https://github.com/iden3/snarkjs</li>
         <li>[6] L. Grassi, D. Kales, D. Khovratovich, A. Roy, C. Rechberger, and M. Schofnegger, &ldquo;Poseidon: A new hash function for zero-knowledge proof systems,&rdquo; in <em>Proc. USENIX Security 2021</em>, 2021, pp. 519&ndash;535.</li>
         <li>[7] Matter Labs, &ldquo;zkSync Era: Scaling Ethereum with ZK technology,&rdquo; Technical Documentation, 2023. [Online]. Available: https://docs.zksync.io</li>
-        <li>[8] M. Sporny et al., &ldquo;Verifiable Credentials Data Model v1.1,&rdquo; W3C Recommendation, 2022.</li>
+        <li>[8] M. Sporny et al., &ldquo;Verifiable Credentials Data Model v2.0,&rdquo; W3C Recommendation, 2024.</li>
         <li>[9] B. Whitehat, M. Gurkan, and K. Choi, &ldquo;Semaphore: Zero-knowledge signaling on Ethereum,&rdquo; 2020. [Online]. Available: https://semaphore.appliedzkp.org</li>
         <li>[10] E. Ben-Sasson et al., &ldquo;Zerocash: Decentralized anonymous payments from Bitcoin,&rdquo; in <em>Proc. IEEE S&amp;P 2014</em>, 2014, pp. 459&ndash;474.</li>
         <li>[11] V. Buterin, &ldquo;Decentralized Society: Finding Web3&rsquo;s Soul,&rdquo; 2022. [Online]. Available: https://papers.ssrn.com/sol3/papers.cfm?abstract_id=4105763</li>
@@ -1108,16 +1156,31 @@ Ethereum L1 settlement</div>
         <tr><th>Contract</th><th>Address</th></tr>
       </thead>
       <tbody>
-        <tr><td>InstitutionRegistry (Proxy)</td><td><code>0xe7f1725...0512</code></td></tr>
-        <tr><td>CertificateRegistry (Proxy)</td><td><code>0xCf7Ed3...Fc9</code></td></tr>
-        <tr><td>EmployerRegistry (Proxy)</td><td><code>0x5FC8d3...707</code></td></tr>
-        <tr><td>ZKAuthRegistry (Proxy)</td><td><code>0xB7f8BC...53a</code></td></tr>
-        <tr><td>Groth16Verifier</td><td><code>0xa513E6...853</code></td></tr>
+        <tr><td>InstitutionRegistry (Proxy)</td><td><code>0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512</code></td></tr>
+        <tr><td>CertificateRegistry (Proxy)</td><td><code>0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9</code></td></tr>
+        <tr><td>EmployerRegistry (Proxy)</td><td><code>0x5FC8d32690cc91D4c39d9d3abcBD16989F875707</code></td></tr>
+        <tr><td>ZKAuthRegistry (Proxy)</td><td><code>0xB7f8BC63BbcaD18155201308C8f3540b07f84F5e</code></td></tr>
+        <tr><td>VerifierAdapter</td><td><code>0xa513E6E4b8f2a923D98304ec87F64353C4D5C853</code></td></tr>
+      </tbody>
+    </table>
+
+    <table>
+      <caption>TABLE A-II. Contract Addresses &mdash; zkSync Sepolia Testnet (Chain ID&nbsp;300)</caption>
+      <thead>
+        <tr><th>Contract</th><th>Address</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>InstitutionRegistry (Proxy)</td><td><code>0xADA8d4369C8378F42Aaabb76e994cc7AE7d10dcD</code></td></tr>
+        <tr><td>CertificateRegistry (Proxy)</td><td><code>0x9E0d446e913b7F41d6053DAB21b1071AceB688D7</code></td></tr>
+        <tr><td>EmployerRegistry (Proxy)</td><td><code>0xAa8aC288f3aEDb9eca653E03fE1D85bfc9082D38</code></td></tr>
+        <tr><td>ZKAuthRegistry (Proxy)</td><td><code>0x6DB6087B168F0a5d004b1fb6B356c876B93d88f0</code></td></tr>
+        <tr><td>Groth16Verifier</td><td><code>0xB09d476b4583253B5E56A133b92730BE96f8510D</code></td></tr>
+        <tr><td>VerifierAdapter</td><td><code>0x2fDB913Db9f03c9157bBeF184691e9eb75f888Ab</code></td></tr>
       </tbody>
     </table>
     <p style="font-size:9.5pt; color:var(--muted);">
-      zkSync Sepolia (chain ID&nbsp;300) addresses are recorded in
-      <code>contracts/deployments/</code> in the project repository.
+      Deployment timestamp: 2026-05-24T10:51:48 UTC.
+      Deployer: <code>0xEf01b1B33F56607fF932C7E057308acaB0E8C52B</code>.
     </p>
 
     <!-- ─────────────────────────────────────────
@@ -1127,17 +1190,17 @@ Ethereum L1 settlement</div>
     <hr class="section-rule" />
 
     <table>
-      <caption>TABLE B-I. Circuit Signal Specification (<code>zkAuth.circom</code>)</caption>
+      <caption>TABLE B-I. Circuit Signal Specification (<code>auth_login.circom</code>)</caption>
       <thead>
         <tr><th>Signal</th><th>Visibility</th><th>Description</th></tr>
       </thead>
       <tbody>
-        <tr><td><code>sk</code></td><td>Private</td><td>User&rsquo;s 248-bit secret key</td></tr>
-        <tr><td><code>walletAddress</code></td><td>Private</td><td>Ethereum address as BN254 field element</td></tr>
-        <tr><td><code>salt</code></td><td>Private</td><td>Random 254-bit blinding factor</td></tr>
-        <tr><td><code>commitment</code></td><td>Public output</td><td>Poseidon(Poseidon(sk), addr, salt)</td></tr>
+        <tr><td><code>privateKey</code></td><td>Private input</td><td>User&rsquo;s 248-bit secret key</td></tr>
+        <tr><td><code>walletAddress</code></td><td>Private input</td><td>Ethereum address as BN254 field element; binding enforced at contract level via commitment mapping</td></tr>
+        <tr><td><code>salt</code></td><td>Private input</td><td>Random 254-bit blinding factor</td></tr>
+        <tr><td><code>commitment</code></td><td>Public input</td><td>Expected: Poseidon(Poseidon(privateKey), walletAddress, salt); contract supplies from storage</td></tr>
         <tr><td><code>nullifierNonce</code></td><td>Public input</td><td>Fresh 128-bit random nonce per session</td></tr>
-        <tr><td><code>nullifier</code></td><td>Public output</td><td>Poseidon(sk, nullifierNonce)</td></tr>
+        <tr><td><code>nullifier</code></td><td>Public input</td><td>Expected: Poseidon(privateKey, nullifierNonce); checked for uniqueness by contract</td></tr>
       </tbody>
     </table>
 
