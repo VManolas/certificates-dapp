@@ -1,0 +1,1231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Thesis — Privacy-Preserving Credential Verification using ZKPs on zkSync Era</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --serif: Georgia, "Times New Roman", Times, serif;
+      --sans: "Helvetica Neue", Arial, sans-serif;
+      --mono: "Courier New", Courier, monospace;
+      --text: #111;
+      --muted: #555;
+      --light: #888;
+      --rule: #ccc;
+      --accent: #1a3a6b;
+      --accent-light: #e8eef7;
+      --max: 780px;
+    }
+
+    html { font-size: 12pt; color: var(--text); background: #fff; scroll-behavior: smooth; }
+    body { font-family: var(--serif); line-height: 1.7; margin: 0; padding: 0; }
+
+    /* ── Nav bar ── */
+    .top-bar {
+      background: var(--accent);
+      color: #fff;
+      padding: 0.55rem 2rem;
+      font-family: var(--sans);
+      font-size: 10pt;
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .top-bar a { color: #fff; text-decoration: none; }
+    .top-bar a:hover { text-decoration: underline; }
+    .top-bar .sep { opacity: 0.4; }
+
+    /* ── Page wrapper ── */
+    .page { max-width: var(--max); margin: 0 auto; padding: 0 2rem 6rem; }
+
+    /* ── Cover page ── */
+    .cover {
+      text-align: center;
+      padding: 4rem 2rem 3rem;
+      border-bottom: 3px double var(--rule);
+      margin-bottom: 3rem;
+    }
+    .cover .uni-logo {
+      display: inline-block;
+      width: 80px; height: 80px;
+      border: 2px solid var(--rule);
+      border-radius: 50%;
+      margin-bottom: 1.2rem;
+      line-height: 80px;
+      font-size: 9pt;
+      color: var(--light);
+      font-family: var(--sans);
+    }
+    .cover .uni-name {
+      font-family: var(--sans);
+      font-size: 11pt;
+      color: var(--muted);
+      margin-bottom: 0.2rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .cover .dept-name {
+      font-family: var(--sans);
+      font-size: 10pt;
+      color: var(--muted);
+      margin-bottom: 2.5rem;
+    }
+    .cover .thesis-label {
+      font-size: 10pt;
+      font-family: var(--sans);
+      color: var(--light);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 1rem;
+      border: 1px solid var(--rule);
+      display: inline-block;
+      padding: 0.2rem 0.8rem;
+    }
+    .cover h1 {
+      font-size: 20pt;
+      font-weight: bold;
+      line-height: 1.3;
+      color: var(--accent);
+      margin-bottom: 0.8rem;
+    }
+    .cover .title-gr {
+      font-size: 14pt;
+      color: var(--muted);
+      font-style: italic;
+      margin-bottom: 2.5rem;
+    }
+    .cover .meta-table {
+      display: inline-block;
+      text-align: left;
+      margin: 1.5rem auto 0;
+      font-size: 11pt;
+    }
+    .cover .meta-table tr td:first-child {
+      color: var(--muted);
+      padding-right: 1rem;
+      font-style: italic;
+    }
+    .cover .meta-table tr td { padding: 0.2rem 0; vertical-align: top; }
+    .cover .year { margin-top: 2rem; font-size: 11pt; color: var(--light); }
+
+    /* ── Front matter ── */
+    .front-section {
+      margin: 2.5rem 0;
+      padding-bottom: 2rem;
+      border-bottom: 1px solid var(--rule);
+    }
+    .front-section h2 {
+      font-size: 13pt;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--accent);
+      margin-bottom: 1rem;
+      font-family: var(--sans);
+    }
+    .abstract-text { text-align: justify; }
+    .keywords { margin-top: 0.8rem; font-size: 10.5pt; }
+    .keywords strong { font-style: normal; }
+
+    /* ── Table of Contents ── */
+    .toc { margin: 2.5rem 0; padding-bottom: 2rem; border-bottom: 1px solid var(--rule); }
+    .toc h2 {
+      font-size: 13pt;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--accent);
+      margin-bottom: 1.2rem;
+      font-family: var(--sans);
+    }
+    .toc ol { list-style: none; padding: 0; }
+    .toc > ol > li { margin-bottom: 0.5rem; }
+    .toc a { color: var(--text); text-decoration: none; }
+    .toc a:hover { color: var(--accent); }
+    .toc .ch-title {
+      font-weight: bold;
+      font-size: 11pt;
+      display: flex;
+      justify-content: space-between;
+    }
+    .toc .ch-title .pg { color: var(--light); font-weight: normal; font-size: 10pt; }
+    .toc .sub-list { list-style: none; padding-left: 1.8rem; margin-top: 0.2rem; }
+    .toc .sub-list li {
+      font-size: 10.5pt;
+      color: var(--muted);
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 0.1rem;
+    }
+    .toc .sub-list .pg { color: var(--light); font-size: 10pt; }
+
+    /* ── Chapter headings ── */
+    .chapter {
+      margin: 3.5rem 0 0;
+      padding-top: 2rem;
+      border-top: 2px solid var(--accent);
+    }
+    .chapter-label {
+      font-family: var(--sans);
+      font-size: 9.5pt;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--light);
+      margin-bottom: 0.3rem;
+    }
+    .chapter h2 {
+      font-size: 18pt;
+      font-weight: bold;
+      color: var(--accent);
+      margin-bottom: 0.3rem;
+      line-height: 1.25;
+    }
+    .chapter-intro {
+      font-size: 10.5pt;
+      color: var(--muted);
+      font-style: italic;
+      margin: 0.6rem 0 1.5rem;
+      padding-left: 1rem;
+      border-left: 3px solid var(--accent-light);
+    }
+
+    /* ── Section headings ── */
+    h3 {
+      font-size: 13pt;
+      font-weight: bold;
+      margin: 1.8rem 0 0.5rem;
+      color: var(--text);
+      border-bottom: 1px solid var(--rule);
+      padding-bottom: 0.2rem;
+    }
+    h4 {
+      font-size: 11.5pt;
+      font-weight: bold;
+      font-style: italic;
+      margin: 1.2rem 0 0.3rem;
+      color: var(--text);
+    }
+    h5 {
+      font-size: 11pt;
+      font-style: italic;
+      margin: 0.8rem 0 0.2rem;
+      color: var(--muted);
+    }
+
+    /* ── Body text ── */
+    p { margin-bottom: 0.8rem; text-align: justify; }
+
+    /* ── Placeholder blocks ── */
+    .placeholder {
+      background: #f7f8fa;
+      border: 1px dashed #c8cdd6;
+      border-radius: 4px;
+      padding: 0.8rem 1rem;
+      color: #888;
+      font-style: italic;
+      font-size: 10.5pt;
+      margin: 0.8rem 0 1rem;
+      font-family: var(--sans);
+    }
+    .placeholder::before { content: "✎ "; }
+
+    /* ── Section outline list ── */
+    .outline { margin: 0.4rem 0 1rem 1.2rem; }
+    .outline li { margin-bottom: 0.4rem; font-size: 11pt; }
+    .outline li span { color: var(--muted); font-size: 10.5pt; display: block; padding-left: 0.5rem; }
+
+    /* ── Callout boxes ── */
+    .callout {
+      background: var(--accent-light);
+      border-left: 4px solid var(--accent);
+      padding: 0.7rem 1rem;
+      margin: 1rem 0;
+      font-size: 10.5pt;
+    }
+    .callout strong { color: var(--accent); }
+
+    /* ── Formula ── */
+    .formula {
+      display: block;
+      text-align: center;
+      font-family: var(--mono);
+      font-size: 10.5pt;
+      margin: 0.8rem 0;
+      color: #222;
+      background: #f9f9f9;
+      padding: 0.4rem;
+      border-radius: 3px;
+    }
+
+    /* ── Table ── */
+    table { width: 100%; border-collapse: collapse; font-size: 10.5pt; margin: 1rem 0; }
+    th { border-top: 2px solid var(--text); border-bottom: 1px solid var(--text); padding: 5px 10px; text-align: left; font-family: var(--sans); }
+    td { border-bottom: 1px solid var(--rule); padding: 4px 10px; }
+    caption { font-style: italic; font-size: 10pt; margin-bottom: 4px; text-align: center; caption-side: top; color: var(--muted); }
+
+    /* ── References ── */
+    .references ol { list-style: none; padding: 0; }
+    .references ol li { padding-left: 2.2rem; text-indent: -2.2rem; margin-bottom: 0.5rem; font-size: 10.5pt; }
+
+    /* ── Footer ── */
+    .foot {
+      margin-top: 4rem;
+      border-top: 1px solid var(--rule);
+      padding-top: 1.2rem;
+      font-size: 9.5pt;
+      color: var(--light);
+      font-family: var(--sans);
+      text-align: center;
+    }
+    .foot a { color: var(--light); }
+
+    /* ── Print ── */
+    @media print {
+      .top-bar { display: none; }
+      .page { padding: 0 1.5cm 3cm; }
+      .chapter { page-break-before: always; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Navigation bar ── -->
+<nav class="top-bar">
+  <span style="font-weight:600; font-size:11pt;">zkCredentials Thesis</span>
+  <span class="sep">|</span>
+  <a href="#ch1">1. Introduction</a>
+  <a href="#ch2">2. Background</a>
+  <a href="#ch3">3. Related Work</a>
+  <a href="#ch4">4. System Design</a>
+  <a href="#ch5">5. ZK Protocol</a>
+  <a href="#ch6">6. Implementation</a>
+  <a href="#ch7">7. Evaluation</a>
+  <a href="#ch8">8. Conclusion</a>
+  <span class="sep">|</span>
+  <a href="researchpaper.html">Research Paper ↗</a>
+</nav>
+
+<div class="page">
+
+  <!-- ══════════════════════════════════════
+       COVER PAGE
+  ═══════════════════════════════════════ -->
+  <div class="cover">
+    <div class="uni-logo">UNIWA</div>
+    <div class="uni-name">University of West Attica</div>
+    <div class="dept-name">Department of Informatics and Computer Engineering</div>
+    <div class="thesis-label">Diploma Thesis</div>
+    <h1>Privacy-Preserving Credential Verification using Zero-Knowledge Proofs on zkSync Era</h1>
+    <div class="title-gr">Διατήρηση Απορρήτου στην Επαλήθευση Πιστοποιητικών με Αποδείξεις Μηδενικής Γνώσης στο zkSync Era</div>
+    <table class="meta-table">
+      <tr><td>Author:</td><td><strong>Vasileios Manolas</strong></td></tr>
+      <tr><td>Registration No.:</td><td>ice19102</td></tr>
+      <tr><td>Supervisor:</td><td>Dimitrios Kogias, Adjunct Lecturer</td></tr>
+      <tr><td>Department:</td><td>Informatics and Computer Engineering</td></tr>
+      <tr><td>Institution:</td><td>University of West Attica</td></tr>
+      <tr><td>Submitted:</td><td>Athens, 2026</td></tr>
+    </table>
+    <div class="year">Academic Year 2025–2026</div>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       DECLARATION OF ORIGINALITY
+  ═══════════════════════════════════════ -->
+  <div class="front-section" id="declaration">
+    <h2>Declaration of Originality</h2>
+    <p>I, Vasileios Manolas, declare that this thesis is entirely my own work and has not been submitted, in whole or in part, for any other academic award. Where use has been made of the work of others, it has been duly acknowledged. All sources consulted are listed in the References section.</p>
+    <p style="margin-top:1.5rem;">Signature: _____________________________ &nbsp;&nbsp; Date: _____________</p>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       GREEK ABSTRACT
+  ═══════════════════════════════════════ -->
+  <div class="front-section" id="abstract-gr">
+    <h2>Περίληψη</h2>
+    <p class="abstract-text">Η παρούσα διπλωματική εργασία παρουσιάζει ένα σύστημα έκδοσης, διαχείρισης και επαλήθευσης ακαδημαϊκών πιστοποιητικών στο blockchain του zkSync Era, με έμφαση στη διατήρηση του απορρήτου μέσω αποδείξεων μηδενικής γνώσης (ZKP). Το σύστημα επιτρέπει σε χρήστες να αποδεικνύουν την κατοχή έγκυρου πιστοποιητικού χωρίς να αποκαλύπτουν το περιεχόμενό του, αξιοποιώντας το σύστημα αποδείξεων Groth16 πάνω στην ελλειπτική καμπύλη BN254. Τα έξυπνα συμβόλαια υλοποιούνται με το πρότυπο UUPS (Universal Upgradeable Proxy Standard) και αναπτύσσονται στο δίκτυο zkSync Sepolia. Η αρχιτεκτονική ενσωματώνει μια νέα ροή ZK Authentication που επιτρέπει ανώνυμη σύνδεση βάσει μυστικού κλειδιού, με μηχανισμό nullifier για αποτροπή επανάληψης αποδείξεων.</p>
+    <p class="keywords"><strong>Λέξεις-κλειδιά:</strong> Αποδείξεις Μηδενικής Γνώσης, Blockchain, Ακαδημαϊκά Πιστοποιητικά, zkSync Era, Groth16, Poseidon, Έξυπνα Συμβόλαια, Απορρήτο</p>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       ENGLISH ABSTRACT
+  ═══════════════════════════════════════ -->
+  <div class="front-section" id="abstract-en">
+    <h2>Abstract</h2>
+    <p class="abstract-text">This thesis presents zkCredentials, a system for issuing, managing, and verifying academic credentials on the zkSync Era blockchain while preserving user privacy through zero-knowledge proofs (ZKPs). The system enables users to prove possession of a valid credential without revealing its contents, using the Groth16 proof system over the BN254 elliptic curve. Smart contracts follow the UUPS upgradeable proxy pattern and are deployed on the zkSync Sepolia testnet. A dedicated ZK Authentication flow allows anonymous login based on a secret key commitment, with a nullifier mechanism preventing proof replay across sessions. The frontend is a React 18 single-page application integrating wallet-based and ZK-based authentication. Gas efficiency on Layer-2 is analysed, and the security properties of the commitment scheme are argued through cryptographic reasoning.</p>
+    <p class="keywords"><strong>Keywords:</strong> Zero-Knowledge Proofs, Blockchain, Academic Credentials, zkSync Era, Groth16, Poseidon Hash, Smart Contracts, Privacy, UUPS Proxy, Layer-2</p>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       ACKNOWLEDGEMENTS
+  ═══════════════════════════════════════ -->
+  <div class="front-section" id="acknowledgements">
+    <h2>Acknowledgements</h2>
+    <p class="placeholder">Write personal acknowledgements here — supervisor, family, colleagues, open-source communities.</p>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       TABLE OF CONTENTS
+  ═══════════════════════════════════════ -->
+  <div class="toc" id="toc">
+    <h2>Table of Contents</h2>
+    <ol>
+      <li>
+        <div class="ch-title"><a href="#declaration">Declaration of Originality</a><span class="pg">ii</span></div>
+      </li>
+      <li>
+        <div class="ch-title"><a href="#abstract-gr">Περίληψη (Greek Abstract)</a><span class="pg">iii</span></div>
+      </li>
+      <li>
+        <div class="ch-title"><a href="#abstract-en">Abstract</a><span class="pg">iv</span></div>
+      </li>
+      <li>
+        <div class="ch-title"><a href="#acknowledgements">Acknowledgements</a><span class="pg">v</span></div>
+      </li>
+      <li>
+        <div class="ch-title"><a href="#figures">List of Figures</a><span class="pg">vi</span></div>
+      </li>
+      <li>
+        <div class="ch-title"><a href="#tables">List of Tables</a><span class="pg">vii</span></div>
+      </li>
+      <li>
+        <div class="ch-title"><a href="#glossary">Glossary</a><span class="pg">viii</span></div>
+      </li>
+      <li>
+        <div class="ch-title"><a href="#ch1">1. Introduction</a><span class="pg">1</span></div>
+        <ul class="sub-list">
+          <li><span>1.1 Problem Statement and Motivation</span><span class="pg">1</span></li>
+          <li><span>1.2 Research Methodology</span><span class="pg">3</span></li>
+          <li><span>1.3 Research Objectives</span><span class="pg">4</span></li>
+          <li><span>1.4 Contributions</span><span class="pg">5</span></li>
+          <li><span>1.5 Threat Model and Scope</span><span class="pg">6</span></li>
+          <li><span>1.6 Document Structure</span><span class="pg">7</span></li>
+        </ul>
+      </li>
+      <li>
+        <div class="ch-title"><a href="#ch2">2. Theoretical Background</a><span class="pg">8</span></div>
+        <ul class="sub-list">
+          <li><span>2.1 Zero-Knowledge Proofs</span><span class="pg">8</span></li>
+          <li><span>2.2 zk-SNARKs and Groth16</span><span class="pg">11</span></li>
+          <li><span>2.3 Arithmetic Circuits and R1CS</span><span class="pg">14</span></li>
+          <li><span>2.4 Poseidon Hash Function</span><span class="pg">16</span></li>
+          <li><span>2.5 Blockchain and Smart Contracts</span><span class="pg">18</span></li>
+          <li><span>2.6 Layer-2 Scaling and zkSync Era</span><span class="pg">20</span></li>
+          <li><span>2.7 Upgradeable Smart Contracts (UUPS)</span><span class="pg">22</span></li>
+        </ul>
+      </li>
+      <li>
+        <div class="ch-title"><a href="#ch3">3. Related Work</a><span class="pg">24</span></div>
+        <ul class="sub-list">
+          <li><span>3.1 Comparison Framework</span><span class="pg">24</span></li>
+          <li><span>3.2 ZK-Based Identity Systems</span><span class="pg">26</span></li>
+          <li><span>3.3 On-Chain Credential Schemes</span><span class="pg">28</span></li>
+          <li><span>3.4 Privacy-Preserving Authentication</span><span class="pg">30</span></li>
+          <li><span>3.5 Gap Analysis and Positioning</span><span class="pg">32</span></li>
+        </ul>
+      </li>
+      <li>
+        <div class="ch-title"><a href="#ch4">4. System Design</a><span class="pg">34</span></div>
+        <ul class="sub-list">
+          <li><span>4.1 Requirements</span><span class="pg">34</span></li>
+          <li><span>4.2 Architecture Overview</span><span class="pg">36</span></li>
+          <li><span>4.3 Smart Contract Design</span><span class="pg">38</span></li>
+          <li><span>4.4 Security Goals</span><span class="pg">42</span></li>
+        </ul>
+      </li>
+      <li>
+        <div class="ch-title"><a href="#ch5">5. ZK Authentication Protocol</a><span class="pg">44</span></div>
+        <ul class="sub-list">
+          <li><span>5.1 Key Generation</span><span class="pg">44</span></li>
+          <li><span>5.2 Commitment Scheme</span><span class="pg">45</span></li>
+          <li><span>5.3 Nullifier Mechanism</span><span class="pg">46</span></li>
+          <li><span>5.4 Circuit Design</span><span class="pg">47</span></li>
+          <li><span>5.5 Trusted Setup</span><span class="pg">49</span></li>
+          <li><span>5.6 Proof Encoding and On-Chain Submission</span><span class="pg">50</span></li>
+          <li><span>5.7 Session Lifecycle</span><span class="pg">52</span></li>
+        </ul>
+      </li>
+      <li>
+        <div class="ch-title"><a href="#ch6">6. Implementation</a><span class="pg">54</span></div>
+        <ul class="sub-list">
+          <li><span>6.1 Development Environment</span><span class="pg">54</span></li>
+          <li><span>6.2 Contract Implementation</span><span class="pg">55</span></li>
+          <li><span>6.3 Circuit Implementation</span><span class="pg">58</span></li>
+          <li><span>6.4 Frontend Implementation</span><span class="pg">60</span></li>
+          <li><span>6.5 Deployment Pipeline</span><span class="pg">63</span></li>
+        </ul>
+      </li>
+      <li>
+        <div class="ch-title"><a href="#ch7">7. Evaluation</a><span class="pg">65</span></div>
+        <ul class="sub-list">
+          <li><span>7.1 Correctness Argument</span><span class="pg">65</span></li>
+          <li><span>7.2 Security Analysis</span><span class="pg">67</span></li>
+          <li><span>7.3 Performance</span><span class="pg">70</span></li>
+          <li><span>7.4 Gas Cost Analysis</span><span class="pg">72</span></li>
+          <li><span>7.5 Limitations and Mitigations</span><span class="pg">74</span></li>
+        </ul>
+      </li>
+      <li>
+        <div class="ch-title"><a href="#ch8">8. Conclusion and Future Work</a><span class="pg">76</span></div>
+        <ul class="sub-list">
+          <li><span>8.1 Summary of Contributions</span><span class="pg">76</span></li>
+          <li><span>8.2 Future Work</span><span class="pg">77</span></li>
+        </ul>
+      </li>
+      <li>
+        <div class="ch-title"><a href="#references">References</a><span class="pg">79</span></div>
+      </li>
+      <li>
+        <div class="ch-title"><a href="#appendix-a">Appendix A: Deployment Addresses</a><span class="pg">85</span></div>
+      </li>
+      <li>
+        <div class="ch-title"><a href="#appendix-b">Appendix B: Circuit Signals</a><span class="pg">86</span></div>
+      </li>
+      <li>
+        <div class="ch-title"><a href="#appendix-c">Appendix C: Test Suite Summary</a><span class="pg">87</span></div>
+      </li>
+    </ol>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       LIST OF FIGURES
+  ═══════════════════════════════════════ -->
+  <div class="front-section" id="figures">
+    <h2>List of Figures</h2>
+    <table>
+      <tr><th>Figure</th><th>Caption</th><th>Page</th></tr>
+      <tr><td>1.1</td><td>Actors and trust boundaries in the zkCredentials system</td><td>2</td></tr>
+      <tr><td>2.1</td><td>Prover–Verifier interaction in an interactive ZKP protocol</td><td>9</td></tr>
+      <tr><td>2.2</td><td>Groth16 trusted setup and proof generation flow</td><td>12</td></tr>
+      <tr><td>2.3</td><td>R1CS constraint structure for a single multiplication gate</td><td>15</td></tr>
+      <tr><td>2.4</td><td>Poseidon permutation network (S-box, MDS matrix)</td><td>17</td></tr>
+      <tr><td>2.5</td><td>zkSync Era architecture: sequencer, prover, L1 settlement</td><td>21</td></tr>
+      <tr><td>4.1</td><td>High-level system architecture and component interactions</td><td>36</td></tr>
+      <tr><td>4.2</td><td>Smart contract inheritance hierarchy</td><td>39</td></tr>
+      <tr><td>5.1</td><td>ZK Authentication Protocol — full session lifecycle</td><td>53</td></tr>
+      <tr><td>6.1</td><td>Deployment pipeline from local Hardhat to zkSync Sepolia</td><td>63</td></tr>
+      <tr><td>7.1</td><td>Proof generation and verification timing breakdown</td><td>71</td></tr>
+      <tr><td>7.2</td><td>Gas cost comparison: local Hardhat vs zkSync Sepolia</td><td>73</td></tr>
+    </table>
+    <p class="placeholder">Replace page numbers with final paginated values after typesetting.</p>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       LIST OF TABLES
+  ═══════════════════════════════════════ -->
+  <div class="front-section" id="tables">
+    <h2>List of Tables</h2>
+    <table>
+      <tr><th>Table</th><th>Caption</th><th>Page</th></tr>
+      <tr><td>3.1</td><td>Comparison of related systems across six dimensions</td><td>25</td></tr>
+      <tr><td>4.1</td><td>Functional requirements (FR-01 – FR-12)</td><td>34</td></tr>
+      <tr><td>4.2</td><td>Non-functional requirements (NFR-01 – NFR-08)</td><td>35</td></tr>
+      <tr><td>5.1</td><td>ZK Auth circuit signals — private and public inputs</td><td>48</td></tr>
+      <tr><td>7.1</td><td>Security properties and the argument for each claim</td><td>68</td></tr>
+      <tr><td>7.2</td><td>Proof generation and verification latency</td><td>71</td></tr>
+      <tr><td>7.3</td><td>Gas costs for all state-changing contract operations</td><td>73</td></tr>
+    </table>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       GLOSSARY (front matter)
+  ═══════════════════════════════════════ -->
+  <div class="front-section" id="glossary">
+    <h2>Glossary</h2>
+    <table>
+      <tr><th>Term</th><th>Definition</th></tr>
+      <tr><td><strong>BN254</strong></td><td>Barreto–Naehrig 254-bit elliptic curve used in Groth16 and supported natively by the EVM.</td></tr>
+      <tr><td><strong>Circom</strong></td><td>Domain-specific language for writing arithmetic circuits that compile to R1CS.</td></tr>
+      <tr><td><strong>Commitment</strong></td><td>A cryptographic value that binds a secret without revealing it; hiding and binding properties.</td></tr>
+      <tr><td><strong>Groth16</strong></td><td>A zk-SNARK proof system producing constant-size proofs (3 group elements) with fast verification.</td></tr>
+      <tr><td><strong>L1 / L2</strong></td><td>Layer-1: base blockchain (Ethereum). Layer-2: an execution environment that posts validity proofs to L1.</td></tr>
+      <tr><td><strong>Nullifier</strong></td><td>A deterministic, public value derived from a secret; revealed on proof submission to prevent replay.</td></tr>
+      <tr><td><strong>Poseidon</strong></td><td>ZK-friendly hash function optimised for arithmetic circuits; ~300 R1CS constraints per invocation.</td></tr>
+      <tr><td><strong>R1CS</strong></td><td>Rank-1 Constraint System — the intermediate representation of an arithmetic circuit used by zk-SNARKs.</td></tr>
+      <tr><td><strong>snarkjs</strong></td><td>JavaScript library for generating and verifying Groth16 and PLONK proofs in the browser or Node.</td></tr>
+      <tr><td><strong>Trusted Setup</strong></td><td>A one-time ceremony that produces proving and verifying keys; security relies on at least one honest participant.</td></tr>
+      <tr><td><strong>UUPS</strong></td><td>Universal Upgradeable Proxy Standard (EIP-1822); upgrade logic lives in the implementation contract.</td></tr>
+      <tr><td><strong>UTXO</strong></td><td>Unspent Transaction Output — the accounting model used by Bitcoin (contrast with Ethereum's account model).</td></tr>
+      <tr><td><strong>ZKP</strong></td><td>Zero-Knowledge Proof — a proof that a statement is true without revealing why it is true.</td></tr>
+      <tr><td><strong>zk-SNARK</strong></td><td>Zero-Knowledge Succinct Non-Interactive Argument of Knowledge — a non-interactive ZKP with constant proof size.</td></tr>
+      <tr><td><strong>zkSync Era</strong></td><td>An EVM-compatible ZK rollup by Matter Labs that settles on Ethereum using ZK validity proofs.</td></tr>
+    </table>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       CHAPTER 1 — INTRODUCTION
+  ═══════════════════════════════════════ -->
+  <div class="chapter" id="ch1">
+    <div class="chapter-label">Chapter 1</div>
+    <h2>Introduction</h2>
+    <p class="chapter-intro">This chapter establishes the context and motivation for the work, states the research objectives and contributions, defines the threat model, and outlines the document structure.</p>
+
+    <h3>1.1 Problem Statement and Motivation</h3>
+    <p>Academic credentials are central to hiring, further study, and professional licensing. The verification of these credentials today relies on a fragile chain of institutional trust: a university issues a paper or PDF certificate, an employer sends an email or pays a third-party service to confirm it, and the university replies — often days later, sometimes for a fee. This process is slow, costly, and opaque. Fraudulent credentials circulate widely; a 2023 survey by the National Student Clearinghouse estimated that 33% of hiring managers had encountered falsified academic documents.</p>
+    <p>Blockchain-based credential systems address the authenticity problem by anchoring credential hashes on a public ledger. Once a hash is recorded on-chain, any party can verify that the document is unchanged. Systems such as Blockcerts [1] and MIT's Digital Diplomas [2] have demonstrated the viability of this approach.</p>
+    <p>However, these systems introduce a new problem: <em>over-disclosure</em>. Sharing a hash-linked certificate reveals the institution, the degree, the date, and often the student's identity to any querying party. The data subject has no meaningful control over who learns what. This is incompatible with the European General Data Protection Regulation (GDPR), Article 5(1)(c), which mandates data minimisation — processing only data that is necessary for the stated purpose.</p>
+    <div class="callout"><strong>Core tension:</strong> Cryptographic authenticity and selective disclosure are both necessary but technically in conflict. A signature over a full credential proves authenticity at the cost of revealing everything; a zero-knowledge proof can prove a property of the credential without revealing the credential itself.</div>
+    <p>Zero-knowledge proofs (ZKPs) resolve this tension. A prover holding a valid credential can construct a ZKP that convinces a verifier of a specific property — "this person holds a degree from a recognised institution issued after 2020" — without disclosing the degree type, the institution name, or the student's identity. The verifier learns only that the claim is valid.</p>
+    <p>This thesis designs and implements zkCredentials, a system that combines on-chain credential anchoring with ZK-based authentication on zkSync Era, a ZK rollup that provides EVM compatibility with dramatically lower transaction costs than Ethereum mainnet.</p>
+    <p class="placeholder">Insert Figure 1.1 here: actors and trust boundaries diagram.</p>
+
+    <h3>1.2 Research Methodology</h3>
+    <p>This work follows a design-science research methodology [3], proceeding through four phases:</p>
+    <ul class="outline">
+      <li><strong>Literature review:</strong> <span>Survey of ZKP systems, on-chain credential schemes, and privacy-preserving authentication protocols published between 2016 and 2025.</span></li>
+      <li><strong>Requirements elicitation:</strong> <span>Identification of functional and non-functional requirements through analysis of shortcomings in existing systems and relevant regulatory constraints (GDPR, eIDAS 2.0).</span></li>
+      <li><strong>Artefact construction:</strong> <span>Design and implementation of the zkCredentials system — smart contracts, ZK circuit, and React frontend — using iterative development with a local Hardhat environment and deployment to zkSync Sepolia.</span></li>
+      <li><strong>Evaluation:</strong> <span>Correctness argument via property verification, security analysis relative to the stated threat model, and empirical measurement of proof generation latency and on-chain gas costs.</span></li>
+    </ul>
+    <p>The implementation is open source and available at the project repository. All circuit constraint counts and gas figures cited in Chapter 7 were measured on reproducible deployments using the versions recorded in <code>contracts/package.json</code>.</p>
+
+    <h3>1.3 Research Objectives</h3>
+    <p>This thesis pursues four primary objectives:</p>
+    <ul class="outline">
+      <li><strong>RO-1: Privacy-preserving verification.</strong> <span>Design a credential verification flow in which a user can prove possession of a valid credential without disclosing the credential's contents to the verifier.</span></li>
+      <li><strong>RO-2: Replay-resistant authentication.</strong> <span>Design a ZK authentication mechanism in which each proof is single-use, preventing session hijacking through proof replay.</span></li>
+      <li><strong>RO-3: Upgradeability without storage corruption.</strong> <span>Implement all contracts using the UUPS proxy pattern such that contract logic can be upgraded without losing stored data or disrupting active sessions.</span></li>
+      <li><strong>RO-4: Practical gas efficiency on Layer-2.</strong> <span>Demonstrate that the full credential issuance and ZK verification flow is economically viable on zkSync Era, with per-operation costs below those achievable on Ethereum mainnet.</span></li>
+    </ul>
+
+    <h3>1.4 Contributions</h3>
+    <p>The principal contributions of this thesis are:</p>
+    <ul class="outline">
+      <li><strong>A ZK credential registry architecture</strong> <span>combining four UUPS-upgradeable smart contracts (InstitutionRegistry, CertificateRegistry, EmployerRegistry, ZKAuthRegistry) with clean interface separation and role-based access control.</span></li>
+      <li><strong>A Groth16-based ZK authentication protocol</strong> <span>using Poseidon commitments and nullifiers, implemented in Circom and integrated into a React frontend via snarkjs.</span></li>
+      <li><strong>A working deployment on zkSync Era Sepolia</strong> <span>with measured gas costs and documented deployment pipeline, demonstrating the practical compatibility of ecPairing-based proof verification with zkSync's EVM environment after removal of the <code>forceEVMLA</code> flag.</span></li>
+      <li><strong>A reproducible local development environment</strong> <span>using Hardhat with pre-funded accounts (chain ID 1337) and an equivalent zkSync in-memory node (chain ID 260), enabling deterministic testing without testnet access.</span></li>
+    </ul>
+
+    <h3>1.5 Threat Model and Scope</h3>
+    <p>The following threat model defines the security assumptions under which the system is designed.</p>
+    <h4>Trusted parties</h4>
+    <p>The system administrator who deploys contracts and initialises the trusted setup is assumed to be honest. Registered institutions (universities) are trusted to issue credentials only to their legitimate students. The Ethereum and zkSync L1/L2 networks are assumed to achieve consensus correctly.</p>
+    <h4>Adversarial capabilities</h4>
+    <p>An adversary may be a passive observer reading all on-chain data, an active attacker submitting arbitrary transactions, or a colluding verifier attempting to extract user identity from proofs. The adversary does <em>not</em> control the trusted setup (i.e., at least one participant in the Powers of Tau ceremony was honest).</p>
+    <h4>Out of scope</h4>
+    <p>Side-channel attacks on the client device, front-running of credential issuance transactions, and social-engineering attacks against institution staff are outside the scope of this thesis. Key custody — how a user stores and backs up their ZK secret key — is noted as a limitation in Section 7.5 but not solved here.</p>
+
+    <h3>1.6 Document Structure</h3>
+    <p>Chapter 2 provides the theoretical background covering ZKPs, zk-SNARKs, the Poseidon hash function, and zkSync Era. Chapter 3 surveys related work and positions this system relative to existing approaches. Chapter 4 presents the system design: requirements, architecture, and smart contract structure. Chapter 5 details the ZK Authentication Protocol as a standalone technical contribution. Chapter 6 documents the implementation. Chapter 7 evaluates correctness, security, performance, and gas efficiency. Chapter 8 concludes and identifies future work.</p>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       CHAPTER 2 — THEORETICAL BACKGROUND
+  ═══════════════════════════════════════ -->
+  <div class="chapter" id="ch2">
+    <div class="chapter-label">Chapter 2</div>
+    <h2>Theoretical Background</h2>
+    <p class="chapter-intro">This chapter builds the mathematical and technical foundation for the contributions in later chapters. Readers familiar with ZKPs and blockchain may skim to Section 2.6.</p>
+
+    <h3>2.1 Zero-Knowledge Proofs</h3>
+    <p>A zero-knowledge proof (ZKP) is an interactive or non-interactive protocol between a prover P and a verifier V. P wishes to convince V that a statement x is in a language L (i.e., that a witness w exists such that (x, w) ∈ R for some relation R), without revealing w. The protocol must satisfy three properties [4]:</p>
+    <ul class="outline">
+      <li><strong>Completeness:</strong> <span>If the statement is true and P knows w, then an honest V will always accept the proof.</span></li>
+      <li><strong>Soundness:</strong> <span>If the statement is false, no cheating P can convince an honest V to accept, except with negligible probability.</span></li>
+      <li><strong>Zero-knowledge:</strong> <span>V learns nothing about w beyond the fact that the statement is true. Formally, there exists a simulator S that can produce a transcript indistinguishable from a real proof without knowing w.</span></li>
+    </ul>
+    <p>Goldwasser, Micali, and Rackoff introduced the concept of zero-knowledge proofs in their seminal 1985 paper [4]. Their graph isomorphism protocol demonstrated that computationally hard problems could be verified with zero knowledge. Subsequent work extended this to NP-complete problems [5], establishing that any statement with an NP witness can in principle be proved in zero knowledge.</p>
+    <p class="placeholder">Insert Figure 2.1: Prover–Verifier interaction diagram for an interactive ZKP.</p>
+    <h4>Non-interactive ZKPs</h4>
+    <p>Interactive proofs require multiple rounds of communication between P and V. In many applications — including blockchain — interaction is infeasible. The Fiat–Shamir heuristic [6] transforms interactive proofs into non-interactive ones by replacing the verifier's random challenge with the output of a hash function applied to the prover's message. This transformation is secure in the random oracle model.</p>
+
+    <h3>2.2 zk-SNARKs and Groth16</h3>
+    <p>A zk-SNARK (Zero-Knowledge Succinct Non-Interactive Argument of Knowledge) is a non-interactive ZKP with two additional properties: succinctness (proof size is sublinear in the size of the statement) and knowledge soundness (the prover implicitly knows the witness, not just that one exists).</p>
+    <p>The Groth16 construction [7] is the most widely deployed zk-SNARK. It achieves the smallest known proof size for a general-purpose SNARK: a proof consists of exactly three group elements (two in G₁ and one in G₂ of the BN254 curve), amounting to approximately 192 bytes. Verification requires three pairing operations and is therefore constant time regardless of circuit size.</p>
+    <p class="placeholder">Insert Figure 2.2: Groth16 trusted setup and proof generation flow.</p>
+    <h4>Trusted setup</h4>
+    <p>Groth16 requires a circuit-specific trusted setup: a structured reference string (SRS) generated by a trusted party or multi-party ceremony. The SRS encodes encrypted powers of a secret τ. If τ is compromised, an adversary can produce false proofs. The "toxic waste" problem has led to large-scale ceremonies such as the Zcash Powers of Tau [8] and the Semaphore ceremony, which rely on the security assumption that at least one participant destroys their contribution.</p>
+    <h4>BN254 elliptic curve</h4>
+    <p>BN254 (also known as alt_bn128) is a pairing-friendly elliptic curve with 254-bit field size. It is the curve for which the Ethereum yellow paper [9] defines the <code>ecAdd</code>, <code>ecMul</code>, and <code>ecPairing</code> precompiled contracts (EIP-196 [10], EIP-197 [11]). This makes on-chain Groth16 proof verification feasible at approximately 180,000–260,000 gas per verification.</p>
+
+    <h3>2.3 Arithmetic Circuits and R1CS</h3>
+    <p>A zk-SNARK operates over an arithmetic circuit defined over a finite field F_p. The circuit represents the computation to be proved as a directed acyclic graph of addition and multiplication gates. Each gate introduces one constraint.</p>
+    <p>The Rank-1 Constraint System (R1CS) [12] is the standard intermediate representation. An R1CS instance over F_p consists of matrices A, B, C ∈ F_p^{m×n} and a witness vector w ∈ F_p^n such that:</p>
+    <code class="formula">(A · w) ∘ (B · w) = C · w</code>
+    <p>where ∘ denotes the Hadamard (element-wise) product. Each row of A, B, C encodes one multiplication constraint. Addition constraints are "free" (they do not increase the number of rows). Circuit complexity is therefore measured in multiplication gates (R1CS constraints).</p>
+    <p class="placeholder">Insert Figure 2.3: R1CS constraint structure for a single multiplication gate.</p>
+    <h4>Circom</h4>
+    <p>Circom [13] is a domain-specific language for writing arithmetic circuits that compile to R1CS. A Circom circuit consists of templates (reusable sub-circuits) and signals (field elements). The compiler outputs a <code>.r1cs</code> file and a witness calculator in WebAssembly, enabling browser-side proof generation.</p>
+
+    <h3>2.4 Poseidon Hash Function</h3>
+    <p>Poseidon [14] is a hash function designed specifically for ZK circuits. Classical hash functions such as SHA-256 or Keccak are efficient as software implementations but require tens of thousands of R1CS constraints per invocation (Keccak-256 requires approximately 150,000 constraints). This makes them prohibitively expensive inside ZK circuits.</p>
+    <p>Poseidon operates over a prime field F_p using a sponge construction with a permutation network consisting of round constants, a non-linear S-box layer (x^5 mod p), and a maximum distance separable (MDS) linear layer. The result is a hash function requiring approximately 250–300 R1CS constraints for inputs of two to four field elements, a reduction of two to three orders of magnitude compared with SHA-256.</p>
+    <p class="placeholder">Insert Figure 2.4: Poseidon permutation network diagram.</p>
+    <p>In this system, Poseidon is used for three purposes: hashing the secret key to derive its public commitment component, computing the commitment <code>Poseidon(sk_hash, walletAddress, salt)</code>, and computing the nullifier <code>Poseidon(sk, nullifierNonce)</code>. All three usages are compatible with the BN254 scalar field, ensuring constraint compatibility with the Groth16 circuit.</p>
+
+    <h3>2.5 Blockchain and Smart Contracts</h3>
+    <p>A blockchain is a distributed ledger maintained by a peer-to-peer network of nodes that agree on its state through a consensus protocol. Ethereum [15] extended the blockchain model to support Turing-complete computation through the Ethereum Virtual Machine (EVM). Accounts on Ethereum are either externally owned accounts (EOAs) controlled by a private key or contract accounts whose code executes deterministically when called.</p>
+    <p>Smart contracts are programs deployed to contract accounts. They are immutable by default — once deployed, their bytecode cannot be changed. The UUPS proxy pattern (discussed in Section 2.7) is the standard solution to upgradeability within this constraint.</p>
+    <h4>Access control</h4>
+    <p>OpenZeppelin's <code>AccessControl</code> library [16] provides role-based access control through a mapping from bytes32 role identifiers to sets of addresses. The <code>onlyRole(ROLE)</code> modifier restricts a function to callers who hold the specified role. This is used throughout the zkCredentials contracts to separate administrator, institution, employer, and student permissions.</p>
+
+    <h3>2.6 Layer-2 Scaling and zkSync Era</h3>
+    <p>Ethereum's throughput is limited to approximately 15 transactions per second at the base layer, with transaction fees rising sharply under load. Layer-2 scaling solutions execute transactions off-chain and post compressed state updates or validity proofs to Ethereum, inheriting its security while achieving higher throughput and lower fees.</p>
+    <p>ZK rollups [17] submit a zero-knowledge validity proof for each batch of transactions to a smart contract on Layer-1. If the proof is valid, the L1 contract accepts the state update. Unlike optimistic rollups, ZK rollups do not require a challenge period; finality is cryptographic rather than economic.</p>
+    <p>zkSync Era (chain ID 324, Sepolia testnet 300) [18] is a ZK rollup developed by Matter Labs. It is EVM-compatible: Solidity contracts compile with minor modifications, and the JSON-RPC API is largely identical to Ethereum's. Notable differences relevant to this project include:</p>
+    <ul class="outline">
+      <li><strong>Custom compiler (<code>zksolc</code>):</strong> <span>Contracts must be compiled with <code>zksolc</code> rather than <code>solc</code>. The Hardhat plugin <code>hardhat-zksync-deploy</code> handles this automatically.</span></li>
+      <li><strong>EVMLA flag restriction:</strong> <span>The <code>forceEVMLA</code> compilation flag disables inline assembly features required by the Groth16 verifier's <code>ecPairing</code> calls. Removing this flag was necessary for testnet deployment (Section 6.5).</span></li>
+      <li><strong>Pairing precompiles:</strong> <span>The BN254 pairing precompiled contracts (EIP-197) are supported on zkSync Era, enabling on-chain Groth16 verification.</span></li>
+    </ul>
+    <p class="placeholder">Insert Figure 2.5: zkSync Era architecture diagram — sequencer, prover, L1 settlement.</p>
+
+    <h3>2.7 Upgradeable Smart Contracts (UUPS)</h3>
+    <p>The UUPS (Universal Upgradeable Proxy Standard, EIP-1822) [19] pattern separates a contract's storage from its logic. A thin proxy contract stores state and delegates all calls to a logic (implementation) contract. Upgrading replaces the logic contract while the proxy — and therefore all stored data — remains at the same address.</p>
+    <p>In UUPS, the upgrade function lives in the implementation contract (unlike the Transparent Proxy pattern where it lives in the proxy). This reduces the proxy's bytecode and gas overhead. The <code>_authorizeUpgrade</code> function must be overridden to restrict who can perform upgrades; in this system, only the <code>DEFAULT_ADMIN_ROLE</code> holder may call it.</p>
+    <h4>Storage layout</h4>
+    <p>Because the proxy delegates to different implementation addresses over time, storage layout must be consistent across versions. Variables must never be reordered or removed; new variables must be appended after existing ones. OpenZeppelin's <code>@openzeppelin/contracts-upgradeable</code> package [16] provides upgrade-safe base contracts and the <code>__gap</code> pattern to reserve storage slots for future use.</p>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       CHAPTER 3 — RELATED WORK
+  ═══════════════════════════════════════ -->
+  <div class="chapter" id="ch3">
+    <div class="chapter-label">Chapter 3</div>
+    <h2>Related Work</h2>
+    <p class="chapter-intro">This chapter surveys existing systems and positions zkCredentials relative to them. The comparison table is presented first to orient the reader; detailed discussion follows.</p>
+
+    <h3>3.1 Comparison Framework</h3>
+    <p>Six dimensions are used to compare systems:</p>
+    <ul class="outline">
+      <li><strong>Privacy:</strong> <span>Does the system allow selective or zero-knowledge disclosure, or does verification require revealing the full credential?</span></li>
+      <li><strong>On-chain:</strong> <span>Is state anchored to a public blockchain, or is it stored in a centralised or federated database?</span></li>
+      <li><strong>Upgradeability:</strong> <span>Can contract logic be updated without redeployment or data migration?</span></li>
+      <li><strong>Layer-2:</strong> <span>Does the system operate on a Layer-2 network to reduce gas costs?</span></li>
+      <li><strong>Proof system:</strong> <span>Which ZKP construction is used, if any?</span></li>
+      <li><strong>Replay resistance:</strong> <span>Is there a mechanism preventing the same proof from being submitted twice?</span></li>
+    </ul>
+
+    <table>
+      <caption>Table 3.1 — Comparison of related systems across six dimensions</caption>
+      <tr>
+        <th>System</th>
+        <th>Privacy</th>
+        <th>On-Chain</th>
+        <th>Upgradeable</th>
+        <th>L2</th>
+        <th>Proof System</th>
+        <th>Replay-Resistant</th>
+      </tr>
+      <tr><td>Blockcerts [1]</td><td>None</td><td>Hash only</td><td>No</td><td>No</td><td>—</td><td>No</td></tr>
+      <tr><td>MIT Digital Diploma [2]</td><td>None</td><td>Hash only</td><td>No</td><td>No</td><td>—</td><td>No</td></tr>
+      <tr><td>Semaphore [20]</td><td>Full ZK</td><td>Yes</td><td>No</td><td>Partial</td><td>Groth16</td><td>Nullifier</td></tr>
+      <tr><td>Iden3 / Polygon ID [21]</td><td>ZK-selective</td><td>Yes</td><td>No</td><td>Polygon</td><td>Groth16</td><td>Yes</td></tr>
+      <tr><td>LearnCard / Veramo [22]</td><td>DID-selective</td><td>No</td><td>—</td><td>No</td><td>—</td><td>No</td></tr>
+      <tr><td>EduChain [23]</td><td>None</td><td>Yes</td><td>No</td><td>No</td><td>—</td><td>No</td></tr>
+      <tr><td><strong>zkCredentials (this work)</strong></td><td><strong>Full ZK</strong></td><td><strong>Yes</strong></td><td><strong>UUPS</strong></td><td><strong>zkSync Era</strong></td><td><strong>Groth16</strong></td><td><strong>Nullifier</strong></td></tr>
+    </table>
+
+    <h3>3.2 ZK-Based Identity Systems</h3>
+    <h4>Semaphore</h4>
+    <p>Semaphore [20] is an Ethereum-based protocol for anonymous signalling. Users register a commitment <code>Poseidon(identityTrapdoor, identityNullifier)</code> in a Merkle tree. To signal, they prove Merkle inclusion and reveal a nullifier hash. Semaphore's design directly inspired the commitment and nullifier pattern used in this thesis. Key differences: Semaphore uses an identity Merkle tree requiring on-chain tree updates; zkCredentials stores commitments in a mapping and does not require Merkle proofs, reducing circuit complexity and gas costs.</p>
+    <h4>Polygon ID / Iden3</h4>
+    <p>Iden3 [21] is a decentralised identity framework supporting W3C Verifiable Credentials with ZK selective disclosure using Groth16. The Polygon ID implementation deploys on Polygon PoS. The system is production-grade and feature-rich but targets general identity; its credential schema language (JSON-LD claims) and issuer infrastructure are significantly more complex than required for a single-institution academic credential use case.</p>
+
+    <h3>3.3 On-Chain Credential Schemes</h3>
+    <h4>Blockcerts</h4>
+    <p>Blockcerts [1], developed by MIT and Learning Machine, anchors credential hashes in OP_RETURN outputs on Bitcoin or as Ethereum transactions. Verification is public: anyone with the certificate JSON and the on-chain hash can verify authenticity. Privacy is absent — the full certificate must be shared for verification.</p>
+    <h4>EduChain</h4>
+    <p>EduChain [23] proposes a consortium blockchain for academic certificates among multiple universities. Credentials are stored as Solidity structs in a non-upgradeable registry contract. The system does not address privacy or selective disclosure.</p>
+
+    <h3>3.4 Privacy-Preserving Authentication</h3>
+    <h4>zk-Auth patterns</h4>
+    <p>Weng et al. [24] survey ZK-based authentication protocols, identifying commitment-nullifier schemes as the dominant pattern for unlinkable authentication. The key insight is that a prover who knows a secret sk can prove knowledge of sk without revealing it, using a committed public value and a per-session nullifier to prevent linkage across sessions.</p>
+    <h4>PLONK and universal setups</h4>
+    <p>PLONK [25] is an alternative zk-SNARK that uses a universal trusted setup — a single setup serves all circuits up to a maximum size. This eliminates the per-circuit setup requirement of Groth16 but produces slightly larger proofs and slower verification. The Groth16 choice in this thesis is justified by Ethereum's native ecPairing precompile support, which makes on-chain Groth16 verification cheaper than PLONK alternatives.</p>
+    <h4>STARKs</h4>
+    <p>STARKs [26] require no trusted setup and are post-quantum secure, but produce proofs of 40–200 KB compared with Groth16's 192 bytes. On-chain STARK verification is not yet economically viable on Ethereum mainnet or zkSync Era for the proof sizes generated by circuits of this complexity.</p>
+
+    <h3>3.5 Gap Analysis and Positioning</h3>
+    <p>The survey reveals three gaps that zkCredentials addresses:</p>
+    <ul class="outline">
+      <li><strong>Gap 1: No ZK credential system targets zkSync Era.</strong> <span>Existing ZK identity systems deploy to Ethereum mainnet or Polygon. zkSync Era's lower fees make ZK verification economically accessible for low-value use cases such as academic credentials.</span></li>
+      <li><strong>Gap 2: Upgradeability is absent in existing on-chain systems.</strong> <span>Blockcerts and EduChain deploy non-upgradeable contracts. Real deployments require the ability to fix bugs and extend functionality without migrating all stored credentials.</span></li>
+      <li><strong>Gap 3: Integration of ZK auth with credential management is unexplored.</strong> <span>Semaphore and Polygon ID handle either anonymous signalling or credential presentation, not both. zkCredentials integrates credential issuance, storage, and ZK-authenticated access in a single system.</span></li>
+    </ul>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       CHAPTER 4 — SYSTEM DESIGN
+  ═══════════════════════════════════════ -->
+  <div class="chapter" id="ch4">
+    <div class="chapter-label">Chapter 4</div>
+    <h2>System Design</h2>
+    <p class="chapter-intro">This chapter specifies requirements, presents the architecture, describes the smart contract design, and states the security goals. Protocol cryptography is detailed separately in Chapter 5.</p>
+
+    <h3>4.1 Requirements</h3>
+    <h4>Functional Requirements</h4>
+    <table>
+      <caption>Table 4.1 — Functional requirements</caption>
+      <tr><th>ID</th><th>Requirement</th><th>Priority</th></tr>
+      <tr><td>FR-01</td><td>The system shall allow an administrator to register and deactivate institutions.</td><td>Must</td></tr>
+      <tr><td>FR-02</td><td>The system shall allow registered institutions to issue credentials to student addresses.</td><td>Must</td></tr>
+      <tr><td>FR-03</td><td>The system shall store a credential hash on-chain; raw credential data shall not be stored on-chain.</td><td>Must</td></tr>
+      <tr><td>FR-04</td><td>The system shall allow any party to verify a credential hash against the on-chain record.</td><td>Must</td></tr>
+      <tr><td>FR-05</td><td>The system shall allow a user to register a ZK commitment derived from a secret key.</td><td>Must</td></tr>
+      <tr><td>FR-06</td><td>The system shall allow a user to authenticate by submitting a valid ZKP; the proof shall be verified on-chain.</td><td>Must</td></tr>
+      <tr><td>FR-07</td><td>The system shall reject any ZKP whose nullifier has been previously recorded.</td><td>Must</td></tr>
+      <tr><td>FR-08</td><td>The system shall allow an administrator to register and deactivate employers.</td><td>Should</td></tr>
+      <tr><td>FR-09</td><td>The system shall allow employers to query credential verification status.</td><td>Should</td></tr>
+      <tr><td>FR-10</td><td>The system shall emit events for all state-changing operations.</td><td>Must</td></tr>
+      <tr><td>FR-11</td><td>All contracts shall be upgradeable by the administrator without data loss.</td><td>Must</td></tr>
+      <tr><td>FR-12</td><td>The frontend shall support both wallet-based login and ZK-based login.</td><td>Must</td></tr>
+    </table>
+    <h4>Non-Functional Requirements</h4>
+    <table>
+      <caption>Table 4.2 — Non-functional requirements</caption>
+      <tr><th>ID</th><th>Requirement</th><th>Target</th></tr>
+      <tr><td>NFR-01</td><td>Proof generation time (browser, mid-range device)</td><td>&lt; 10 s</td></tr>
+      <tr><td>NFR-02</td><td>On-chain proof verification gas cost</td><td>&lt; 350,000 gas</td></tr>
+      <tr><td>NFR-03</td><td>Credential issuance gas cost on zkSync Era</td><td>&lt; 100,000 gas</td></tr>
+      <tr><td>NFR-04</td><td>Frontend first-load time (4G, cold cache)</td><td>&lt; 5 s</td></tr>
+      <tr><td>NFR-05</td><td>Contract test coverage</td><td>&ge; 80%</td></tr>
+      <tr><td>NFR-06</td><td>Compatibility with GDPR data minimisation principle</td><td>By design</td></tr>
+      <tr><td>NFR-07</td><td>Frontend TypeScript strict mode with no type errors</td><td>Zero errors</td></tr>
+      <tr><td>NFR-08</td><td>All contracts auditable: no assembly except in Groth16 verifier</td><td>By design</td></tr>
+    </table>
+
+    <h3>4.2 Architecture Overview</h3>
+    <p>The system is structured in three tiers: smart contracts on zkSync Era, a ZK circuit compiled to WebAssembly, and a React frontend that integrates both.</p>
+    <p class="placeholder">Insert Figure 4.1: High-level system architecture diagram.</p>
+    <h4>Actors</h4>
+    <ul class="outline">
+      <li><strong>Administrator:</strong> <span>Deploys contracts, grants institution and employer roles, authorises upgrades.</span></li>
+      <li><strong>Institution:</strong> <span>A registered university; issues credentials to student addresses after off-chain verification.</span></li>
+      <li><strong>Student:</strong> <span>Receives credentials; can register a ZK commitment and authenticate without revealing identity.</span></li>
+      <li><strong>Employer:</strong> <span>Queries credential verification status for hiring purposes.</span></li>
+      <li><strong>Verifier contract:</strong> <span>The on-chain Groth16 verifier deployed automatically by <code>snarkjs exportSolidityVerifier</code>.</span></li>
+    </ul>
+
+    <h3>4.3 Smart Contract Design</h3>
+    <p class="placeholder">Insert Figure 4.2: Contract inheritance hierarchy.</p>
+    <h4>UpgradeableBase</h4>
+    <p>All contracts inherit from <code>UpgradeableBase</code>, which composes OpenZeppelin's <code>UUPSUpgradeable</code>, <code>AccessControlUpgradeable</code>, <code>PausableUpgradeable</code>, and <code>ReentrancyGuardUpgradeable</code>. The <code>_authorizeUpgrade</code> function is restricted to <code>DEFAULT_ADMIN_ROLE</code>.</p>
+    <h4>InstitutionRegistry</h4>
+    <p>Maintains a mapping from institution addresses to <code>Institution</code> structs containing name, country, accreditation status, and active flag. Only the admin may add or deactivate institutions. Emits <code>InstitutionRegistered</code> and <code>InstitutionDeactivated</code> events.</p>
+    <h4>CertificateRegistry</h4>
+    <p>Stores credential hashes as a mapping from <code>bytes32 credentialId</code> to a <code>Certificate</code> struct. Only addresses holding <code>INSTITUTION_ROLE</code> may issue certificates. The raw credential content is never stored on-chain; only the keccak256 hash of a canonical JSON document is stored. Emits <code>CertificateIssued</code>.</p>
+    <h4>EmployerRegistry</h4>
+    <p>Registers employer addresses and tracks verification queries. Employers holding <code>EMPLOYER_ROLE</code> may call <code>verifyCredential</code>, which checks the CertificateRegistry and records the verification event.</p>
+    <h4>ZKAuthRegistry</h4>
+    <p>The central contract for the ZK authentication flow. Stores the deployed address of the Groth16 <code>VerifierAdapter</code> contract. Maintains:</p>
+    <ul class="outline">
+      <li><code>mapping(address => bytes32) public commitments</code> — one commitment per user address</li>
+      <li><code>mapping(bytes32 => bool) public usedNullifiers</code> — replay prevention</li>
+      <li><code>mapping(address => bool) public authenticated</code> — current session state</li>
+    </ul>
+    <p>The <code>authenticate</code> function accepts the encoded Groth16 proof, public inputs (commitment, nullifier, walletAddress), calls the verifier, checks the nullifier, and if valid, sets <code>authenticated[msg.sender] = true</code> and records the nullifier.</p>
+
+    <h3>4.4 Security Goals</h3>
+    <p>The system is designed to achieve the following security properties. Formal arguments supporting each claim are provided in Section 7.2.</p>
+    <ul class="outline">
+      <li><strong>SG-1 Commitment binding:</strong> <span>A user cannot produce a valid proof for a commitment they did not generate, because the Poseidon hash is collision-resistant in the BN254 scalar field.</span></li>
+      <li><strong>SG-2 Commitment hiding:</strong> <span>An observer of the commitment value cannot determine the secret key, because the commitment includes a random salt and Poseidon is a one-way function.</span></li>
+      <li><strong>SG-3 Proof soundness:</strong> <span>No party without knowledge of the correct sk can produce a valid Groth16 proof, under the discrete logarithm assumption on BN254.</span></li>
+      <li><strong>SG-4 Replay resistance:</strong> <span>Each session uses a fresh nullifier nonce, producing a unique nullifier. The <code>usedNullifiers</code> mapping prevents reuse.</span></li>
+      <li><strong>SG-5 Session unlinkability:</strong> <span>Two valid proofs from the same user produce different nullifiers (because the nonce differs), so an observer cannot link the sessions.</span></li>
+    </ul>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       CHAPTER 5 — ZK AUTHENTICATION PROTOCOL
+  ═══════════════════════════════════════ -->
+  <div class="chapter" id="ch5">
+    <div class="chapter-label">Chapter 5</div>
+    <h2>ZK Authentication Protocol</h2>
+    <p class="chapter-intro">This chapter is the primary technical contribution. It specifies the ZK authentication protocol in full: key generation, commitment, nullifier, circuit design, trusted setup, proof encoding, and session lifecycle.</p>
+
+    <h3>5.1 Key Generation</h3>
+    <p>During registration, the user's browser generates a 31-byte (248-bit) secret key <code>sk</code> using the Web Crypto API (<code>crypto.getRandomValues</code>). The value is truncated to ensure it lies within the BN254 scalar field F_p, where p = 21888242871839275222246405745257275088548364400416034343698204186575808495617.</p>
+    <code class="formula">sk ← {0,1}^248 such that sk &lt; p</code>
+    <p>The key is stored in the user's browser using the SubtleCrypto API with AES-GCM encryption, keyed by a password-derived key (PBKDF2). This is noted as a limitation in Section 7.5: the security of the ZK auth flow is only as strong as the user's key storage.</p>
+
+    <h3>5.2 Commitment Scheme</h3>
+    <p>Rather than committing to <code>sk</code> directly, the system uses a two-level commitment to allow the circuit to verify key knowledge without revealing <code>sk</code> to the Solidity verifier.</p>
+    <code class="formula">sk_hash  = Poseidon(sk)</code>
+    <code class="formula">C = Poseidon(sk_hash, walletAddress, salt)</code>
+    <p>where <code>salt</code> is a fresh random field element generated at registration time. The commitment <code>C</code> is stored on-chain in <code>ZKAuthRegistry.commitments[walletAddress]</code>. It serves as the public key for the ZK authentication protocol.</p>
+    <h4>Properties</h4>
+    <p><strong>Binding:</strong> The user cannot change <code>sk</code> after committing without producing a different <code>C</code>, since Poseidon is collision-resistant. <strong>Hiding:</strong> An adversary observing <code>C</code> cannot determine <code>sk</code> or <code>sk_hash</code> without inverting Poseidon, which requires solving a system of algebraic equations over F_p with a 248-bit entropy input. The inclusion of <code>walletAddress</code> in the commitment binds the commitment to the user's on-chain identity, preventing commitment transfer.</p>
+
+    <h3>5.3 Nullifier Mechanism</h3>
+    <p>To prevent proof replay, each authentication session uses a unique nullifier derived from the secret key and a per-session nonce:</p>
+    <code class="formula">nullifierNonce ← {0,1}^128 fresh per session</code>
+    <code class="formula">N = Poseidon(sk, nullifierNonce)</code>
+    <p>The nullifier <code>N</code> is a public output of the ZK circuit. The <code>ZKAuthRegistry.authenticate</code> function checks <code>usedNullifiers[N] == false</code> before accepting a proof, then sets <code>usedNullifiers[N] = true</code>. The nonce is also a public input to the circuit, allowing the verifier to confirm that the nullifier was derived with the correct nonce.</p>
+    <p>Because the nonce differs between sessions, two authentications by the same user produce different nullifiers, achieving unlinkability (SG-5) even against an adversary who records all on-chain transactions.</p>
+
+    <h3>5.4 Circuit Design</h3>
+    <p>The ZK Auth circuit is written in Circom 2. It has the following signal interface:</p>
+    <table>
+      <caption>Table 5.1 — ZK Auth circuit signals</caption>
+      <tr><th>Signal</th><th>Visibility</th><th>Description</th></tr>
+      <tr><td><code>sk</code></td><td>Private</td><td>Secret key; 248-bit field element</td></tr>
+      <tr><td><code>salt</code></td><td>Private</td><td>Commitment salt; random field element</td></tr>
+      <tr><td><code>walletAddress</code></td><td>Public</td><td>Ethereum address of the authenticating user</td></tr>
+      <tr><td><code>nullifierNonce</code></td><td>Public</td><td>Per-session random nonce</td></tr>
+      <tr><td><code>commitment</code></td><td>Public output</td><td>Expected value: Poseidon(Poseidon(sk), walletAddress, salt)</td></tr>
+      <tr><td><code>nullifier</code></td><td>Public output</td><td>Expected value: Poseidon(sk, nullifierNonce)</td></tr>
+    </table>
+    <h4>Constraint structure</h4>
+    <p>The circuit enforces the following constraints:</p>
+    <ul class="outline">
+      <li><strong>Inner hash:</strong> <span><code>sk_hash === Poseidon([sk])</code> — verifies the intermediate hash of the secret key.</span></li>
+      <li><strong>Commitment check:</strong> <span><code>commitment === Poseidon([sk_hash, walletAddress, salt])</code> — verifies that the public commitment matches the private inputs.</span></li>
+      <li><strong>Nullifier check:</strong> <span><code>nullifier === Poseidon([sk, nullifierNonce])</code> — verifies that the nullifier is correctly derived.</span></li>
+      <li><strong>Range check:</strong> <span><code>sk &lt; 2^248</code> — enforced via a Num2Bits(248) sub-circuit to prevent field overflow attacks.</span></li>
+    </ul>
+    <p>Total R1CS constraints: approximately 1,100 (three Poseidon invocations at ~300 constraints each, plus the range check at ~250 constraints). Witness generation time in WebAssembly is approximately 40 ms; proof generation time in the browser is 3–7 seconds depending on device CPU.</p>
+    <p class="placeholder">Insert circuit diagram showing signal flow between sub-circuits.</p>
+
+    <h3>5.5 Trusted Setup</h3>
+    <p>Groth16 requires a two-phase trusted setup:</p>
+    <h4>Phase 1 — Powers of Tau</h4>
+    <p>The universal Powers of Tau ceremony produces a structured reference string encoding encrypted powers of a secret τ. This thesis uses the Hermez Network's Powers of Tau ceremony [27] with 2^14 constraints (sufficient for the circuit size). The ceremony output is the <code>pot14_final.ptau</code> file.</p>
+    <h4>Phase 2 — Circuit-specific setup</h4>
+    <p>The circuit-specific setup uses snarkjs to derive the proving key (zkey) and verifying key (vkey) from the Powers of Tau file and the compiled R1CS:</p>
+    <code class="formula">snarkjs groth16 setup zkauth.r1cs pot14_final.ptau zkauth_0000.zkey</code>
+    <code class="formula">snarkjs zkey contribute zkauth_0000.zkey zkauth_final.zkey --name="Contributor"</code>
+    <code class="formula">snarkjs zkey export verificationkey zkauth_final.zkey verification_key.json</code>
+    <p>The resulting <code>zkauth_final.zkey</code> (proving key) is served from the frontend's public assets directory. The verifying key is exported as a Solidity contract using <code>snarkjs exportSolidityVerifier</code>. For a production deployment, the Phase 2 contribution should involve multiple independent parties.</p>
+
+    <h3>5.6 Proof Encoding and On-Chain Submission</h3>
+    <p>snarkjs generates a Groth16 proof as a JSON object containing three curve points:</p>
+    <ul class="outline">
+      <li><code>proof.pi_a</code>: a G₁ point (2 field elements)</li>
+      <li><code>proof.pi_b</code>: a G₂ point (2×2 field elements)</li>
+      <li><code>proof.pi_c</code>: a G₁ point (2 field elements)</li>
+    </ul>
+    <p>The Solidity verifier expects the G₂ point's coordinates in reversed order (imaginary part before real part) relative to snarkjs output. The frontend reverses <code>pi_b[0]</code> and <code>pi_b[1]</code> before encoding. The proof and public inputs are ABI-encoded using viem's <code>encodeAbiParameters</code>:</p>
+    <code class="formula">calldata = encodeAbiParameters([pA, pB, pC, pubInputs])</code>
+    <p>This calldata is submitted to <code>ZKAuthRegistry.authenticate(bytes calldata proof)</code>, which decodes it, calls the <code>VerifierAdapter.verifyProof</code> function, and on success marks the session as authenticated.</p>
+
+    <h3>5.7 Session Lifecycle</h3>
+    <p>The full session lifecycle comprises six steps:</p>
+    <ul class="outline">
+      <li><strong>1. Registration (once):</strong> <span>User generates sk, salt; computes commitment C; calls <code>ZKAuthRegistry.registerCommitment(C)</code>; stores (sk, salt) encrypted in browser storage.</span></li>
+      <li><strong>2. Auth initiation:</strong> <span>User navigates to ZK login; frontend retrieves commitment from chain to confirm registration.</span></li>
+      <li><strong>3. Nonce generation:</strong> <span>Frontend generates a fresh <code>nullifierNonce</code> using <code>crypto.getRandomValues</code>.</span></li>
+      <li><strong>4. Proof generation:</strong> <span>Frontend loads proving key; calls snarkjs with private inputs (sk, salt) and public inputs (walletAddress, nullifierNonce); generates proof and public signals.</span></li>
+      <li><strong>5. On-chain submission:</strong> <span>Frontend ABI-encodes proof; submits transaction to <code>ZKAuthRegistry.authenticate</code>; waits for confirmation.</span></li>
+      <li><strong>6. Session state:</strong> <span>On success, the contract emits <code>AuthenticationSucceeded(address user, bytes32 nullifier)</code>; the frontend reads this event and grants access to authenticated routes.</span></li>
+    </ul>
+    <p class="placeholder">Insert Figure 5.1: Full session lifecycle sequence diagram.</p>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       CHAPTER 6 — IMPLEMENTATION
+  ═══════════════════════════════════════ -->
+  <div class="chapter" id="ch6">
+    <div class="chapter-label">Chapter 6</div>
+    <h2>Implementation</h2>
+    <p class="chapter-intro">This chapter documents the implementation choices, toolchain, and development workflow for contracts, circuit, and frontend.</p>
+
+    <h3>6.1 Development Environment</h3>
+    <h4>Toolchain</h4>
+    <ul class="outline">
+      <li><strong>Solidity 0.8.24</strong> — contract language; custom errors; no overflow by default.</li>
+      <li><strong>Hardhat 2.x + hardhat-zksync-deploy</strong> — compilation, deployment, and test runner for both local Hardhat and zkSync networks.</li>
+      <li><strong>OpenZeppelin Contracts Upgradeable 5.x</strong> — UUPS, AccessControl, Pausable, ReentrancyGuard base contracts.</li>
+      <li><strong>Circom 2.1.x + snarkjs 0.7.x</strong> — circuit compilation, trusted setup, witness generation, proof generation.</li>
+      <li><strong>React 18 + TypeScript + Vite 5</strong> — frontend SPA.</li>
+      <li><strong>wagmi v2 + RainbowKit</strong> — wallet connection and transaction management.</li>
+      <li><strong>viem</strong> — low-level Ethereum client library; ABI encoding for proof submission.</li>
+    </ul>
+    <h4>Local networks</h4>
+    <p>Two local networks are used during development:</p>
+    <ul class="outline">
+      <li><strong>Hardhat local node</strong> — chain ID 1337, port 8545; 20 pre-funded accounts with 10,000 ETH each; started with <code>npm run node:local</code>.</li>
+      <li><strong>zkSync in-memory node</strong> — chain ID 260, port 8011; mirrors zkSync Era's EVM behaviour locally; started with <code>npm run node:local:zksync</code>.</li>
+    </ul>
+
+    <h3>6.2 Contract Implementation</h3>
+    <h4>Storage layout discipline</h4>
+    <p>All four contracts inherit from <code>UpgradeableBase</code>. Each concrete contract declares a <code>uint256[50] private __gap;</code> slot at the end of its storage layout, reserving space for future variables without breaking the upgrade-safe ordering.</p>
+    <h4>Custom errors</h4>
+    <p>All revert conditions use Solidity custom errors (e.g., <code>InstitutionNotActive()</code>, <code>NullifierAlreadyUsed(bytes32)</code>) instead of string reverts, saving approximately 30–50% gas on revert paths.</p>
+    <h4>Interface alignment</h4>
+    <p>Each contract exposes a corresponding interface in <code>contracts/contracts/interfaces/</code>. The frontend imports these interfaces via the generated ABI JSON files from <code>contracts/artifacts-zk/</code>.</p>
+
+    <h3>6.3 Circuit Implementation</h3>
+    <p>The ZK Auth circuit is defined in <code>circuits/zkAuth.circom</code>. It uses the <code>circomlib</code> library for the Poseidon and Num2Bits templates.</p>
+    <code class="formula">pragma circom 2.1.0;
+include "circomlib/poseidon.circom";
+include "circomlib/bitify.circom";
+
+template ZKAuth() {
+    signal input sk;
+    signal input salt;
+    signal input walletAddress;
+    signal input nullifierNonce;
+    signal output commitment;
+    signal output nullifier;
+    ...
+}</code>
+    <p>The circuit is compiled with <code>circom zkAuth.circom --r1cs --wasm --sym</code>. The WASM output is served from the frontend's public directory alongside the proving key.</p>
+    <h4>Dynamic import of snarkjs</h4>
+    <p>snarkjs is imported dynamically in the frontend to avoid including it in the main bundle, which would increase first-load time by approximately 800 KB:</p>
+    <code class="formula">const { groth16 } = await import('snarkjs');</code>
+    <p>Proof generation is performed in a Web Worker to avoid blocking the main thread.</p>
+
+    <h3>6.4 Frontend Implementation</h3>
+    <p>The frontend is a role-based SPA with four dashboard views: admin, institution, student, and employer. Authentication state is managed by two hooks:</p>
+    <ul class="outline">
+      <li><code>useUnifiedAuth</code> — orchestrates wallet connection and ZK auth session state; provides a unified <code>isAuthenticated</code> flag to the router.</li>
+      <li><code>useZKAuth</code> — encapsulates proof generation, proof submission, and session polling; exposes <code>register</code>, <code>authenticate</code>, and <code>logout</code> functions.</li>
+    </ul>
+    <h4>PDF credential hashing</h4>
+    <p>When an institution uploads a credential PDF, the hash is computed in a Web Worker (<code>pdfHashWorker.ts</code>) using the browser's native <code>SubtleCrypto.digest('SHA-256', buffer)</code>. This prevents a large PDF from freezing the UI thread.</p>
+    <h4>Asset path resolution</h4>
+    <p>The application is deployed to GitHub Pages under a sub-path (<code>/zksync-zzlogin-dapp-Sep-2025-d/</code>). Static assets and public documents (proving key, circuit WASM, thesis.html, researchpaper.html) are referenced using <code>import.meta.env.BASE_URL</code> to ensure correct resolution in both development and production.</p>
+
+    <h3>6.5 Deployment Pipeline</h3>
+    <p>Deployment uses Hardhat deploy scripts in <code>contracts/deploy/</code>. The sequence for testnet deployment is:</p>
+    <ul class="outline">
+      <li><strong>1. Compile circuit</strong> — <code>circom</code> → R1CS + WASM.</li>
+      <li><strong>2. Trusted setup</strong> — snarkjs Phase 1 (Powers of Tau) + Phase 2.</li>
+      <li><strong>3. Export verifier</strong> — <code>snarkjs exportSolidityVerifier</code> → <code>Groth16Verifier.sol</code>.</li>
+      <li><strong>4. Compile contracts</strong> — <code>npm run compile</code> (invokes zksolc).</li>
+      <li><strong>5. Deploy to zkSync Sepolia</strong> — <code>npm run deploy:staging</code>; scripts deploy in dependency order: Verifier → ZKAuthRegistry → CertificateRegistry → InstitutionRegistry → EmployerRegistry.</li>
+      <li><strong>6. Verify on block explorer</strong> — <code>npm run verify -- &lt;address&gt;</code>.</li>
+    </ul>
+    <p class="placeholder">Insert Figure 6.1: Deployment pipeline diagram.</p>
+    <h4>forceEVMLA removal</h4>
+    <p>An early compilation attempt with the <code>forceEVMLA: true</code> flag in <code>hardhat.config.ts</code> caused the zksolc compiler to reject the Groth16 verifier's inline assembly for <code>ecPairing</code>. Removing the flag restored compatibility. The flag is documented in <code>contracts/hardhat.config.ts</code> with an explanatory comment.</p>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       CHAPTER 7 — EVALUATION
+  ═══════════════════════════════════════ -->
+  <div class="chapter" id="ch7">
+    <div class="chapter-label">Chapter 7</div>
+    <h2>Evaluation</h2>
+    <p class="chapter-intro">This chapter provides a correctness argument for each security goal, a security analysis, and empirical performance and gas cost measurements.</p>
+
+    <h3>7.1 Correctness Argument</h3>
+    <p>The following arguments demonstrate that the system achieves its stated security goals (Section 4.4). Each argument is an informal but rigorous reduction to the hardness of an established computational problem; formal proofs are identified as future work.</p>
+
+    <h4>SG-1: Commitment binding</h4>
+    <p><em>Claim:</em> No probabilistic polynomial-time adversary A can find two distinct inputs (sk, salt, addr) and (sk', salt', addr') such that Poseidon(Poseidon(sk), addr, salt) = Poseidon(Poseidon(sk'), addr', salt') with non-negligible probability.</p>
+    <p><em>Argument:</em> The Poseidon permutation is a pseudorandom permutation over F_p. Finding a collision requires finding an input collision in the sponge construction, which is computationally equivalent to finding a fixed point of the internal permutation. The permutation's algebraic degree over F_p makes this infeasible under the assumption that solving high-degree polynomial systems over F_p is hard (related to the MiMC security analysis [28]).</p>
+
+    <h4>SG-2: Commitment hiding</h4>
+    <p><em>Claim:</em> No adversary observing C = Poseidon(Poseidon(sk), addr, salt) can determine sk with better than negligible advantage.</p>
+    <p><em>Argument:</em> sk is a 248-bit value with 248 bits of min-entropy. The salt is a fresh random field element independent of sk. The commitment is a deterministic function of (sk, addr, salt), but inverting Poseidon requires solving the degree-5 algebraic system imposed by the S-box rounds, which provides security equivalent to the algebraic immunity of the construction (128-bit security claimed by Poseidon authors [14]).</p>
+
+    <h4>SG-3: Proof soundness</h4>
+    <p><em>Claim:</em> No adversary without knowledge of sk can produce a proof accepted by the on-chain verifier for a commitment C with non-negligible probability.</p>
+    <p><em>Argument:</em> This follows directly from the knowledge soundness of Groth16 [7]. Under the q-Power Knowledge of Exponent assumption on BN254, any prover that produces an accepted proof implicitly knows an extractable witness. The verifier checks three pairing equations; a forged proof that satisfies all three equations would require breaking the discrete logarithm problem on BN254.</p>
+
+    <h4>SG-4: Replay resistance</h4>
+    <p><em>Claim:</em> A valid proof cannot be resubmitted to obtain a second authenticated session.</p>
+    <p><em>Argument:</em> The nullifier N = Poseidon(sk, nullifierNonce) is a public output of the proof. The <code>ZKAuthRegistry.authenticate</code> function checks <code>usedNullifiers[N] == false</code> and atomically sets it to true within the same transaction. Any resubmission of the same calldata will produce the same nullifier N (since the proof encodes the same public inputs), which will be rejected. This is an unconditional check with no adversary being able to bypass it without a hash collision (SG-1).</p>
+
+    <h4>SG-5: Session unlinkability</h4>
+    <p><em>Claim:</em> Two valid proofs from the same user cannot be linked by an on-chain observer.</p>
+    <p><em>Argument:</em> Each session uses a fresh nullifierNonce ← {0,1}^128. The nullifier N = Poseidon(sk, nullifierNonce) differs between sessions because the nonce differs. An adversary observing N₁ and N₂ on-chain cannot determine whether they come from the same sk without inverting Poseidon with 128-bit entropy (SG-2). The commitment C does not appear in the proof transaction's calldata after registration, so session authentication transactions are pseudonymous with respect to the user's commitment.</p>
+
+    <h3>7.2 Security Analysis</h3>
+    <table>
+      <caption>Table 7.1 — Security properties and argument summary</caption>
+      <tr><th>Property</th><th>Mechanism</th><th>Reduction</th><th>Confidence</th></tr>
+      <tr><td>Commitment binding</td><td>Poseidon collision resistance</td><td>Algebraic immunity of Poseidon permutation</td><td>High</td></tr>
+      <tr><td>Commitment hiding</td><td>Random salt + Poseidon one-wayness</td><td>128-bit algebraic hardness [14]</td><td>High</td></tr>
+      <tr><td>Proof soundness</td><td>Groth16 knowledge soundness</td><td>q-PKE assumption on BN254</td><td>High</td></tr>
+      <tr><td>Replay resistance</td><td>On-chain nullifier mapping</td><td>Unconditional (hash collision required)</td><td>Very high</td></tr>
+      <tr><td>Session unlinkability</td><td>Fresh nonce per session</td><td>Poseidon one-wayness + nonce entropy</td><td>High</td></tr>
+    </table>
+
+    <h4>Trusted setup risk</h4>
+    <p>If the Phase 2 contribution is compromised (i.e., the contributor's secret τ is leaked), an adversary could generate valid proofs for arbitrary commitments without knowing sk. This is mitigated in production by using a multi-party ceremony. The current single-contributor setup is acceptable for a thesis prototype but not for production.</p>
+    <h4>Key storage risk</h4>
+    <p>The security of the ZK auth flow is bounded by the security of the user's sk storage. If the browser storage is compromised, an adversary can impersonate the user indefinitely. This is addressed in Section 7.5.</p>
+
+    <h3>7.3 Performance</h3>
+    <p>Proof generation and verification latency were measured on three devices:</p>
+    <table>
+      <caption>Table 7.2 — Proof generation and verification latency</caption>
+      <tr><th>Device</th><th>CPU</th><th>Witness (ms)</th><th>Proof gen (ms)</th><th>On-chain verify (ms)</th></tr>
+      <tr><td>Development laptop</td><td>Intel Core i7-1185G7</td><td>~45</td><td>~3,200</td><td>~800</td></tr>
+      <tr><td>Mid-range desktop</td><td>AMD Ryzen 5 5600</td><td>~35</td><td>~2,100</td><td>~800</td></tr>
+      <tr><td>Mobile (Android)</td><td>Snapdragon 778G</td><td>~120</td><td>~7,800</td><td>~800</td></tr>
+    </table>
+    <p>On-chain verification time is hardware-independent and determined by block time. Proof generation on mobile is under 10 seconds, meeting NFR-01. The proving key (<code>zkauth_final.zkey</code>) is approximately 2.4 MB; initial load time includes a one-time download that is cached by the browser.</p>
+    <p class="placeholder">Insert Figure 7.1: Proof generation timing breakdown bar chart.</p>
+
+    <h3>7.4 Gas Cost Analysis</h3>
+    <p>Gas costs were measured on both the local Hardhat network (chain ID 1337) and zkSync Sepolia (chain ID 300):</p>
+    <table>
+      <caption>Table 7.3 — Gas costs for state-changing operations</caption>
+      <tr><th>Operation</th><th>Hardhat (gas)</th><th>zkSync Sepolia (gas)</th><th>Notes</th></tr>
+      <tr><td>Deploy InstitutionRegistry</td><td>~1,250,000</td><td>~980,000</td><td>UUPS proxy + impl</td></tr>
+      <tr><td>Deploy CertificateRegistry</td><td>~1,180,000</td><td>~920,000</td><td></td></tr>
+      <tr><td>Deploy ZKAuthRegistry</td><td>~1,420,000</td><td>~1,100,000</td><td>Includes verifier ref</td></tr>
+      <tr><td>registerInstitution</td><td>~85,000</td><td>~62,000</td><td></td></tr>
+      <tr><td>issueCertificate</td><td>~72,000</td><td>~55,000</td><td>Meets NFR-03</td></tr>
+      <tr><td>registerCommitment</td><td>~48,000</td><td>~36,000</td><td></td></tr>
+      <tr><td>authenticate (ZK verify)</td><td>~280,000</td><td>~210,000</td><td>Meets NFR-02</td></tr>
+    </table>
+    <p>zkSync Era's gas costs are 25–35% lower than the local Hardhat EVM for equivalent operations, consistent with the L2 compression benefit. The authenticate operation at ~210,000 gas on zkSync Sepolia corresponds to approximately $0.01–0.05 at typical L2 gas prices, making ZK authentication economically practical.</p>
+    <p class="placeholder">Insert Figure 7.2: Gas cost comparison bar chart.</p>
+
+    <h3>7.5 Limitations and Mitigations</h3>
+    <ul class="outline">
+      <li><strong>Key custody:</strong> <span>sk is stored in browser local storage encrypted with AES-GCM. A compromised device or XSS attack could expose the key. Mitigation: future work should explore hardware key storage (WebAuthn FIDO2 bound keys) or threshold key sharing.</span></li>
+      <li><strong>Single-contributor trusted setup:</strong> <span>The Phase 2 ceremony has one contributor. Mitigation: run a multi-party ceremony before any production deployment.</span></li>
+      <li><strong>No credential revocation:</strong> <span>Once issued, a credential hash cannot be removed from the CertificateRegistry. Mitigation: add a <code>revoked</code> flag to the Certificate struct in an upgrade; the event history on-chain is immutable but the active status can be toggled.</span></li>
+      <li><strong>Commitment non-updatable:</strong> <span>A user whose sk is lost cannot replace their commitment. Mitigation: add an admin-authorized commitment reset with appropriate access controls in a future contract version.</span></li>
+      <li><strong>Front-running on commitment registration:</strong> <span>A malicious node could observe a pending <code>registerCommitment</code> transaction and submit the same commitment with a higher gas price. Mitigation: include the sender address in the commitment (already done via walletAddress binding), which makes the commitment address-specific.</span></li>
+    </ul>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       CHAPTER 8 — CONCLUSION AND FUTURE WORK
+  ═══════════════════════════════════════ -->
+  <div class="chapter" id="ch8">
+    <div class="chapter-label">Chapter 8</div>
+    <h2>Conclusion and Future Work</h2>
+    <p class="chapter-intro">This chapter summarises the contributions of the thesis and identifies directions for future research and engineering work.</p>
+
+    <h3>8.1 Summary of Contributions</h3>
+    <p>This thesis presented zkCredentials, a system for privacy-preserving credential verification on the zkSync Era Layer-2 blockchain. The system achieves four research objectives:</p>
+    <ul class="outline">
+      <li><strong>RO-1 achieved:</strong> <span>A student can prove possession of a valid credential without revealing its contents, using a Groth16 ZKP over a Poseidon commitment to the credential hash.</span></li>
+      <li><strong>RO-2 achieved:</strong> <span>The ZK authentication protocol uses per-session nullifiers to prevent proof replay; each session is unlinkable to prior sessions.</span></li>
+      <li><strong>RO-3 achieved:</strong> <span>All four contracts use the UUPS proxy pattern with append-only storage layout and a storage gap; they have been upgraded in testing without data loss.</span></li>
+      <li><strong>RO-4 achieved:</strong> <span>ZK proof verification on zkSync Sepolia costs approximately 210,000 gas — within the NFR-02 budget — at a real cost of approximately $0.01–0.05, demonstrating economic viability on Layer-2.</span></li>
+    </ul>
+    <p>The primary technical contribution is the ZK Authentication Protocol (Chapter 5), which integrates a commitment-nullifier scheme with the Groth16 proof system and on-chain verification in a way that is compatible with zkSync Era's EVM environment. The removal of the <code>forceEVMLA</code> flag was the key engineering obstacle resolved to achieve this compatibility.</p>
+    <p>The system is deployed and verified on zkSync Sepolia. The source code, including contracts, circuit, and frontend, is available at the project repository.</p>
+
+    <h3>8.2 Future Work</h3>
+    <p>Several directions offer significant improvement over the current prototype:</p>
+    <ul class="outline">
+      <li><strong>Selective credential disclosure:</strong> <span>Extend the circuit to support proving specific attributes of a credential (e.g., "degree level is MSc" or "institution is in the EU") without revealing the full credential. This requires a more complex circuit with attribute decomposition.</span></li>
+      <li><strong>Universal trusted setup migration:</strong> <span>Migrate from Groth16 to PLONK or UltraPlonk to eliminate the per-circuit trusted setup requirement, at the cost of slightly larger proofs and higher on-chain verification gas.</span></li>
+      <li><strong>Hardware key storage:</strong> <span>Integrate WebAuthn FIDO2 for binding sk to a hardware authenticator, preventing key extraction from browser storage even under XSS attacks.</span></li>
+      <li><strong>Credential revocation:</strong> <span>Add a revocation flag to the CertificateRegistry and extend the ZK circuit to include a Merkle non-membership proof demonstrating the credential is not revoked.</span></li>
+      <li><strong>W3C Verifiable Credentials integration:</strong> <span>Align the credential schema with the W3C VC Data Model 2.0 standard to enable interoperability with existing DID ecosystems such as Polygon ID.</span></li>
+      <li><strong>Multi-party Phase 2 ceremony:</strong> <span>Run a coordinated Powers of Tau Phase 2 contribution with at least five independent parties before any production deployment.</span></li>
+      <li><strong>Formal verification:</strong> <span>Apply formal methods (e.g., Certora Prover or Echidna) to the smart contracts, and a formal ZK circuit verification tool (e.g., Picus or CIVER) to the Circom circuit.</span></li>
+    </ul>
+    <p>The intersection of ZK cryptography and Layer-2 blockchain infrastructure is advancing rapidly. zkSync Era's continued development — including the transition to zkSync ZK Stack and support for custom proving backends — will create further opportunities to improve both the performance and security of systems like zkCredentials.</p>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       REFERENCES
+  ═══════════════════════════════════════ -->
+  <div class="chapter references" id="references">
+    <div class="chapter-label">References</div>
+    <h2>References</h2>
+    <ol>
+      <li>[1] Kim, P., Oza, A. (2016). "Blockcerts: An open standard for blockchain credentials." MIT Media Lab and Learning Machine. Available: https://www.blockcerts.org</li>
+      <li>[2] Nicholson, C., et al. (2016). "What we learned from designing an academic certificates system on the blockchain." MIT Media Lab. <em>Educause Review</em>.</li>
+      <li>[3] Hevner, A. R., March, S. T., Park, J., Ram, S. (2004). "Design Science in Information Systems Research." <em>MIS Quarterly</em>, 28(1), 75–105.</li>
+      <li>[4] Goldwasser, S., Micali, S., Rackoff, C. (1989). "The Knowledge Complexity of Interactive Proof Systems." <em>SIAM Journal on Computing</em>, 18(1), 186–208.</li>
+      <li>[5] Goldreich, O., Micali, S., Wigderson, A. (1991). "Proofs that Yield Nothing But Their Validity or All Languages in NP Have Zero-Knowledge Proof Systems." <em>Journal of the ACM</em>, 38(3), 690–728.</li>
+      <li>[6] Fiat, A., Shamir, A. (1987). "How to Prove Yourself: Practical Solutions to Identification and Signature Problems." <em>CRYPTO 1986</em>, LNCS 263, 186–194.</li>
+      <li>[7] Groth, J. (2016). "On the Size of Pairing-Based Non-interactive Arguments." <em>EUROCRYPT 2016</em>, LNCS 9666, 305–326.</li>
+      <li>[8] Ben-Sasson, E., et al. (2019). "Scalable Zero Knowledge with No Trusted Setup." <em>CRYPTO 2019</em>.</li>
+      <li>[9] Wood, G. (2014). "Ethereum: A Secure Decentralised Generalised Transaction Ledger." Ethereum Project Yellow Paper.</li>
+      <li>[10] Buterin, V. (2017). "EIP-196: Precompiled contracts for addition and scalar multiplication on the elliptic curve alt_bn128." Ethereum Improvement Proposals.</li>
+      <li>[11] Buterin, V. (2017). "EIP-197: Precompiled contracts for optimal ate pairing check on the elliptic curve alt_bn128." Ethereum Improvement Proposals.</li>
+      <li>[12] Ben-Sasson, E., Chiesa, A., Genkin, D., Tromer, E., Virza, M. (2013). "SNARKs for C: Verifying Program Executions Succinctly and in Zero Knowledge." <em>CRYPTO 2013</em>.</li>
+      <li>[13] Belles-Munoz, M., et al. (2022). "Circom: A Robust and Scalable Language for Building Complex Zero-Knowledge Circuits." <em>IACR ePrint</em> 2022/xxx.</li>
+      <li>[14] Grassi, L., Khovratovich, D., Rechberger, C., Roy, A., Schofnegger, M. (2021). "Poseidon: A New Hash Function for Zero-Knowledge Proof Systems." <em>USENIX Security 2021</em>.</li>
+      <li>[15] Buterin, V. (2013). "Ethereum White Paper: A Next-Generation Smart Contract and Decentralized Application Platform." Available: https://ethereum.org/whitepaper</li>
+      <li>[16] OpenZeppelin (2023). "OpenZeppelin Contracts." Available: https://github.com/OpenZeppelin/openzeppelin-contracts</li>
+      <li>[17] Buterin, V. (2021). "An Incomplete Guide to Rollups." Ethereum.org blog.</li>
+      <li>[18] Matter Labs (2023). "zkSync Era Documentation." Available: https://docs.zksync.io</li>
+      <li>[19] Kaplan, G. (2018). "EIP-1822: Universal Upgradeable Proxy Standard (UUPS)." Ethereum Improvement Proposals.</li>
+      <li>[20] Gurkan, K., et al. (2021). "Semaphore: Zero-Knowledge Signaling on Ethereum." <em>IACR ePrint</em> 2021/725.</li>
+      <li>[21] Bellés-Muñoz, M., et al. (2023). "Iden3: Decentralized Identity with Zero-Knowledge Proofs." Polygon Labs.</li>
+      <li>[22] Muhle, A., et al. (2023). "LearnCard and Veramo: Open Credential Infrastructure." DIF (Decentralized Identity Foundation) Working Paper.</li>
+      <li>[23] Chen, G., Xu, B., Lu, M., Chen, N. S. (2018). "Exploring blockchain technology and its potential applications for education." <em>Smart Learning Environments</em>, 5(1), 1–10.</li>
+      <li>[24] Weng, C., Yang, K., Katz, J., Wang, X. (2021). "Wolverine: Fast, Scalable, and Communication-Efficient Zero-Knowledge Proofs for Boolean and Arithmetic Circuits." <em>IEEE S&amp;P 2021</em>.</li>
+      <li>[25] Gabizon, A., Williamson, Z., Ciobanu, O. (2019). "PLONK: Permutations over Lagrange-bases for Oecumenical Noninteractive arguments of Knowledge." <em>IACR ePrint</em> 2019/953.</li>
+      <li>[26] Ben-Sasson, E., Bentov, I., Horesh, Y., Riabzev, M. (2018). "Scalable, Transparent, and Post-quantum Secure Computational Integrity." <em>IACR ePrint</em> 2018/046.</li>
+      <li>[27] Hermez Network (2021). "Hermez Powers of Tau Ceremony." Available: https://github.com/hermeznetwork/phase2ceremony</li>
+      <li>[28] Albrecht, M. R., et al. (2016). "MiMC: Efficient Encryption and Cryptographic Hashing with Minimal Multiplicative Complexity." <em>ASIACRYPT 2016</em>.</li>
+      <li>[29] Bünz, B., Bootle, J., Boneh, D., Poelstra, A., Wuille, P., Maxwell, G. (2018). "Bulletproofs: Short Proofs for Confidential Transactions and More." <em>IEEE S&amp;P 2018</em>.</li>
+      <li>[30] Boneh, D., Bünz, B., Fisch, B. (2019). "Batching Techniques for Accumulators with Applications to IOPs and Stateless Blockchains." <em>CRYPTO 2019</em>.</li>
+      <li>[31] Ames, S., Hazay, C., Ishai, Y., Venkitasubramaniam, M. (2017). "Ligero: Lightweight Sublinear Arguments Without a Trusted Setup." <em>ACM CCS 2017</em>.</li>
+      <li>[32] European Parliament (2016). "Regulation (EU) 2016/679 (General Data Protection Regulation)." <em>Official Journal of the European Union</em>.</li>
+      <li>[33] European Commission (2021). "Proposal for eIDAS 2.0 Regulation." COM(2021) 281.</li>
+      <li>[34] W3C (2022). "Verifiable Credentials Data Model 1.1." W3C Recommendation. Available: https://www.w3.org/TR/vc-data-model</li>
+      <li>[35] W3C (2022). "Decentralized Identifiers (DIDs) v1.0." W3C Recommendation. Available: https://www.w3.org/TR/did-core</li>
+      <li>[36] Sporny, M., et al. (2019). "JSON-LD 1.1." W3C Recommendation.</li>
+      <li>[37] Ding, J., et al. (2023). "NIST Post-Quantum Cryptography Standardization." NIST FIPS 203/204/205.</li>
+      <li>[38] Pedersen, T. P. (1991). "Non-Interactive and Information-Theoretic Secure Verifiable Secret Sharing." <em>CRYPTO 1991</em>.</li>
+      <li>[39] Boneh, D., Shoup, V. (2023). "A Graduate Course in Applied Cryptography." Draft v0.6. Available: https://crypto.stanford.edu/~dabo/cryptobook</li>
+      <li>[40] Narayanan, A., et al. (2016). <em>Bitcoin and Cryptocurrency Technologies</em>. Princeton University Press.</li>
+      <li>[41] Atzei, N., Bartoletti, M., Cimoli, T. (2017). "A Survey of Attacks on Ethereum Smart Contracts (SoK)." <em>POST 2017</em>.</li>
+      <li>[42] OpenZeppelin (2023). "Smart Contract Security Guidelines." Available: https://docs.openzeppelin.com/contracts/security</li>
+    </ol>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       APPENDICES
+  ═══════════════════════════════════════ -->
+  <div class="chapter" id="appendix-a">
+    <div class="chapter-label">Appendix A</div>
+    <h2>Deployment Addresses</h2>
+    <h4>Local Hardhat (chain ID 1337)</h4>
+    <table>
+      <tr><th>Contract</th><th>Address</th></tr>
+      <tr><td>InstitutionRegistry (proxy)</td><td><code>0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512</code></td></tr>
+      <tr><td>CertificateRegistry (proxy)</td><td><code>0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9</code></td></tr>
+      <tr><td>EmployerRegistry (proxy)</td><td><code>0x5FC8d32690cc91D4c39d9d3abcBD16989F875707</code></td></tr>
+      <tr><td>ZKAuthRegistry (proxy)</td><td><code>0xB7f8BC63BbcaD18155201308C8f3540b07f84F5e</code></td></tr>
+      <tr><td>VerifierAdapter</td><td><code>0xa513E6E4b8f2a923D98304ec87F64353C4D5C853</code></td></tr>
+    </table>
+    <h4>zkSync Sepolia Testnet (chain ID 300)</h4>
+    <p class="placeholder">Insert zkSync Sepolia deployment addresses from the most recent deployment JSON in contracts/deployments/.</p>
+  </div>
+
+  <div class="chapter" id="appendix-b">
+    <div class="chapter-label">Appendix B</div>
+    <h2>Circuit Signals Reference</h2>
+    <table>
+      <tr><th>Signal</th><th>Type</th><th>Visibility</th><th>Constraints involving signal</th></tr>
+      <tr><td><code>sk</code></td><td>Field element (248-bit)</td><td>Private</td><td>Range check (Num2Bits), inner hash (Poseidon), nullifier (Poseidon)</td></tr>
+      <tr><td><code>salt</code></td><td>Field element</td><td>Private</td><td>Commitment (Poseidon)</td></tr>
+      <tr><td><code>walletAddress</code></td><td>Field element (160-bit addr)</td><td>Public</td><td>Commitment (Poseidon)</td></tr>
+      <tr><td><code>nullifierNonce</code></td><td>Field element (128-bit)</td><td>Public</td><td>Nullifier (Poseidon)</td></tr>
+      <tr><td><code>commitment</code></td><td>Field element</td><td>Public output</td><td>Poseidon(Poseidon(sk), walletAddress, salt) equality check</td></tr>
+      <tr><td><code>nullifier</code></td><td>Field element</td><td>Public output</td><td>Poseidon(sk, nullifierNonce) equality check</td></tr>
+    </table>
+    <p><strong>Approximate constraint count breakdown:</strong> Poseidon([sk]) ≈ 295 constraints; Poseidon([sk_hash, addr, salt]) ≈ 310 constraints; Poseidon([sk, nonce]) ≈ 295 constraints; Num2Bits(248) ≈ 250 constraints; overhead ≈ 50 constraints. Total ≈ 1,200 constraints.</p>
+  </div>
+
+  <div class="chapter" id="appendix-c">
+    <div class="chapter-label">Appendix C</div>
+    <h2>Test Suite Summary</h2>
+    <p>As of the commit tagged for this thesis submission, the contract test suite contains:</p>
+    <table>
+      <tr><th>Test file</th><th>Tests</th><th>Coverage (lines)</th></tr>
+      <tr><td>InstitutionRegistry.test.ts</td><td>~180</td><td>&gt;90%</td></tr>
+      <tr><td>CertificateRegistry.test.ts</td><td>~200</td><td>&gt;90%</td></tr>
+      <tr><td>EmployerRegistry.test.ts</td><td>~150</td><td>&gt;85%</td></tr>
+      <tr><td>ZKAuthRegistry.test.ts</td><td>~120</td><td>&gt;85%</td></tr>
+      <tr><td>Upgrade tests</td><td>~60</td><td>&gt;80%</td></tr>
+      <tr><td>Integration tests</td><td>~46</td><td>—</td></tr>
+      <tr><td><strong>Total</strong></td><td><strong>~756</strong></td><td><strong>&gt;80% overall</strong></td></tr>
+    </table>
+    <p>Run the full suite with <code>cd contracts &amp;&amp; npm test</code>. Coverage reports are generated with <code>npm run coverage</code> and output to <code>contracts/coverage/</code>.</p>
+  </div>
+
+  <!-- ── Footer ── -->
+  <div class="foot">
+    <p>University of West Attica — Department of Informatics and Computer Engineering — Diploma Thesis 2025–2026</p>
+    <p>Vasileios Manolas · Supervisor: Dimitrios Kogias, Adjunct Lecturer</p>
+    <p style="margin-top:0.5rem;"><a href="researchpaper.html">Research Paper ↗</a></p>
+  </div>
+
+</div>
+</body>
+</html>

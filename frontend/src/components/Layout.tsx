@@ -541,6 +541,22 @@ export function Layout() {
               >
                 GitHub
               </a>
+              <a
+                href={`${import.meta.env.BASE_URL}thesis.html`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-surface-400 hover:text-white text-sm transition-colors"
+              >
+                Thesis
+              </a>
+              <a
+                href={`${import.meta.env.BASE_URL}researchpaper.html`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-surface-400 hover:text-white text-sm transition-colors"
+              >
+                Research Paper
+              </a>
             </div>
           </div>
         </div>
