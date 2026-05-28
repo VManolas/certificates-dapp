@@ -504,38 +504,79 @@ Ethereum L1 settlement</div>
       unlinkability.</figcaption>
     </figure>
 
-    <h2 class="subsection">A. Threat Model and Privacy Goals</h2>
+    <h2 class="subsection">A. Adversary Model and Privacy Goals</h2>
     <p>
-      We consider two classes of adversary:
+      Security claims are stated with respect to a <em>probabilistic
+      polynomial-time (PPT)</em> adversary who can observe all on-chain state,
+      submit arbitrary transactions, and control transaction ordering. The
+      system is not secure against an adversary who can break the discrete
+      logarithm problem on BN254 or find a Poseidon collision. Five classes of
+      adversary are considered:
     </p>
     <p>
       <em>Passive blockchain observer:</em> reads all on-chain state and
       transaction calldata, including the commitment registration transaction
-      and all authentication transactions. This adversary can observe
-      <code>msg.sender</code> of every transaction.
+      and all authentication transactions. Can observe
+      <code>msg.sender</code> of every transaction. <strong>Partially
+      mitigated:</strong> cannot determine private keys, salts, or link
+      sessions from nullifier values alone. Can link sessions to the same
+      wallet via <code>msg.sender</code>.
     </p>
     <p>
       <em>Active forger:</em> submits arbitrary transactions to the contracts,
       including malformed proofs or replayed proof bytes, attempting to
-      authenticate without knowledge of <em>sk</em>.
+      authenticate without knowledge of <em>sk</em>. <strong>Fully
+      mitigated:</strong> Groth16 soundness (under q-PKE) prevents proof
+      forgery; nullifier uniqueness prevents replay.
+    </p>
+    <p>
+      <em>Malicious institution:</em> issues fraudulent certificates for
+      arbitrary student addresses and document hashes. <strong>Not mitigated
+      by contract logic</strong> (the contract does not validate document
+      authenticity); mitigated by admin suspension.
+    </p>
+    <p>
+      <em>Compromised admin key:</em> can upgrade registry implementations,
+      approve fraudulent institutions, or call <code>setVerifier()</code> to
+      replace the verifier adapter. Cannot forge ZK proofs (the
+      Groth16Verifier is immutable). <strong>Most significant residual
+      risk;</strong> mitigated in production by a multi-sig wallet and
+      timelock controller.
+    </p>
+    <p>
+      <em>Malicious frontend:</em> can read <em>sk</em> from JavaScript memory
+      during proof generation. <strong>Not mitigated;</strong> a browser
+      extension or hardware enclave is out of scope.
+    </p>
+    <p>
+      <strong>Security reduction.</strong> The system&rsquo;s authentication
+      guarantee reduces to three independent sub-problems: (1)&nbsp;Groth16
+      soundness under the q-PKE assumption on BN254&nbsp;[2],
+      (2)&nbsp;Poseidon-128 collision resistance over the BN254 scalar
+      field&nbsp;[6], and (3)&nbsp;AES-GCM-256 security for local credential
+      storage. The system makes no additional cryptographic assumptions.
     </p>
     <p>
       <strong>Privacy properties achieved:</strong> (i)&nbsp;The secret key
       <em>sk</em> and credential contents are never revealed on-chain.
       (ii)&nbsp;Two authentication sessions cannot be linked by their ZK proof
-      contents or nullifier values alone. (iii)&nbsp;An observer who does not
-      know <em>sk</em> cannot determine what credential a user holds from their
-      authentication transaction.
+      contents or nullifier values alone (<em>session unlinkability</em>).
+      (iii)&nbsp;An observer who does not know <em>sk</em> cannot determine what
+      credential a user holds from their authentication transaction.
     </p>
     <p>
       <strong>Privacy properties not achieved:</strong> Because authentication
       transactions are submitted by the user&rsquo;s wallet, <code>msg.sender</code>
       is visible on-chain. An observer who observed the commitment registration
-      transaction can therefore link the authenticating wallet to the commitment.
+      transaction can therefore permanently link the authenticating wallet to the
+      commitment (<em>registration unlinkability</em> is not achieved).
       Full wallet-level unlinkability would require a relayer or Merkle-based
       anonymity set (Section&nbsp;VIII-A). We do not protect against an adversary
       who learns the user&rsquo;s secret key; such an adversary can forge proofs
-      and impersonate the user indefinitely.
+      and impersonate the user indefinitely (no <em>forward secrecy</em>).
+      The system achieves <em>pseudonymity</em> (actions linked to a persistent
+      pseudonym &mdash; the commitment) rather than <em>anonymity</em> (actions
+      unlinkable to any user identity).
     </p>
 
     <h2 class="subsection">B. Key Material Generation</h2>
@@ -998,24 +1039,43 @@ Ethereum L1 settlement</div>
       assumptions beyond hash collision resistance.
     </p>
 
-    <h2 class="subsection">D. Limitations and Known Gaps</h2>
+    <h2 class="subsection">D. Privacy Analysis and Known Gaps</h2>
     <p>
-      <em>Commitment-level linkability.</em> The commitment value is stored
-      on-chain by the user&rsquo;s wallet via <code>registerCommitment</code>.
-      Authentication transactions are submitted from the same wallet
-      (<code>msg.sender</code> is visible). A passive observer can therefore
-      link authentication sessions to the registering wallet. Full unlinkability
-      requires either a relayer (to decouple <code>msg.sender</code> from the
-      user&rsquo;s wallet) or a Merkle-based anonymity set (as in
-      Semaphore&nbsp;[9]) to hide the commitment among a set.
+      The system achieves <em>pseudonymity</em>, not <em>anonymity</em>.
+      Pseudonymity means an observer can link actions to a persistent
+      pseudonym (the commitment) but not to a real-world identity. Anonymity
+      would require that the observer cannot determine which user performed an
+      action, even within the set of known users. Two formal privacy properties
+      are distinguished:
+    </p>
+    <p>
+      <em>Session unlinkability (achieved).</em> Two login sessions cannot be
+      linked to each other by an observer who does not already know the
+      commitment. Each nullifier N&nbsp;=&nbsp;Poseidon(sk,&nbsp;freshNonce) is
+      computationally independent under Poseidon one-wayness.
+    </p>
+    <p>
+      <em>Registration unlinkability (not achieved).</em> The commitment value
+      is stored on-chain by the user&rsquo;s wallet via
+      <code>registerCommitment</code>. Authentication transactions are submitted
+      from the same wallet (<code>msg.sender</code> is visible). A passive
+      observer can therefore permanently link authentication sessions to the
+      registering wallet. Full registration unlinkability requires either a
+      relayer (to decouple <code>msg.sender</code> from the user&rsquo;s wallet)
+      or a Merkle-based anonymity set (as in Semaphore&nbsp;[9]) to hide the
+      commitment among a set. This design deliberately trades stronger privacy
+      for simpler implementation and lower gas cost.
     </p>
     <p>
       <em>No forward secrecy.</em> If <em>sk</em> is compromised, all past
-      sessions become retroactively linkable — an attacker can compute
+      sessions become retroactively linkable &mdash; an attacker can compute
       Poseidon(<em>sk</em>,&nbsp;<em>n</em>) for each observed public nonce
-      <em>n</em> and match the results against on-chain nullifiers — and
-      future impersonation is possible. The system provides no mechanism
-      for key rotation without creating a new commitment.
+      <em>n</em> and match the results against on-chain nullifiers &mdash; and
+      future impersonation is possible. The system provides <em>session
+      secrecy</em> (a stolen session ID is useless after 24&nbsp;hours) but not
+      <em>key secrecy</em> (a stolen private key is useful indefinitely). The
+      system provides no mechanism for key rotation without creating a new
+      commitment; commitment revocation is not currently implemented.
     </p>
     <p>
       <em>Single-party trusted setup.</em> The circuit-specific setup phase
