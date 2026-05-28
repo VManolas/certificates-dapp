@@ -7,8 +7,7 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
 /**
  * @title IAuthVerifier
- * @notice Interface for the Noir-generated ZK verifier contract
- * @dev Will be replaced with actual verifier after circuit compilation
+ * @notice Interface for the Groth16 ZK verifier contract
  */
 interface IAuthVerifier {
     function verify(

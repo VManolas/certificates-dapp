@@ -435,13 +435,17 @@ Ethereum L1 settlement</div>
           registration, session creation, and nullifier tracking.</li>
     </ul>
     <p>
-      All contracts inherit from <code>UpgradeableBase</code>, which provides UUPS
-      proxy support (EIP-1822&nbsp;[16]), OpenZeppelin&rsquo;s
+      <code>CertificateRegistry</code> and <code>InstitutionRegistry</code> inherit from
+      <code>UpgradeableBase</code>, which provides UUPS proxy support
+      (EIP-1822&nbsp;[16]), OpenZeppelin&rsquo;s
       <code>AccessControlUpgradeable</code>&nbsp;[17], <code>PausableUpgradeable</code>,
-      and <code>ReentrancyGuardUpgradeable</code>. Cross-contract authorisation is
-      enforced via dedicated roles (e.g., <code>CERTIFICATE_REGISTRY_ROLE</code> on
-      <code>InstitutionRegistry</code> permits only the
-      <code>CertificateRegistry</code> contract to increment certificate counters).
+      and <code>ReentrancyGuardUpgradeable</code>.
+      <code>ZKAuthRegistry</code> and <code>EmployerRegistry</code> achieve equivalent
+      upgradeability through direct OpenZeppelin inheritance. Cross-contract
+      authorisation is enforced via dedicated roles (e.g.,
+      <code>CERTIFICATE_REGISTRY_ROLE</code> on <code>InstitutionRegistry</code>
+      permits only the <code>CertificateRegistry</code> contract to increment
+      certificate counters).
     </p>
 
     <h2 class="subsection">C. ZK Proof System</h2>
@@ -487,18 +491,19 @@ Ethereum L1 settlement</div>
       <div class="placeholder-fig">User (Browser)         ZKAuthRegistry (L2)
      |                          |
      | -- registerCommitment(C) ->
-     |                          | store commitments[addr]=C
+     |                          | store commitments[C]=true
      |                          |
      | generate nullifierNonce  |
      | prove(sk,salt,addr,nonce)|
      | &darr; [~2–8 s client-side]  |
      |                          |
-     | -- startSession(proof) -->
+     | -- startSession(C,proof,nonce,N) -->
+     |                          | require commitments[C]
      |                          | verifyProof(proof)
      |                          | check !usedNullifiers[N]
      |                          | usedNullifiers[N] = true
-     |                          | sessions[addr] = active
-     | &lt;-- SessionStarted(addr,N) -|</div>
+     |                          | sessions[id] = active
+     | &lt;-- SessionStarted(id,C) -|</div>
       <figcaption>Fig. 2. ZK Authentication Protocol sequence. The prover
       generates a fresh nullifierNonce per session, ensuring session
       unlinkability.</figcaption>
@@ -667,14 +672,14 @@ Ethereum L1 settlement</div>
       private inputs: <code>privateKey</code>, <code>walletAddress</code>,
       <code>salt</code>; and public inputs:
       <code>commitment</code>, <code>nullifierNonce</code>,
-      <code>nullifier</code>. The wallet binding is enforced at the contract
-      level: the contract retrieves the stored commitment for
-      <code>msg.sender</code> and passes it as a public input to the verifier,
-      ensuring that only the address that registered a commitment can
-      authenticate against it. As a consequence, the authenticating wallet address
-      is visible on-chain in every authentication transaction; authentication is
-      pseudonymous at the wallet level, not anonymous (see Section&nbsp;IV-A).
-      The circuit enforces three relations:
+      <code>nullifier</code>. The commitment is caller-supplied; the contract
+      verifies that it is registered (<code>commitments[commitment] == true</code>)
+      and that the ZK proof is valid against the public inputs. Wallet binding is
+      cryptographic rather than programmatic: only a prover who knows the private
+      key and salt used to construct the commitment can generate a valid proof.
+      The authenticating wallet address is visible on-chain via <code>msg.sender</code>;
+      authentication is pseudonymous at the wallet level, not anonymous
+      (see Section&nbsp;IV-A). The circuit enforces three relations:
     </p>
     <ol>
       <li><span class="formula">sk_hash = Poseidon(privateKey)</span></li>
@@ -730,15 +735,14 @@ Ethereum L1 settlement</div>
     <h2 class="subsection">H. Session Lifecycle</h2>
     <p>
       A session is created by calling
-      <code>ZKAuthRegistry.startSession(bytes calldata proof)</code> with a
-      valid proof. On success, the contract sets
-      <code>sessions[msg.sender].active = true</code> and records the nullifier.
-      The nullifier itself serves as the unique session identifier, since it is
-      already guaranteed unique by the <code>usedNullifiers</code> mapping and
-      does not require additional block-hash-based entropy (which would be
-      susceptible to block proposer manipulation). Sessions expire after
-      24&nbsp;hours, checked at query time using <code>block.timestamp</code>.
-      Logout calls <code>endSession()</code>, which sets
+      <code>ZKAuthRegistry.startSession(bytes32 commitment, bytes calldata proof, bytes32 nullifierNonce, bytes32 nullifier)</code>
+      with the registered commitment and a valid proof. On success, the contract
+      generates a unique session identifier from
+      <code>keccak256(commitment, timestamp, msg.sender, blockhash)</code>,
+      stores the session data, and records the nullifier as spent.
+      Sessions expire after 24&nbsp;hours, checked at query time using
+      <code>block.timestamp</code>. Logout calls
+      <code>endSession(bytes32 sessionId)</code>, which sets
       <code>session.active = false</code> immediately.
     </p>
 
@@ -920,7 +924,7 @@ Ethereum L1 settlement</div>
           (imaginary/real swap for EIP-197 compatibility).</li>
       <li>ABI-encode with viem&rsquo;s <code>encodeAbiParameters</code>.</li>
       <li>Submit transaction to
-          <code>ZKAuthRegistry.startSession(bytes calldata proof)</code>.</li>
+          <code>ZKAuthRegistry.startSession(commitment, proof, nullifierNonce, nullifier)</code>.</li>
     </ol>
 
     <h2 class="subsection">D. Deployment</h2>

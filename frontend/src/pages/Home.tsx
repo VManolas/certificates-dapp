@@ -365,7 +365,7 @@ export function Home() {
                           <div className="bg-surface-900 border border-surface-700 rounded-lg shadow-xl p-3 text-left">
                             <p className="text-xs font-semibold text-white mb-1">ZKP algorithm used</p>
                             <p className="text-xs text-surface-300 mb-2">
-                              This flow uses a Noir-based circuit with an <span className="text-primary-300 font-medium">UltraPlonk</span> verifier on-chain.
+                              This flow uses a Circom-based circuit with a <span className="text-primary-300 font-medium">Groth16</span> verifier on-chain.
                             </p>
                             <p className="text-xs text-surface-400">
                               Chosen for strong security with practical proof generation and verification performance for real user login flows.

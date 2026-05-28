@@ -158,7 +158,7 @@ export function useZKAuth() {
 
       logger.debug('Commitment computed', { commitment });
 
-      // Step 3: Generate ZK proof using Noir circuit
+      // Step 3: Generate ZK proof using Groth16/Circom circuit
       logger.info('🔐 Generating secure authentication proof...');
       const { generateAuthProof } = await import('@/lib/zkAuth');
       const { proof, nullifier, nullifierNonce } = await generateAuthProof(
@@ -340,7 +340,7 @@ export function useZKAuth() {
       setZKRole(credentials.role);
       logger.debug(`Role restored from credentials: ${credentials.role}`);
 
-      // Step 3: Generate login proof using Noir circuit
+      // Step 3: Generate login proof using Groth16/Circom circuit
       logger.info('🔐 Generating secure authentication proof...');
       const { generateAuthProof } = await import('@/lib/zkAuth');
       const { proof, nullifier, nullifierNonce } = await generateAuthProof(

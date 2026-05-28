@@ -1256,10 +1256,10 @@
           <marker id="arrcross" markerWidth="6" markerHeight="4" refX="6" refY="2" orient="auto"><polygon points="0 0,6 2,0 4" fill="#2d6a2d"/></marker>
         </defs>
       </svg>
-      <figcaption style="font-size:10pt; color:var(--muted); margin-top:0.5rem;">Figure 4.2 — Smart contract inheritance hierarchy. All four registry contracts inherit from UpgradeableBase, which composes OpenZeppelin's upgradeable base contracts. Cross-contract authorization is managed via dedicated roles.</figcaption>
+      <figcaption style="font-size:10pt; color:var(--muted); margin-top:0.5rem;">Figure 4.2 — Smart contract inheritance hierarchy. CertificateRegistry and InstitutionRegistry inherit from UpgradeableBase; ZKAuthRegistry and EmployerRegistry achieve equivalent functionality through direct OpenZeppelin inheritance. Cross-contract authorization is managed via dedicated roles.</figcaption>
     </figure>
     <h4>UpgradeableBase</h4>
-    <p>All contracts inherit from <code>UpgradeableBase</code>, which composes OpenZeppelin's <code>UUPSUpgradeable</code>, <code>AccessControlUpgradeable</code>, <code>PausableUpgradeable</code>, and <code>ReentrancyGuardUpgradeable</code>. The <code>_authorizeUpgrade</code> function is restricted to <code>DEFAULT_ADMIN_ROLE</code>.</p>
+    <p><code>CertificateRegistry</code> and <code>InstitutionRegistry</code> inherit from <code>UpgradeableBase</code>, which composes OpenZeppelin's <code>UUPSUpgradeable</code>, <code>AccessControlUpgradeable</code>, <code>PausableUpgradeable</code>, and <code>ReentrancyGuardUpgradeable</code>. <code>ZKAuthRegistry</code> and <code>EmployerRegistry</code> achieve equivalent upgradeability by inheriting these OpenZeppelin contracts directly, without the version-tracking and upgrade-history features provided by <code>UpgradeableBase</code>. In all four contracts, <code>_authorizeUpgrade</code> is restricted to the admin role.</p>
     <h4>InstitutionRegistry</h4>
     <p>Maintains a mapping from institution addresses to <code>Institution</code> structs containing name, country, accreditation status, and active flag. Only the admin may add or deactivate institutions. Emits <code>InstitutionRegistered</code> and <code>InstitutionDeactivated</code> events.</p>
     <h4>CertificateRegistry</h4>
@@ -1269,11 +1269,11 @@
     <h4>ZKAuthRegistry</h4>
     <p>The central contract for the ZK authentication flow. Stores the deployed address of the Groth16 <code>VerifierAdapter</code> contract. Maintains:</p>
     <ul class="outline">
-      <li><code>mapping(address => bytes32) public commitments</code> — one commitment per user address</li>
+      <li><code>mapping(bytes32 => bool) public commitments</code> — whether a commitment is registered</li>
       <li><code>mapping(bytes32 => bool) public usedNullifiers</code> — replay prevention</li>
-      <li><code>mapping(address => bool) public authenticated</code> — current session state</li>
+      <li><code>mapping(bytes32 => Session) public sessions</code> — session data keyed by sessionId</li>
     </ul>
-    <p>The <code>startSession</code> function accepts the encoded Groth16 proof (containing the commitment, nullifierNonce, and nullifier as public inputs), calls the verifier adapter, checks the nullifier against <code>usedNullifiers</code>, and if valid, creates a session with a 24-hour expiry and records the nullifier as spent. The wallet binding is enforced at the contract level: the contract retrieves <code>commitments[msg.sender]</code> and passes it as the expected commitment public input to the verifier. Since the commitment was computed over the user's wallet address during registration, a valid proof can only be produced by someone who knows both the private key and the salt used with that specific address. This means the authenticating wallet address is visible on-chain in every authentication transaction; authentication is pseudonymous at the wallet level, not anonymous.</p>
+    <p>The <code>startSession(bytes32 commitment, bytes calldata proof, bytes32 nullifierNonce, bytes32 nullifier)</code> function accepts the caller-supplied commitment and the encoded Groth16 proof, verifies that <code>commitments[commitment]</code> is true (i.e., the commitment was previously registered), checks the nullifier against <code>usedNullifiers</code>, calls the verifier adapter with the public inputs <code>[commitment, nullifierNonce, nullifier]</code>, and if valid, creates a session with a 24-hour expiry and records the nullifier as spent. Wallet binding is <em>not</em> enforced at the contract level: the commitment is caller-supplied rather than retrieved from an address-to-commitment mapping. Security relies on the ZK proof itself — only a prover who possesses the private key, wallet address, and salt used to construct the commitment can generate a valid proof. Since the commitment was computed as <code>Poseidon(Poseidon(privateKey), walletAddress, salt)</code>, these three secrets are required for authentication. The authenticating wallet address is visible on-chain in the transaction's <code>msg.sender</code>, making authentication pseudonymous at the wallet level, not anonymous.</p>
 
     <h3>4.4 Adversary Model</h3>
     <p>The system's security claims are stated with respect to a <em>probabilistic polynomial-time (PPT)</em> adversary who can:</p>
@@ -1387,9 +1387,9 @@
       <caption>Table 5.1 — ZK Auth circuit signals</caption>
       <tr><th>Signal</th><th>Visibility</th><th>Description</th></tr>
       <tr><td><code>privateKey</code></td><td>Private input</td><td>Secret key; 248-bit field element</td></tr>
-      <tr><td><code>walletAddress</code></td><td>Private input</td><td>Ethereum address; binding enforced at contract level via commitment mapping</td></tr>
+      <tr><td><code>walletAddress</code></td><td>Private input</td><td>Ethereum address; embedded in commitment at registration</td></tr>
       <tr><td><code>salt</code></td><td>Private input</td><td>Commitment salt; random field element</td></tr>
-      <tr><td><code>commitment</code></td><td>Public input</td><td>Contract supplies from <code>commitments[msg.sender]</code>; circuit checks: Poseidon(Poseidon(privateKey), walletAddress, salt)</td></tr>
+      <tr><td><code>commitment</code></td><td>Public input</td><td>Caller-supplied; contract verifies <code>commitments[commitment] == true</code>; circuit checks: Poseidon(Poseidon(privateKey), walletAddress, salt)</td></tr>
       <tr><td><code>nullifierNonce</code></td><td>Public input</td><td>Per-session random nonce</td></tr>
       <tr><td><code>nullifier</code></td><td>Public input</td><td>Circuit checks: Poseidon(privateKey, nullifierNonce); contract enforces uniqueness</td></tr>
     </table>
@@ -1401,9 +1401,9 @@
       <li><strong>Nullifier check:</strong> <span><code>nullifier === Poseidon([privateKey, nullifierNonce])</code> — verifies that the nullifier is correctly derived.</span></li>
     </ul>
     <p>Total R1CS constraints: 1,537 (as reported by <code>snarkjs r1cs info</code>). The circuit comprises three Poseidon invocations with varying state widths (t=2, t=4, and t=3 respectively) plus internal wiring. No explicit range check on <em>sk</em> is included in the current implementation; field overflow is mitigated by the 248-bit key generation procedure in the frontend. Witness generation time in WebAssembly is approximately 40 ms; proof generation time in the browser is 2–8 seconds depending on device CPU.</p>
-    <h4>Wallet binding: circuit-level vs. contract-level enforcement</h4>
-    <p>The circuit does not verify that <code>walletAddress</code> (a private input) equals <code>msg.sender</code> — it cannot, because the circuit runs in the browser before the transaction is submitted, so <code>msg.sender</code> is not available as an input to the proof. Wallet binding is instead enforced at the contract level: the contract retrieves <code>commitments[msg.sender]</code> and passes it as the expected commitment public input to the verifier. Since the commitment was computed over the user's wallet address during registration, a valid proof can only be produced by someone who knows both the private key and the salt used with that specific address. This means only the wallet that registered the commitment can authenticate against it.</p>
-    <p>The distinction between circuit-level and contract-level enforcement is subtle but important. Contract-level enforcement relies on the correctness of the contract logic: if the contract were upgraded to pass an attacker-chosen commitment rather than <code>commitments[msg.sender]</code>, the binding would be broken. A circuit-level enforcement — including <code>msg.sender</code> as a public input and constraining it to equal <code>walletAddress</code> in the commitment — would make each proof cryptographically non-transferable, providing a stronger guarantee independent of contract correctness. This is identified as future work (Section 8.2).</p>
+    <h4>Wallet binding: current design and limitations</h4>
+    <p>The circuit does not verify that <code>walletAddress</code> (a private input) equals <code>msg.sender</code> — it cannot, because the circuit runs in the browser before the transaction is submitted, so <code>msg.sender</code> is not available as an input to the proof. The contract likewise does not enforce wallet binding: the commitment is caller-supplied, and the contract only verifies that the commitment is registered (<code>commitments[commitment] == true</code>) and that the ZK proof is valid. Consequently, any wallet in possession of the three secrets (privateKey, walletAddress, salt) can authenticate against a given commitment.</p>
+    <p>This is a deliberate design trade-off. Wallet binding is provided <em>cryptographically</em> rather than <em>programmatically</em>: since the commitment encodes a specific wallet address, only a prover who knows that address (along with the private key and salt) can construct a valid proof. In practice, the wallet address is known to the original registrant and is observable on-chain in the registration transaction, so the security argument reduces to knowledge of the private key and salt. A stronger enforcement — including <code>msg.sender</code> as a public input and constraining it to equal <code>walletAddress</code> within the circuit — would make each proof cryptographically non-transferable, tying authentication to a specific wallet independent of secret knowledge. This is identified as future work (Section 8.2).</p>
     <p>Additionally, the circuit does not include a range check on <code>walletAddress</code>. Ethereum addresses are 20 bytes (160 bits), but the BN254 field accepts any element up to ~254 bits. A user could register a commitment with a <code>walletAddress</code> value exceeding 2<sup>160</sup>&nbsp;&minus;&nbsp;1, which cannot correspond to any real Ethereum address. In practice this is self-defeating (the commitment would be permanently unusable), but it is a formal gap. A complete solution would add a 160-constraint range proof inside the circuit to enforce <code>walletAddress &lt; 2<sup>160</sup></code>.</p>
     <figure style="margin:1.5rem 0; text-align:center;">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 250" style="max-width:90%; height:auto; font-family:'Helvetica Neue',Arial,sans-serif; font-size:10px;">
@@ -1497,7 +1497,7 @@
     </ul>
     <p>BN254's G₂ points are defined over a field extension F<sub>p²</sub>, meaning each coordinate is a pair (real, imaginary). snarkjs stores π<sub>B</sub> coordinates as <code>[imaginary, real]</code> in the JSON proof output, but the Solidity verifier (EIP-197 [11]) expects <code>[real, imaginary]</code>. The frontend transposes <code>pi_b[0]</code> and <code>pi_b[1]</code> before ABI encoding; failure to do so causes silent proof rejection. The proof and public inputs are ABI-encoded using viem's <code>encodeAbiParameters</code>:</p>
     <code class="formula">calldata = encodeAbiParameters([pA, pB, pC, pubInputs])</code>
-    <p>This calldata is submitted to <code>ZKAuthRegistry.startSession(bytes calldata proof)</code>, which decodes it, calls the <code>VerifierAdapter.verifyProof</code> function, and on success marks the session as authenticated.</p>
+    <p>This calldata is submitted to <code>ZKAuthRegistry.startSession(bytes32 commitment, bytes calldata proof, bytes32 nullifierNonce, bytes32 nullifier)</code>, which verifies the commitment is registered, checks nullifier uniqueness, calls the <code>VerifierAdapter.verifyProof</code> function with the public inputs, and on success creates an authenticated session.</p>
 
     <h3>5.7 Session Lifecycle</h3>
     <p>The full session lifecycle comprises six steps:</p>
@@ -1561,12 +1561,12 @@
 
         <!-- Submit proof -->
         <line x1="130" y1="310" x2="390" y2="330" stroke="#1a3a6b" stroke-width="1.2" marker-end="url(#arr1)"/>
-        <text x="260" y="315" text-anchor="middle" font-size="9">startSession(bytes proof)</text>
+        <text x="260" y="315" text-anchor="middle" font-size="9">startSession(commitment, proof, nonce, nullifier)</text>
 
         <!-- ZKAuth processes -->
         <rect x="390" y="330" width="10" height="70" fill="#f0f7f0" stroke="#2d6a2d" stroke-width="0.5"/>
-        <text x="420" y="345" font-size="8" fill="#555">decode proof + public inputs</text>
-        <text x="420" y="358" font-size="8" fill="#555">commitment = commitments[msg.sender]</text>
+        <text x="420" y="345" font-size="8" fill="#555">require commitments[commitment]</text>
+        <text x="420" y="358" font-size="8" fill="#555">require !usedNullifiers[nullifier]</text>
 
         <!-- Call verifier -->
         <line x1="400" y1="365" x2="590" y2="365" stroke="#b8860b" stroke-width="1" marker-end="url(#arr3)"/>
@@ -1634,7 +1634,7 @@
 
     <h3>6.2 Contract Implementation</h3>
     <h4>Storage layout discipline</h4>
-    <p>All four contracts inherit from <code>UpgradeableBase</code>. Each concrete contract declares a <code>uint256[50] private __gap;</code> slot at the end of its storage layout, reserving space for future variables without breaking the upgrade-safe ordering.</p>
+    <p><code>CertificateRegistry</code> and <code>InstitutionRegistry</code> inherit from <code>UpgradeableBase</code>, which itself reserves a storage gap. <code>ZKAuthRegistry</code> and <code>EmployerRegistry</code> inherit OpenZeppelin's upgradeable contracts directly. All four contracts declare a <code>uint256[N] private __gap;</code> slot at the end of their storage layout (with N adjusted per contract to account for declared state variables), reserving space for future variables without breaking the upgrade-safe ordering.</p>
     <h4>Custom errors</h4>
     <p>All revert conditions use Solidity custom errors (e.g., <code>InstitutionNotActive()</code>, <code>NullifierAlreadyUsed(bytes32)</code>) instead of string reverts, saving approximately 30–50% gas on revert paths.</p>
     <h4>Interface alignment</h4>
@@ -1682,7 +1682,9 @@ component main { public [commitment, nullifierNonce, nullifier] } = AuthLogin();
     <p>Proof generation is performed in a Web Worker to avoid blocking the main thread.</p>
 
     <h3>6.4 Test Suite</h3>
-    <p>The project includes a comprehensive test suite with approximately 756 tests covering contract logic, circuit correctness, and frontend integration. Contract tests are written in TypeScript using Hardhat's test runner (Mocha/Chai) and cover both unit-level function behaviour (e.g., access control, role conflict detection, revocation monotonicity) and integration-level flows (e.g., end-to-end certificate issuance, ZK proof verification with valid and invalid inputs, cross-contract authorization via <code>CERTIFICATE_REGISTRY_ROLE</code>). Circuit tests verify that the Circom circuit correctly accepts valid witnesses and rejects tampered inputs for all three Poseidon constraints. Frontend tests use Vitest and React Testing Library to verify component rendering, hook behaviour, and proof generation pipeline integration. A summary of test coverage is provided in Appendix C.</p>
+    <p>The project includes a comprehensive test suite with 1,253 tests across two layers: 522 contract tests and 731 frontend tests. Contract tests are written in TypeScript using Hardhat's test runner (Mocha/Chai) and cover both unit-level function behaviour (e.g., access control, role conflict detection, revocation monotonicity) and integration-level flows (e.g., end-to-end certificate issuance, ZK proof verification with valid and invalid inputs, cross-contract authorization via <code>CERTIFICATE_REGISTRY_ROLE</code>). Circuit tests verify that the Circom circuit correctly accepts valid witnesses and rejects tampered inputs for all three Poseidon constraints. Frontend tests use Vitest and React Testing Library to verify component rendering, hook behaviour, and proof generation pipeline integration. A detailed breakdown is provided in Appendix C.</p>
+    <h4>Verifier path coverage</h4>
+    <p>The majority of ZKAuthRegistry tests use a <code>MockAuthVerifier</code> (which always returns <code>true</code>) to isolate contract logic from ZK proof mechanics. Integration tests in <code>zkauth-integration.test.ts</code> exercise the UltraPlonk verification path with real proofs. A separate <code>groth16-integration.test.ts</code> file exercises the production Groth16 path end-to-end: it generates a real Groth16 proof via snarkjs, deploys the <code>Groth16Verifier</code> and <code>Groth16AuthVerifierAdapter</code>, and verifies the complete registration-and-authentication lifecycle. This ensures both verification paths are tested with real cryptographic proofs, not just mocks.</p>
 
     <h3>6.5 Frontend Implementation</h3>
     <p>The frontend is a role-based SPA with four dashboard views: admin, institution, student, and employer. Authentication state is managed by two hooks:</p>
@@ -2015,7 +2017,7 @@ component main { public [commitment, nullifierNonce, nullifier] } = AuthLogin();
     <p>The system has <em>no forward secrecy</em>. If a user's <code>privateKey</code> is compromised at any point, an attacker can:</p>
     <ul class="outline">
       <li>Compute the user's commitment (confirming which on-chain commitment belongs to the victim).</li>
-      <li>Generate valid proofs and start authenticated sessions indefinitely from any wallet (though the contract's wallet-level binding via <code>commitments[msg.sender]</code> limits this to the registered wallet).</li>
+      <li>Generate valid proofs and start authenticated sessions indefinitely from any wallet (since the contract does not enforce wallet-level binding — the commitment is caller-supplied and any wallet with the correct secrets can authenticate).</li>
       <li>Reconstruct the link between all past nullifiers: for each observed <code>nullifierNonce</code> (a public input in every authentication transaction), the attacker computes Poseidon(sk, nullifierNonce) and matches the result against on-chain nullifiers, identifying every session the victim ever created.</li>
     </ul>
     <p>The system provides <em>session secrecy</em> (a stolen session ID is useless after 24 hours) but not <em>key secrecy</em> (a stolen private key is useful indefinitely). The correct mitigation is a key rotation mechanism: register a new commitment, revoke the old one. Commitment revocation is not currently implemented — once a commitment is registered, it stays registered permanently. This is a known limitation identified as future work in Section 8.2.</p>
@@ -2042,7 +2044,7 @@ component main { public [commitment, nullifierNonce, nullifier] } = AuthLogin();
       <li><strong>Revocation is permanent and non-reversible:</strong> <span><code>CertificateRegistry</code> implements <code>revokeCertificate()</code> which sets an <code>isRevoked</code> flag permanently. Once set, the flag cannot be unset — revocation is one-way by design. This is appropriate for most academic credential use cases where issued certificates should not be reinstatable after revocation.</span></li>
       <li><strong>Commitment non-updatable:</strong> <span>A user whose sk is lost cannot replace their commitment. Mitigation: add an admin-authorized commitment reset with appropriate access controls in a future contract version.</span></li>
       <li><strong>Front-running on commitment registration:</strong> <span>A malicious node could observe a pending <code>registerCommitment</code> transaction and submit the same commitment with a higher gas price. Mitigation: include the sender address in the commitment (already done via walletAddress binding), which makes the commitment address-specific.</span></li>
-      <li><strong>Contract-level vs. circuit-level wallet binding:</strong> <span>Wallet binding is enforced at the contract level (<code>commitments[msg.sender]</code>) rather than inside the ZK circuit. This relies on contract correctness: if the contract were upgraded maliciously to pass an attacker-chosen commitment, the binding would break. The stronger approach — including <code>msg.sender</code> as a public input and constraining it in the circuit — would make proofs cryptographically non-transferable independent of contract logic. See Section 5.4 for the full analysis.</span></li>
+      <li><strong>Cryptographic vs. programmatic wallet binding:</strong> <span>Wallet binding relies on secret knowledge (privateKey + salt) rather than on-chain enforcement. The commitment is caller-supplied, and the contract verifies only that it is registered and that the ZK proof is valid — it does not check <code>msg.sender</code> against the commitment. Any wallet with the correct secrets can authenticate. The stronger approach — including <code>msg.sender</code> as a public input and constraining it in the circuit — would make proofs cryptographically non-transferable independent of secret knowledge. See Section 5.4 for the full analysis.</span></li>
       <li><strong>No range check on walletAddress in circuit:</strong> <span>The circuit accepts any BN254 field element as <code>walletAddress</code>, including values exceeding 2<sup>160</sup> that cannot correspond to real Ethereum addresses. This is a formal gap; adding a 160-constraint range proof would close it.</span></li>
     </ul>
   </div>
@@ -2179,18 +2181,32 @@ component main { public [commitment, nullifierNonce, nullifier] } = AuthLogin();
   <div class="chapter" id="appendix-c">
     <div class="chapter-label">Appendix C</div>
     <h2>Test Suite Summary</h2>
-    <p>As of the commit tagged for this thesis submission, the contract test suite contains:</p>
+    <p>As of the commit tagged for this thesis submission, the project includes two test suites: contract tests (Hardhat/Mocha/Chai) and frontend tests (Vitest/React Testing Library). Counts are measured as <code>it()</code> blocks.</p>
+
+    <h4>Contract Tests (522 total)</h4>
     <table>
-      <tr><th>Test file</th><th>Tests</th><th>Coverage (lines)</th></tr>
-      <tr><td>InstitutionRegistry.test.ts</td><td>~180</td><td>&gt;90%</td></tr>
-      <tr><td>CertificateRegistry.test.ts</td><td>~200</td><td>&gt;90%</td></tr>
-      <tr><td>EmployerRegistry.test.ts</td><td>~150</td><td>&gt;85%</td></tr>
-      <tr><td>ZKAuthRegistry.test.ts</td><td>~120</td><td>&gt;85%</td></tr>
-      <tr><td>Upgrade tests</td><td>~60</td><td>&gt;80%</td></tr>
-      <tr><td>Integration tests</td><td>~46</td><td>—</td></tr>
-      <tr><td><strong>Total</strong></td><td><strong>~756</strong></td><td><strong>&gt;80% overall</strong></td></tr>
+      <tr><th>Contract / Category</th><th>Test files</th><th>Tests</th></tr>
+      <tr><td>InstitutionRegistry</td><td>InstitutionRegistry.test.ts, InstitutionRegistry.registerByAdmin.test.ts</td><td>110</td></tr>
+      <tr><td>CertificateRegistry</td><td>CertificateRegistry.test.ts, .error-cases, .batch-validation, .hash-rules</td><td>173</td></tr>
+      <tr><td>EmployerRegistry</td><td>EmployerRegistry.validation, .update, .queries, .vat-uniqueness</td><td>90</td></tr>
+      <tr><td>ZKAuthRegistry</td><td>ZKAuthRegistry.test.ts, ZKAuthRegistry.edge-cases.test.ts</td><td>86</td></tr>
+      <tr><td>Integration</td><td>zkauth-integration, integration.employer, integration.test</td><td>47</td></tr>
+      <tr><td>Other (versioning, poseidon)</td><td>versioning.test.ts, poseidon-compatibility.test.ts</td><td>16</td></tr>
+      <tr><td><strong>Contract subtotal</strong></td><td></td><td><strong>522</strong></td></tr>
     </table>
-    <p>Run the full suite with <code>cd contracts &amp;&amp; npm test</code>. Coverage reports are generated with <code>npm run coverage</code> and output to <code>contracts/coverage/</code>.</p>
+
+    <h4>Frontend Tests (731 total)</h4>
+    <p>Frontend tests cover hooks (useZKAuth, useUnifiedAuth, useCertificateIssuance, etc.), utility libraries (zkAuth, validation, errorHandling, sanitization), components (RouteGuard, ErrorBoundary, UnifiedAuthFlow, etc.), and workers (pdfHashWorker). Run with <code>cd frontend &amp;&amp; npm test</code>.</p>
+
+    <h4>Combined Total</h4>
+    <table>
+      <tr><th>Layer</th><th>Tests</th></tr>
+      <tr><td>Smart contract tests</td><td>522</td></tr>
+      <tr><td>Frontend tests</td><td>731</td></tr>
+      <tr><td><strong>Grand total</strong></td><td><strong>1,253</strong></td></tr>
+    </table>
+
+    <p>Run contract tests with <code>cd contracts &amp;&amp; npm test</code>. Run frontend tests with <code>cd frontend &amp;&amp; npm test</code>. Coverage reports can be generated with <code>npm run coverage</code> in the respective directories.</p>
   </div>
 
   <!-- ── Footer ── -->

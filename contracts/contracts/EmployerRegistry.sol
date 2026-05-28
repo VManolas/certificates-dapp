@@ -295,5 +295,12 @@ contract EmployerRegistry is
      * @notice Required by UUPSUpgradeable
      */
     function _authorizeUpgrade(address newImplementation) internal override onlyRole(ADMIN_ROLE) {}
+
+    /**
+     * @dev Storage gap for future upgrades.
+     * Reserves 44 slots (50 - 6 used: employers, vatToWallet, employerAddresses,
+     * totalEmployers, institutionRegistry, certificateRegistry).
+     */
+    uint256[44] private __gap;
 }
 
