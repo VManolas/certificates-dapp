@@ -262,8 +262,9 @@
       proofs, and verify in constant time. Groth16&nbsp;[2] is the most efficient
       known zk-SNARK construction, producing proofs consisting of three elliptic
       curve points (two in G<sub>1</sub>, one in G<sub>2</sub>), totalling
-      192&nbsp;bytes in compressed representation, with verification requiring only
-      three pairing operations.
+      256&nbsp;bytes in uncompressed affine encoding (two 64-byte
+      G<sub>1</sub> points plus one 128-byte G<sub>2</sub> point), with
+      verification requiring only three pairing operations.
     </p>
     <p>
       Groth16 security relies on the q-type Power Knowledge of Exponent (q-PKE)
@@ -273,7 +274,7 @@
       Alternative systems include PLONK&nbsp;[21] (universal trusted setup, larger
       proofs), STARKs&nbsp;[22] (no trusted setup, post-quantum, 40&ndash;200&nbsp;KB
       proofs), and Bulletproofs&nbsp;[25] (no trusted setup, logarithmic proof size,
-      no succinct verification). Groth16 is chosen here because Ethereum&rsquo;s
+      no succinct verification). Groth16 is chosen here because Ethereum&rsquo;s&nbsp;[13]
       BN254 precompiles (EIP-196&nbsp;[14], EIP-197&nbsp;[15]) make on-chain
       Groth16 verification the lowest-gas option available.
     </p>
@@ -296,8 +297,9 @@
     <p>
       The Poseidon hash function&nbsp;[6] is a sponge construction designed for
       minimal R1CS constraint count. Over BN254&rsquo;s scalar field, Poseidon
-      with <em>t</em>=3 (two inputs, one output) requires approximately
-      300&nbsp;R1CS constraints, compared to approximately 25,000 for SHA-256
+      requires approximately 250&ndash;600&nbsp;R1CS constraints depending on
+      input arity (empirically ~474 for two inputs in this circuit),
+      compared to approximately 25,000 for SHA-256
       and 150,000 for Keccak-256. This two-to-three order-of-magnitude reduction
       is critical for practical proving times on consumer hardware. The construction
       achieves approximately 128-bit security under the algebraic attack model
@@ -338,8 +340,8 @@
         <tr><td>Blockcerts&nbsp;[19]</td><td>None</td><td>Hash</td><td>No</td><td>No</td><td>&mdash;</td></tr>
         <tr><td>Semaphore&nbsp;[9]</td><td>Full ZK</td><td>Yes</td><td>No</td><td>Multi-network</td><td>Groth16</td></tr>
         <tr><td>Polygon ID&nbsp;[20]</td><td>ZK-selective</td><td>Yes</td><td>No</td><td>Polygon</td><td>Groth16</td></tr>
-        <tr><td>Zcash&nbsp;[10]</td><td>Full ZK</td><td>Yes</td><td>No</td><td>No</td><td>Groth16</td></tr>
-        <tr><td>SBT (ERC-5192)&nbsp;[27]</td><td>None</td><td>Yes</td><td>No</td><td>No</td><td>&mdash;</td></tr>
+        <tr><td>Zcash&nbsp;[10]</td><td>Full ZK</td><td>Yes</td><td>No</td><td>No</td><td>zk-SNARK</td></tr>
+        <tr><td>SBT (EIP-5192)&nbsp;[27]</td><td>None</td><td>Yes</td><td>No</td><td>No</td><td>&mdash;</td></tr>
         <tr><td><strong>This work</strong></td><td><strong>ZK-auth*</strong></td><td><strong>Yes</strong></td><td><strong>UUPS</strong></td><td><strong>zkSync Era</strong></td><td><strong>Groth16</strong></td></tr>
       </tbody>
     </table>
@@ -362,19 +364,21 @@
     </p>
     <p>
       <em>Polygon ID</em>&nbsp;[20] is the most directly comparable system: a
-      production ZK identity framework supporting W3C Verifiable Credentials
+      production ZK identity framework supporting W3C Verifiable Credentials&nbsp;[8]
       with Groth16 selective disclosure. It targets general identity; its
       credential schema language and issuer infrastructure are significantly
       more complex than required for a single-institution academic credential
       use case, and it does not deploy on zkSync Era.
     </p>
     <p>
-      <em>Zcash</em>&nbsp;[10] pioneered Groth16 for privacy-preserving
-      transactions and introduced the nullifier concept (a one-time tag
-      preventing double-spend) that directly inspires the nullifier design here.
+      <em>Zerocash</em>&nbsp;[10] introduced the nullifier concept (a one-time
+      tag preventing double-spend) for privacy-preserving transactions,
+      which directly inspires the nullifier design here. The Zcash
+      cryptocurrency subsequently adopted Groth16 in its Sapling upgrade
+      (2018).
     </p>
     <p>
-      <em>Soulbound Tokens (ERC-5192)</em>&nbsp;[27] are non-transferable
+      <em>Soulbound Tokens (EIP-5192)</em>&nbsp;[27],&nbsp;[11] are non-transferable
       on-chain tokens used as digital credentials. They provide on-chain
       provenance but permanently link credentials to a public wallet address,
       offering no privacy protections.
@@ -437,9 +441,10 @@ Ethereum L1 settlement</div>
     <p>
       <code>CertificateRegistry</code> and <code>InstitutionRegistry</code> inherit from
       <code>UpgradeableBase</code>, which provides UUPS proxy support
-      (EIP-1822&nbsp;[16]), OpenZeppelin&rsquo;s
-      <code>AccessControlUpgradeable</code>&nbsp;[17], <code>PausableUpgradeable</code>,
-      and <code>ReentrancyGuardUpgradeable</code>.
+      (EIP-1822&nbsp;[16]) and OpenZeppelin&rsquo;s
+      <code>AccessControlUpgradeable</code>&nbsp;[17], plus version-tracking with
+      an upgrade history array. Both child contracts add
+      <code>ReentrancyGuardUpgradeable</code> directly.
       <code>ZKAuthRegistry</code> and <code>EmployerRegistry</code> achieve equivalent
       upgradeability through direct OpenZeppelin inheritance. Cross-contract
       authorisation is enforced via dedicated roles (e.g.,
@@ -503,7 +508,7 @@ Ethereum L1 settlement</div>
      |                          | check !usedNullifiers[N]
      |                          | usedNullifiers[N] = true
      |                          | sessions[id] = active
-     | &lt;-- SessionStarted(id,C) -|</div>
+     | &lt;-- SessionStarted(id,C,expiry) -|</div>
       <figcaption>Fig. 2. ZK Authentication Protocol sequence. The prover
       generates a fresh nullifierNonce per session, ensuring session
       unlinkability.</figcaption>
@@ -758,7 +763,7 @@ Ethereum L1 settlement</div>
       Transparent Proxy. In UUPS, the upgrade logic resides in the implementation
       contract, reducing deployment gas and eliminating proxy-admin role
       ambiguity. The <code>_authorizeUpgrade</code> function is restricted to
-      <code>DEFAULT_ADMIN_ROLE</code>.
+      <code>ADMIN_ROLE</code>.
     </p>
     <p>
       Storage safety across upgrades is enforced through the <em>storage gap</em>
@@ -838,10 +843,10 @@ Ethereum L1 settlement</div>
       authentication protocol. It stores:
     </p>
     <ul>
-      <li><code>commitments</code>: mapping from address to commitment value.</li>
-      <li><code>sessions</code>: mapping from address to session struct
-          (active flag, expiry timestamp).</li>
-      <li><code>usedNullifiers</code>: mapping from nullifier to spent flag.</li>
+      <li><code>commitments</code>: mapping from <code>bytes32</code> commitment hash to <code>bool</code> (whether registered).</li>
+      <li><code>sessions</code>: mapping from <code>bytes32</code> sessionId to <code>Session</code> struct
+          (commitment, expiry timestamp, active flag).</li>
+      <li><code>usedNullifiers</code>: mapping from <code>bytes32</code> nullifier to spent flag.</li>
     </ul>
     <p>
       The <code>authVerifier</code> address is updateable by admin via
@@ -858,10 +863,10 @@ Ethereum L1 settlement</div>
       expiry is checked at query time (not at creation time, avoiding the need
       for state transitions triggered by external actors); and
       <code>_authorizeUpgrade</code> is restricted to
-      <code>DEFAULT_ADMIN_ROLE</code>, preventing unauthorised logic replacement.
-      Custom Solidity errors (e.g., <code>NullifierAlreadyUsed(bytes32)</code>)
-      are used throughout to save approximately 30&ndash;50% gas on revert
-      paths compared with string reverts.
+      <code>ADMIN_ROLE</code> (<code>keccak256("ADMIN_ROLE")</code>), preventing unauthorised logic replacement.
+      Custom Solidity errors (e.g., <code>NullifierAlreadyUsed()</code>)
+      are used in ZKAuthRegistry, CertificateRegistry, and InstitutionRegistry to save approximately 30&ndash;50% gas on revert
+      paths compared with string reverts. EmployerRegistry uses string-based <code>require</code> reverts.
     </p>
 
     <!-- ─────────────────────────────────────────
@@ -1053,10 +1058,13 @@ Ethereum L1 settlement</div>
       are distinguished:
     </p>
     <p>
-      <em>Session unlinkability (achieved).</em> Two login sessions cannot be
-      linked to each other by an observer who does not already know the
-      commitment. Each nullifier N&nbsp;=&nbsp;Poseidon(sk,&nbsp;freshNonce) is
-      computationally independent under Poseidon one-wayness.
+      <em>Nullifier unlinkability (achieved).</em> Each nullifier
+      N&nbsp;=&nbsp;Poseidon(sk,&nbsp;freshNonce) is computationally
+      independent under Poseidon one-wayness; an observer cannot correlate
+      sessions through the nullifier data alone. However, because the
+      commitment is a public input to <code>startSession</code> and
+      <code>msg.sender</code> is visible, sessions are linkable at the
+      wallet level (see registration unlinkability below).
     </p>
     <p>
       <em>Registration unlinkability (not achieved).</em> The commitment value
@@ -1105,7 +1113,7 @@ Ethereum L1 settlement</div>
       <code>authVerifier</code> address in <code>ZKAuthRegistry</code> is
       updateable by the admin via <code>setVerifier()</code>, and all four
       contracts support UUPS logic upgrades restricted to
-      <code>DEFAULT_ADMIN_ROLE</code>. A compromised admin key can therefore
+      <code>ADMIN_ROLE</code>. A compromised admin key can therefore
       swap the verifier for a trivial one — causing all proof submissions to
       pass — or replace contract logic entirely. In the current prototype the
       admin is a single externally owned account. A production deployment
@@ -1181,19 +1189,19 @@ Ethereum L1 settlement</div>
         <li>[1] S. Goldwasser, S. Micali, and C. Rackoff, &ldquo;The knowledge complexity of interactive proof systems,&rdquo; <em>SIAM J. Comput.</em>, vol. 18, no. 1, pp. 186&ndash;208, 1989.</li>
         <li>[2] J. Groth, &ldquo;On the size of pairing-based non-interactive arguments,&rdquo; in <em>Proc. EUROCRYPT 2016</em>, LNCS vol. 9666. Springer, 2016, pp. 305&ndash;326.</li>
         <li>[3] A. Menezes, T. Okamoto, and S. Vanstone, &ldquo;Reducing elliptic curve logarithms to logarithms in a finite field,&rdquo; <em>IEEE Trans. Inf. Theory</em>, vol. 39, no. 5, pp. 1639&ndash;1646, 1993.</li>
-        <li>[4] B. Belles-Mu&ntilde;oz, A. Murillo, J. Baylina, and J. Adan, &ldquo;Circom: A robust and scalable language for building complex zero-knowledge circuits,&rdquo; <em>Cryptology ePrint Archive</em>, Rep. 2023/681, 2023.</li>
+        <li>[4] M. Bell&eacute;s-Mu&ntilde;oz, M. Isabel, J. L. Mu&ntilde;oz-Tapia, A. Rubio, and J. Baylina, &ldquo;Circom: A circuit description language for building zero-knowledge applications,&rdquo; <em>IEEE Trans. Dependable Secure Comput.</em>, vol. 20, no. 6, pp. 4733&ndash;4751, 2023.</li>
         <li>[5] iden3, &ldquo;snarkjs: zkSNARK implementation in JavaScript &amp; WASM,&rdquo; GitHub, 2023. [Online]. Available: https://github.com/iden3/snarkjs</li>
         <li>[6] L. Grassi, D. Kales, D. Khovratovich, A. Roy, C. Rechberger, and M. Schofnegger, &ldquo;Poseidon: A new hash function for zero-knowledge proof systems,&rdquo; in <em>Proc. USENIX Security 2021</em>, 2021, pp. 519&ndash;535.</li>
         <li>[7] Matter Labs, &ldquo;zkSync Era: Scaling Ethereum with ZK technology,&rdquo; Technical Documentation, 2023. [Online]. Available: https://docs.zksync.io</li>
         <li>[8] M. Sporny et al., &ldquo;Verifiable Credentials Data Model v2.0,&rdquo; W3C Recommendation, 2024.</li>
-        <li>[9] B. Whitehat, M. Gurkan, and K. Choi, &ldquo;Semaphore: Zero-knowledge signaling on Ethereum,&rdquo; 2020. [Online]. Available: https://semaphore.appliedzkp.org</li>
+        <li>[9] B. Whitehat, M. Gurkan, and K. Choi, &ldquo;Semaphore: Zero-knowledge signaling on Ethereum,&rdquo; 2020. [Online]. Available: https://semaphore.pse.dev</li>
         <li>[10] E. Ben-Sasson et al., &ldquo;Zerocash: Decentralized anonymous payments from Bitcoin,&rdquo; in <em>Proc. IEEE S&amp;P 2014</em>, 2014, pp. 459&ndash;474.</li>
         <li>[11] V. Buterin, &ldquo;Decentralized Society: Finding Web3&rsquo;s Soul,&rdquo; 2022. [Online]. Available: https://papers.ssrn.com/sol3/papers.cfm?abstract_id=4105763</li>
-        <li>[12] Hermez Network, &ldquo;Hermez Trusted Setup MPC Ceremony,&rdquo; 2020. [Online]. Available: https://github.com/hermeznetwork/phase2ceremony</li>
+        <li>[12] Hermez Network, &ldquo;Hermez Trusted Setup MPC Ceremony,&rdquo; 2020. [Online]. Available: https://github.com/hermeznetwork/phase2ceremony_4</li>
         <li>[13] G. Wood, &ldquo;Ethereum: A Secure Decentralised Generalised Transaction Ledger,&rdquo; Ethereum Yellow Paper, 2014.</li>
-        <li>[14] V. Buterin, &ldquo;EIP-196: Precompiled contracts for addition and scalar multiplication on the elliptic curve alt_bn128,&rdquo; Ethereum Improvement Proposals, 2017.</li>
-        <li>[15] V. Buterin, &ldquo;EIP-197: Precompiled contracts for optimal ate pairing check on the elliptic curve alt_bn128,&rdquo; Ethereum Improvement Proposals, 2017.</li>
-        <li>[16] G. Kaplan, &ldquo;EIP-1822: Universal Upgradeable Proxy Standard (UUPS),&rdquo; Ethereum Improvement Proposals, 2018.</li>
+        <li>[14] C. Reitwiessner, &ldquo;EIP-196: Precompiled contracts for addition and scalar multiplication on the elliptic curve alt_bn128,&rdquo; Ethereum Improvement Proposals, no. 196, Feb. 2017. [Online]. Available: https://eips.ethereum.org/EIPS/eip-196</li>
+        <li>[15] V. Buterin and C. Reitwiessner, &ldquo;EIP-197: Precompiled contracts for optimal ate pairing check on the elliptic curve alt_bn128,&rdquo; Ethereum Improvement Proposals, no. 197, Feb. 2017. [Online]. Available: https://eips.ethereum.org/EIPS/eip-197</li>
+        <li>[16] G. Barros and P. Gallagher, &ldquo;ERC-1822: Universal Upgradeable Proxy Standard (UUPS),&rdquo; Ethereum Improvement Proposals, no. 1822, Mar. 2019. [Online]. Available: https://eips.ethereum.org/EIPS/eip-1822</li>
         <li>[17] OpenZeppelin, &ldquo;OpenZeppelin Contracts,&rdquo; GitHub, 2023. [Online]. Available: https://github.com/OpenZeppelin/openzeppelin-contracts</li>
         <li>[18] European Parliament, &ldquo;Regulation (EU) 2016/679 (General Data Protection Regulation),&rdquo; <em>Official Journal of the European Union</em>, 2016.</li>
         <li>[19] P. Kim and A. Oza, &ldquo;Blockcerts: An Open Standard for Blockchain Credentials,&rdquo; MIT Media Lab, 2016. [Online]. Available: https://www.blockcerts.org</li>
@@ -1260,7 +1268,7 @@ Ethereum L1 settlement</div>
       </thead>
       <tbody>
         <tr><td><code>privateKey</code></td><td>Private input</td><td>User&rsquo;s 248-bit secret key</td></tr>
-        <tr><td><code>walletAddress</code></td><td>Private input</td><td>Ethereum address as BN254 field element; binding enforced at contract level via commitment mapping</td></tr>
+        <tr><td><code>walletAddress</code></td><td>Private input</td><td>Ethereum address as BN254 field element; binding is cryptographic &mdash; only a prover who knows the address used in the commitment can produce a valid proof</td></tr>
         <tr><td><code>salt</code></td><td>Private input</td><td>Random 254-bit blinding factor</td></tr>
         <tr><td><code>commitment</code></td><td>Public input</td><td>Expected: Poseidon(Poseidon(privateKey), walletAddress, salt); contract supplies from storage</td></tr>
         <tr><td><code>nullifierNonce</code></td><td>Public input</td><td>Fresh 128-bit random nonce per session</td></tr>
