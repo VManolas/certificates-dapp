@@ -4,7 +4,7 @@
  * ======================
  * 
  * A visual indicator that shows when the app is running in development mode
- * with production-grade UltraPlonk ZK verification on local network.
+ * with production-grade Groth16 ZK verification on local network.
  * 
  * Features:
  * - Sticky banner at top of page
@@ -64,7 +64,7 @@ export function DevModeBanner({ variant = 'banner', showDetails = false }: DevMo
             </h3>
             
             <p className="text-sm text-surface-300 mb-3">
-              This application is running with production-grade UltraPlonk ZK verification on a local Hardhat network. 
+              This application is running with production-grade Groth16 ZK verification on a local Hardhat network. 
               Full cryptographic verification is active and operational.
             </p>
 
@@ -73,7 +73,7 @@ export function DevModeBanner({ variant = 'banner', showDetails = false }: DevMo
               <div className="flex items-center gap-2 text-xs">
                 <span className="w-16 text-surface-400">Proofs:</span>
                 <span className="px-2 py-0.5 rounded bg-green-500/20 text-green-300 border border-green-500/30">
-                  UltraPlonk ✓
+                  Groth16 ✓
                 </span>
               </div>
               <div className="flex items-center gap-2 text-xs">
@@ -117,7 +117,7 @@ export function DevModeBanner({ variant = 'banner', showDetails = false }: DevMo
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-sm font-semibold text-white">Development Mode</span>
               <span className="hidden sm:inline text-xs text-yellow-200/80">
-                • ZK Proofs: UltraPlonk (Production) • Local Network
+                • ZK Proofs: Groth16 (Production) • Local Network
               </span>
             </div>
           </div>
@@ -158,7 +158,7 @@ export function DevModeBanner({ variant = 'banner', showDetails = false }: DevMo
                   <ul className="space-y-1 text-xs text-surface-300">
                     <li className="flex items-start gap-2">
                       <span className="text-green-400 mt-0.5">✓</span>
-                      <span>UltraPlonk ZK proof verification (production-grade)</span>
+                      <span>Groth16 ZK proof verification (production-grade)</span>
                     </li>
                     <li className="flex items-start gap-2">
                       <span className="text-green-400 mt-0.5">✓</span>

@@ -20,7 +20,7 @@
  * - Enhanced animations and transitions
  * 
  * Production Implementation:
- * - UltraPlonk verifier (production-grade cryptography)
+ * - Groth16 verifier (production-grade cryptography)
  * - Full zero-knowledge proof verification
  * - Secure credential storage with encryption
  * - On-chain commitment verification
@@ -708,7 +708,7 @@ function EducationalContent() {
               Production Ready
             </h4>
             <p className="text-green-300 text-xs leading-relaxed">
-              Using UltraPlonk verifier with full cryptographic verification on local network.
+              Using Groth16 verifier with full cryptographic verification on local network.
             </p>
           </div>
         </div>

@@ -1263,9 +1263,9 @@
     <h4>InstitutionRegistry</h4>
     <p>Maintains a mapping from institution addresses to <code>Institution</code> structs containing name, country, accreditation status, and active flag. Only the admin may add or deactivate institutions. Emits <code>InstitutionRegistered</code> and <code>InstitutionDeactivated</code> events.</p>
     <h4>CertificateRegistry</h4>
-    <p>Stores credential hashes as a mapping from <code>bytes32 credentialId</code> to a <code>Certificate</code> struct. Only addresses holding <code>INSTITUTION_ROLE</code> may issue certificates. The raw credential content is never stored on-chain; only the SHA-256 hash of the PDF document is stored. Revocation is supported: <code>revokeCertificate()</code> sets an <code>isRevoked</code> flag permanently — once revoked, a certificate cannot be reinstated. Emits <code>CertificateIssued</code> and <code>CertificateRevoked</code>.</p>
+    <p>Stores credential hashes as a mapping from <code>bytes32 credentialId</code> to a <code>Certificate</code> struct. Only addresses that pass the <code>institutionRegistry.canIssueCertificates(msg.sender)</code> check — i.e., registered and active institutions — may issue certificates. The raw credential content is never stored on-chain; only the SHA-256 hash of the PDF document is stored. Revocation is supported: <code>revokeCertificate()</code> sets an <code>isRevoked</code> flag permanently — once revoked, a certificate cannot be reinstated. Emits <code>CertificateIssued</code> and <code>CertificateRevoked</code>.</p>
     <h4>EmployerRegistry</h4>
-    <p>Registers employer addresses and tracks verification queries. Employers holding <code>EMPLOYER_ROLE</code> may call <code>verifyCredential</code>, which checks the CertificateRegistry and records the verification event.</p>
+    <p>Manages employer registration with company details and VAT number uniqueness enforcement. Employers self-register via <code>registerEmployer(companyName, vatNumber)</code>; the contract performs cross-contract role conflict validation (checking that the caller is not an admin, university, or student) before accepting the registration. Admin-only functions allow deactivation and reactivation of employer accounts.</p>
     <h4>ZKAuthRegistry</h4>
     <p>The central contract for the ZK authentication flow. Stores the deployed address of the Groth16 <code>VerifierAdapter</code> contract. Maintains:</p>
     <ul class="outline">
@@ -1370,7 +1370,7 @@
     <p>Rather than committing to <code>sk</code> directly, the system uses a two-level commitment to allow the circuit to verify key knowledge without revealing <code>sk</code> to the Solidity verifier.</p>
     <code class="formula">sk_hash  = Poseidon(sk)</code>
     <code class="formula">C = Poseidon(sk_hash, walletAddress, salt)</code>
-    <p>where <code>salt</code> is a fresh random field element generated at registration time. The commitment <code>C</code> is stored on-chain in <code>ZKAuthRegistry.commitments[walletAddress]</code>. It serves as the public key for the ZK authentication protocol.</p>
+    <p>where <code>salt</code> is a fresh random field element generated at registration time. The commitment <code>C</code> is stored on-chain via <code>ZKAuthRegistry.commitments[C] = true</code>, recording that this commitment has been registered. It serves as the public key for the ZK authentication protocol.</p>
     <h4>Properties</h4>
     <p><strong>Binding:</strong> The user cannot change <code>sk</code> after committing without producing a different <code>C</code>, since Poseidon is collision-resistant. <strong>Hiding:</strong> An adversary observing <code>C</code> cannot determine <code>sk</code> or <code>sk_hash</code> without inverting Poseidon, which requires solving a system of algebraic equations over F_p with a 248-bit entropy input. The inclusion of <code>walletAddress</code> in the commitment binds the commitment to the user's on-chain identity, preventing commitment transfer.</p>
 
@@ -1507,7 +1507,7 @@
       <li><strong>3. Nonce generation:</strong> <span>Frontend generates a fresh <code>nullifierNonce</code> using <code>crypto.getRandomValues</code>.</span></li>
       <li><strong>4. Proof generation:</strong> <span>Frontend loads proving key; calls snarkjs with private inputs (privateKey, walletAddress, salt) and public inputs (commitment, nullifierNonce, nullifier); generates proof.</span></li>
       <li><strong>5. On-chain submission:</strong> <span>Frontend ABI-encodes proof; submits transaction to <code>ZKAuthRegistry.startSession</code>; waits for confirmation.</span></li>
-      <li><strong>6. Session state:</strong> <span>On success, the contract emits <code>AuthenticationSucceeded(address user, bytes32 nullifier)</code>; the frontend reads this event and grants access to authenticated routes.</span></li>
+      <li><strong>6. Session state:</strong> <span>On success, the contract emits <code>SessionStarted(bytes32 indexed sessionId, bytes32 indexed commitment, uint256 expiry)</code>; the frontend reads this event and grants access to authenticated routes.</span></li>
     </ul>
     <figure style="margin:1.5rem 0; text-align:center;">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 580" style="max-width:100%; height:auto; font-family:'Helvetica Neue',Arial,sans-serif; font-size:10px;">
@@ -1539,10 +1539,10 @@
         <text x="260" y="120" text-anchor="middle" font-size="9">registerCommitment(C)</text>
 
         <rect x="390" y="125" width="10" height="20" fill="#f0f7f0" stroke="#2d6a2d" stroke-width="0.5"/>
-        <text x="420" y="137" font-size="8" fill="#555">store commitments[addr] = C</text>
+        <text x="420" y="137" font-size="8" fill="#555">store commitments[C] = true</text>
 
         <line x1="390" y1="150" x2="130" y2="150" stroke="#2d6a2d" stroke-width="1" stroke-dasharray="3,2" marker-end="url(#arr2)"/>
-        <text x="260" y="163" text-anchor="middle" font-size="8" fill="#555">CommitmentRegistered(addr, C)</text>
+        <text x="260" y="163" text-anchor="middle" font-size="8" fill="#555">CommitmentRegistered(C, role, timestamp)</text>
 
         <!-- Phase 2: Authentication -->
         <rect x="10" y="180" width="680" height="285" rx="5" fill="#fafafa" stroke="#ccc" stroke-width="0.5"/>
@@ -1636,7 +1636,7 @@
     <h4>Storage layout discipline</h4>
     <p><code>CertificateRegistry</code> and <code>InstitutionRegistry</code> inherit from <code>UpgradeableBase</code>, which itself reserves a storage gap. <code>ZKAuthRegistry</code> and <code>EmployerRegistry</code> inherit OpenZeppelin's upgradeable contracts directly. All four contracts declare a <code>uint256[N] private __gap;</code> slot at the end of their storage layout (with N adjusted per contract to account for declared state variables), reserving space for future variables without breaking the upgrade-safe ordering.</p>
     <h4>Custom errors</h4>
-    <p>All revert conditions use Solidity custom errors (e.g., <code>InstitutionNotActive()</code>, <code>NullifierAlreadyUsed(bytes32)</code>) instead of string reverts, saving approximately 30–50% gas on revert paths.</p>
+    <p>All revert conditions use Solidity custom errors (e.g., <code>InstitutionNotActive()</code>, <code>NullifierAlreadyUsed()</code>) instead of string reverts, saving approximately 30–50% gas on revert paths.</p>
     <h4>Interface alignment</h4>
     <p>Each contract exposes a corresponding interface in <code>contracts/contracts/interfaces/</code>. The frontend imports these interfaces via the generated ABI JSON files from <code>contracts/artifacts-zk/</code>.</p>
 
@@ -1682,7 +1682,7 @@ component main { public [commitment, nullifierNonce, nullifier] } = AuthLogin();
     <p>Proof generation is performed in a Web Worker to avoid blocking the main thread.</p>
 
     <h3>6.4 Test Suite</h3>
-    <p>The project includes a comprehensive test suite with 1,253 tests across two layers: 522 contract tests and 731 frontend tests. Contract tests are written in TypeScript using Hardhat's test runner (Mocha/Chai) and cover both unit-level function behaviour (e.g., access control, role conflict detection, revocation monotonicity) and integration-level flows (e.g., end-to-end certificate issuance, ZK proof verification with valid and invalid inputs, cross-contract authorization via <code>CERTIFICATE_REGISTRY_ROLE</code>). Circuit tests verify that the Circom circuit correctly accepts valid witnesses and rejects tampered inputs for all three Poseidon constraints. Frontend tests use Vitest and React Testing Library to verify component rendering, hook behaviour, and proof generation pipeline integration. A detailed breakdown is provided in Appendix C.</p>
+    <p>The project includes a comprehensive test suite with 1,179 tests across two layers: 446 contract tests and 733 frontend tests. Contract tests are written in TypeScript using Hardhat's test runner (Mocha/Chai) and cover both unit-level function behaviour (e.g., access control, role conflict detection, revocation monotonicity) and integration-level flows (e.g., end-to-end certificate issuance, ZK proof verification with valid and invalid inputs, cross-contract authorization via <code>CERTIFICATE_REGISTRY_ROLE</code>). Circuit tests verify that the Circom circuit correctly accepts valid witnesses and rejects tampered inputs for all three Poseidon constraints. Frontend tests use Vitest and React Testing Library to verify component rendering, hook behaviour, and proof generation pipeline integration. A detailed breakdown is provided in Appendix C.</p>
     <h4>Verifier path coverage</h4>
     <p>The majority of ZKAuthRegistry tests use a <code>MockAuthVerifier</code> (which always returns <code>true</code>) to isolate contract logic from ZK proof mechanics. Integration tests in <code>zkauth-integration.test.ts</code> exercise the UltraPlonk verification path with real proofs. A separate <code>groth16-integration.test.ts</code> file exercises the production Groth16 path end-to-end: it generates a real Groth16 proof via snarkjs, deploys the <code>Groth16Verifier</code> and <code>Groth16AuthVerifierAdapter</code>, and verifies the complete registration-and-authentication lifecycle. This ensures both verification paths are tested with real cryptographic proofs, not just mocks.</p>
 
@@ -2010,7 +2010,7 @@ component main { public [commitment, nullifierNonce, nullifier] } = AuthLogin();
     <p>Two specific privacy properties are worth naming formally:</p>
     <ul class="outline">
       <li><strong>Session unlinkability (achieved):</strong> <span>Two login sessions cannot be linked to each other by an observer who does not already know the commitment. This follows from the fact that each nullifier is Poseidon(sk, freshNonce) and is computationally independent of any other nullifier under the one-wayness of Poseidon.</span></li>
-      <li><strong>Registration unlinkability (not achieved):</strong> <span>The user's wallet address (<code>msg.sender</code>) is permanently linked to their commitment on-chain via the registration transaction. Anyone who observed the registration transaction or queries <code>commitments[address]</code> knows the mapping forever. Full registration unlinkability would require a Merkle tree of commitments (as in Semaphore [20]), where a user proves membership in the set without revealing which commitment is theirs. This design deliberately trades that stronger privacy guarantee for simpler implementation and lower gas cost.</span></li>
+      <li><strong>Registration unlinkability (not achieved):</strong> <span>The user's wallet address (<code>msg.sender</code>) is permanently linked to their commitment on-chain via the registration transaction. Anyone who observed that transaction knows which commitment belongs to that address forever. Full registration unlinkability would require a Merkle tree of commitments (as in Semaphore [20]), where a user proves membership in the set without revealing which commitment is theirs. This design deliberately trades that stronger privacy guarantee for simpler implementation and lower gas cost.</span></li>
     </ul>
 
     <h4>Forward secrecy</h4>
@@ -2183,27 +2183,27 @@ component main { public [commitment, nullifierNonce, nullifier] } = AuthLogin();
     <h2>Test Suite Summary</h2>
     <p>As of the commit tagged for this thesis submission, the project includes two test suites: contract tests (Hardhat/Mocha/Chai) and frontend tests (Vitest/React Testing Library). Counts are measured as <code>it()</code> blocks.</p>
 
-    <h4>Contract Tests (522 total)</h4>
+    <h4>Contract Tests (446 total)</h4>
     <table>
       <tr><th>Contract / Category</th><th>Test files</th><th>Tests</th></tr>
-      <tr><td>InstitutionRegistry</td><td>InstitutionRegistry.test.ts, InstitutionRegistry.registerByAdmin.test.ts</td><td>110</td></tr>
-      <tr><td>CertificateRegistry</td><td>CertificateRegistry.test.ts, .error-cases, .batch-validation, .hash-rules</td><td>173</td></tr>
-      <tr><td>EmployerRegistry</td><td>EmployerRegistry.validation, .update, .queries, .vat-uniqueness</td><td>90</td></tr>
-      <tr><td>ZKAuthRegistry</td><td>ZKAuthRegistry.test.ts, ZKAuthRegistry.edge-cases.test.ts</td><td>86</td></tr>
-      <tr><td>Integration</td><td>zkauth-integration, integration.employer, integration.test</td><td>47</td></tr>
-      <tr><td>Other (versioning, poseidon)</td><td>versioning.test.ts, poseidon-compatibility.test.ts</td><td>16</td></tr>
-      <tr><td><strong>Contract subtotal</strong></td><td></td><td><strong>522</strong></td></tr>
+      <tr><td>InstitutionRegistry</td><td>InstitutionRegistry.test.ts (76), InstitutionRegistry.registerByAdmin.test.ts (22)</td><td>98</td></tr>
+      <tr><td>CertificateRegistry</td><td>CertificateRegistry.test.ts (83), .error-cases (25), .batch-validation (34), .hash-rules (13)</td><td>155</td></tr>
+      <tr><td>EmployerRegistry</td><td>EmployerRegistry.validation (18), .update (28), .queries (20), .vat-uniqueness (16)</td><td>82</td></tr>
+      <tr><td>ZKAuthRegistry</td><td>ZKAuthRegistry.test.ts (33), ZKAuthRegistry.edge-cases.test.ts (23)</td><td>56</td></tr>
+      <tr><td>Integration</td><td>zkauth-integration (14), groth16-integration (4), integration.employer (14), integration.test (9)</td><td>41</td></tr>
+      <tr><td>Other (versioning, poseidon)</td><td>versioning.test.ts (11), poseidon-compatibility.test.ts (3)</td><td>14</td></tr>
+      <tr><td><strong>Contract subtotal</strong></td><td></td><td><strong>446</strong></td></tr>
     </table>
 
-    <h4>Frontend Tests (731 total)</h4>
+    <h4>Frontend Tests (733 total)</h4>
     <p>Frontend tests cover hooks (useZKAuth, useUnifiedAuth, useCertificateIssuance, etc.), utility libraries (zkAuth, validation, errorHandling, sanitization), components (RouteGuard, ErrorBoundary, UnifiedAuthFlow, etc.), and workers (pdfHashWorker). Run with <code>cd frontend &amp;&amp; npm test</code>.</p>
 
     <h4>Combined Total</h4>
     <table>
       <tr><th>Layer</th><th>Tests</th></tr>
-      <tr><td>Smart contract tests</td><td>522</td></tr>
-      <tr><td>Frontend tests</td><td>731</td></tr>
-      <tr><td><strong>Grand total</strong></td><td><strong>1,253</strong></td></tr>
+      <tr><td>Smart contract tests</td><td>446</td></tr>
+      <tr><td>Frontend tests</td><td>733</td></tr>
+      <tr><td><strong>Grand total</strong></td><td><strong>1,179</strong></td></tr>
     </table>
 
     <p>Run contract tests with <code>cd contracts &amp;&amp; npm test</code>. Run frontend tests with <code>cd frontend &amp;&amp; npm test</code>. Coverage reports can be generated with <code>npm run coverage</code> in the respective directories.</p>
