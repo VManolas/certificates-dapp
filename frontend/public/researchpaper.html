@@ -493,25 +493,31 @@ Ethereum L1 settlement</div>
     <hr class="section-rule" />
 
     <figure>
-      <div class="placeholder-fig">User (Browser)         ZKAuthRegistry (L2)
-     |                          |
-     | -- registerCommitment(C) ->
-     |                          | store commitments[C]=true
-     |                          |
-     | generate nullifierNonce  |
-     | prove(sk,salt,addr,nonce)|
-     | &darr; [~2–8 s client-side]  |
-     |                          |
+      <div class="placeholder-fig">User (Browser)             ZKAuthRegistry (L2)
+     |                              |
+     |  Registration (one-time):    |
+     |  generate sk, salt           |
+     |  C = Poseidon(H(sk),addr,salt)
+     |  prove(sk,salt,addr,nonce₀)  |
+     | -- registerCommitment(C,role,proof,nonce₀,N₀) -->
+     |                              | verifyProof(proof)
+     |                              | store commitments[C]=true
+     |                              |
+     |  Authentication (per session):|
+     |  generate fresh nullifierNonce|
+     |  prove(sk,salt,addr,nonce)   |
+     |  &darr; [~2–8 s client-side]     |
+     |                              |
      | -- startSession(C,proof,nonce,N) -->
-     |                          | require commitments[C]
-     |                          | verifyProof(proof)
-     |                          | check !usedNullifiers[N]
-     |                          | usedNullifiers[N] = true
-     |                          | sessions[id] = active
-     | &lt;-- SessionStarted(id,C,expiry) -|</div>
-      <figcaption>Fig. 2. ZK Authentication Protocol sequence. The prover
-      generates a fresh nullifierNonce per session, ensuring session
-      unlinkability.</figcaption>
+     |                              | require commitments[C]
+     |                              | verifyProof(proof)
+     |                              | check !usedNullifiers[N]
+     |                              | usedNullifiers[N] = true
+     |                              | sessions[id] = active
+     | &lt;-- SessionStarted(id,C,expiry) --|</div>
+      <figcaption>Fig. 2. ZK Authentication Protocol sequence. Both registration
+      and session creation require a valid Groth16 proof. Each session uses a
+      fresh nullifierNonce, ensuring nullifier unlinkability.</figcaption>
     </figure>
 
     <h2 class="subsection">A. Adversary Model and Privacy Goals</h2>
