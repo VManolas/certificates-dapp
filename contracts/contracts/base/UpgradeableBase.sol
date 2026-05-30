@@ -99,11 +99,8 @@ abstract contract UpgradeableBase is
 
     /**
      * @dev Storage gap for future upgrades
-     * Reserves 47 slots for adding new state variables without breaking storage layout
-     * If adding new variables, reduce this number accordingly (50 - added slots)
-     * 
-     * Current usage: 1 slot (upgradeHistory array)
-     * Available: 47 slots
+     * Current usage: 1 slot (upgradeHistory array) → 1 + 47 = 48 total
+     * If adding new state variables, reduce __gap size accordingly
      */
     uint256[47] private __gap;
 }

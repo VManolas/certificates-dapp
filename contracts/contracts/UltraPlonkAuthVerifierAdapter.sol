@@ -16,9 +16,12 @@ interface IUltraPlonkVerifier {
 /**
  * @title UltraPlonkAuthVerifierAdapter
  * @notice Adapter to make UltraPlonk verifier compatible with IAuthVerifier interface
- * @dev Wraps the auto-generated UltraPlonk verifier contract
+ * @dev DEPRECATED: This adapter is retained for reference only. The UltraPlonk/Noir compilation
+ * path is incompatible with zkSync Era's zksolc compiler (forceEVMLA causes stack-too-deep errors).
+ * Production deployments use Groth16AuthVerifierAdapter instead.
+ * See deployment.config.ts and hardhat.config.ts for the current configuration.
  * 
- * This adapter serves multiple purposes:
+ * Original purpose:
  * 1. Matches the IAuthVerifier interface expected by ZKAuthRegistry
  * 2. Adds events for monitoring verification attempts
  * 3. Provides metadata about the verifier (production status, circuit name)

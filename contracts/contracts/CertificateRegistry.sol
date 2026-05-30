@@ -474,8 +474,10 @@ contract CertificateRegistry is
     /**
      * @dev Storage gap for future upgrades (inherited from UpgradeableBase)
      * Combined with base contract gap, provides safe upgrade path
-     * Current usage: 3 slots (institutionRegistry, mappings, counter)
-     * Base provides: 47 slots
+     * Current usage: 5 slots (institutionRegistry, certificates mapping,
+     *   studentCertificates mapping, hashToCertificateId mapping,
+     *   _certificateIdCounter) → 5 + 44 = 49 total child slots
+     * Base provides: 47 additional slots (+ 1 used = 48 in UpgradeableBase)
      */
     uint256[44] private __gap;
 

@@ -354,8 +354,9 @@ contract InstitutionRegistry is
     /**
      * @dev Storage gap for future upgrades (inherited from UpgradeableBase)
      * Combined with base contract gap, provides safe upgrade path
-     * Current usage: 2 slots (mappings and array)
-     * Base provides: 47 slots
+     * Current usage: 3 slots (institutions mapping, institutionList array,
+     *   emailDomainToAddress mapping) → 3 + 45 = 48 total child slots
+     * Base provides: 47 additional slots (+ 1 used = 48 in UpgradeableBase)
      */
     uint256[45] private __gap;
 

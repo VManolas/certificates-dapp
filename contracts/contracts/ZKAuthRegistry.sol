@@ -31,7 +31,7 @@ interface IAuthVerifier {
  * Security:
  * - Private keys never touch the blockchain
  * - Wallet addresses only revealed when user chooses
- * - Poseidon/Pedersen hash for ZK-friendly commitments
+ * - Poseidon hash for ZK-friendly commitments
  * - Session tokens expire after 24 hours
  */
 contract ZKAuthRegistry is 
@@ -40,7 +40,7 @@ contract ZKAuthRegistry is
     UUPSUpgradeable 
 {
     /// @notice Contract version
-    string public constant VERSION = "1.0.0";
+    string public constant VERSION = "1.1.0";
     
     /// @notice Admin role for contract management
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
@@ -141,7 +141,7 @@ contract ZKAuthRegistry is
     
     /**
      * @notice Register a new commitment with role
-     * @param commitment Hash(publicKey, walletAddress, salt) — public anchor of identity
+     * @param commitment Poseidon(Poseidon(privateKey), walletAddress, salt) — public anchor of identity
      * @param role User role (Student or Employer only)
      * @param proof ZK proof of commitment ownership
      * @param nullifierNonce Fresh random nonce chosen by the prover for this proof
@@ -184,6 +184,9 @@ contract ZKAuthRegistry is
      * @dev The nullifier is stored after first use, preventing proof replay: the same
      *      proof bytes cannot open a second session even after the first one expires.
      *      Each session requires a fresh nonce, producing a fresh unlinkable nullifier.
+     *      The nullifier is also included in the sessionId hash, binding each session
+     *      to the exact ZK proof that created it and adding proof-specific entropy
+     *      independent of miner-controllable inputs (blockhash).
      */
     function startSession(
         bytes32 commitment,
@@ -204,7 +207,7 @@ contract ZKAuthRegistry is
         usedNullifiers[nullifier] = true;
 
         sessionId = keccak256(
-            abi.encodePacked(commitment, block.timestamp, msg.sender, blockhash(block.number - 1))
+            abi.encodePacked(commitment, block.timestamp, msg.sender, blockhash(block.number - 1), nullifier)
         );
 
         uint256 expiry = block.timestamp + SESSION_DURATION;
@@ -218,6 +221,14 @@ contract ZKAuthRegistry is
     /**
      * @notice End an active session (logout)
      * @param sessionId Session to terminate
+     * @dev Access control is implicit: sessionId is derived from keccak256(commitment,
+     *      block.timestamp, msg.sender, blockhash, nullifier), giving 256-bit preimage
+     *      resistance. The nullifier binds the session to the specific ZK proof that
+     *      created it and adds proof-specific entropy independent of miner-controllable
+     *      inputs. Only the session creator (who received the ID from startSession's
+     *      return value) and on-chain event observers can know a valid sessionId.
+     *      Sessions expire in 24h regardless, so early termination by an observer is
+     *      a low-impact griefing vector.
      */
     function endSession(bytes32 sessionId) external {
         Session storage session = sessions[sessionId];
@@ -330,7 +341,10 @@ contract ZKAuthRegistry is
     
     /**
      * @notice Storage gap for future upgrades
-     * @dev Reduced from 50 to 49 to account for usedNullifiers mapping
+     * @dev 6 state slots used: authVerifier, commitments, roles, sessions,
+     *      registrationTime, usedNullifiers. Original total = 55 slots
+     *      (5 vars + 50 gap); usedNullifiers added → 6 vars + 49 gap = 55.
+     *      V1.1.0: no new state variables — session ID derivation change only.
      */
     uint256[49] private __gap;
 }

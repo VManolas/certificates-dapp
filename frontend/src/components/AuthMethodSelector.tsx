@@ -387,7 +387,7 @@ export function AuthMethodSelector({
                     <ul className="space-y-1 text-xs">
                       <li className="flex items-start gap-2">
                         <span className="text-primary-400 font-bold">•</span>
-                        <span><strong className="text-white">Private Login:</strong> Your wallet is visible during one-time setup, but all future logins use zero-knowledge proofs (wallet hidden)</span>
+                        <span><strong className="text-white">Private Login:</strong> Your wallet is visible during one-time setup. Future logins use zero-knowledge proofs (secret key hidden; wallet pseudonymous on-chain)</span>
                       </li>
                       <li className="flex items-start gap-2">
                         <span className="text-blue-400 font-bold">•</span>

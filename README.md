@@ -195,7 +195,7 @@ zkCredentials implements **role-based authentication** with guided defaults for 
 2. System auto-detects student role (if certificate exists)
 3. **Private Login (ZK)** shown by default
    - 🔐 One-time setup - wallet visible during registration
-   - 🛡️ Private authentication - ZK proofs hide wallet during login
+   - 🛡️ Private authentication - ZK proofs hide secret key during login (wallet pseudonymous on-chain)
    - ⚙️ Setup takes ~30 seconds, then login forever privately
    - 💡 Pro Tip: Use a dedicated "registration wallet" for maximum privacy
 4. Web3 fallback available if needed
@@ -266,7 +266,7 @@ zkCredentials implements **role-based authentication** with guided defaults for 
 - **Role-Based Authentication** - ZK proofs for students, Web3 for institutions/admin
 - **Zero-Knowledge Privacy Model**:
   - Setup Phase: Wallet visible during one-time commitment registration
-  - Auth Phase: Login privately with ZK proofs (wallet hidden)
+  - Auth Phase: Login privately with ZK proofs (secret key hidden; wallet pseudonymous on-chain via msg.sender)
   - Usage Phase: User controls when to reveal wallet for specific actions
   - Best Practice: Use dedicated registration wallet for maximum privacy
 - All contracts use OpenZeppelin's battle-tested libraries
@@ -295,8 +295,8 @@ zkCredentials implements **role-based authentication** with guided defaults for 
    
    Phase 2 - Authentication (Every Login):
    ├─ Login using zero-knowledge proofs
-   ├─ Your wallet is NOT revealed
-   └─ Complete anonymity during authentication
+   ├─ Your secret key is NOT revealed
+   └─ Pseudonymous authentication (wallet visible as msg.sender, but secrets stay private)
    
    Phase 3 - Usage (Your Control):
    ├─ Choose when to reveal wallet
@@ -312,15 +312,16 @@ zkCredentials implements **role-based authentication** with guided defaults for 
 4. **What's Private vs. What's Public**
    
    **Private (Hidden):**
-   - ✅ Login authentication (after setup)
-   - ✅ Session management
-   - ✅ Identity verification with ZK proofs
-   - ✅ Your private keys (never leave browser)
+   - ✅ Secret key (never leaves browser, proved via ZK)
+   - ✅ Salt and private inputs (hidden by zero-knowledge property)
+   - ✅ Identity verification without revealing secrets
+   - ✅ Per-session nullifiers (unlinkable at the nullifier level)
    
-   **Public (Visible):**
+   **Public (Visible on-chain):**
    - ⚠️ Registration transaction (commitment creation)
-   - ⚠️ Wallet that registered the commitment
-   - ⚠️ Any transactions you make after login (if you choose)
+   - ⚠️ Wallet that registered the commitment (msg.sender)
+   - ⚠️ Wallet that authenticates (msg.sender visible in startSession tx)
+   - ⚠️ Any transactions you make after login
 
 5. **Why This Model?**
    - One-time wallet exposure for cryptographic commitment is unavoidable in Phase 1
@@ -337,9 +338,9 @@ New Wallet: 0xABC... (dedicated for registration only)
 On-chain: 0xABC... → registerCommitment(commitment123)
 Result: Public can see 0xABC registered commitment123
 
-# 3. Login privately (wallet hidden)
+# 3. Login privately (secret key hidden)
 ZK Proof: "I know the secret behind commitment123"
-Result: No one knows which wallet is logging in!
+Result: Secret key stays private; wallet is pseudonymous on-chain
 
 # 4. Use the system
 Future actions: You choose when to reveal wallet
