@@ -17,6 +17,7 @@
     "node:local": "hardhat node --hostname 127.0.0.1 --port 8545",
     "node:local:zksync": "hardhat node-zksync",
     "deploy:local:docker": "hardhat deploy-zksync --script deploy-unified.ts --network localhost",
+    "upgrade:zkauth:staging": "hardhat deploy-zksync --script upgrade-zkauth-registry.ts --network zkSyncSepoliaTestnet",
     "verify": "hardhat verify --network zkSyncSepoliaTestnet",
     "clean": "hardhat clean"
   },
