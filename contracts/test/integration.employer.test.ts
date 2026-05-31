@@ -189,7 +189,7 @@ describe("Integration - EmployerRegistry with full system", function () {
     it("Should prevent an approved university from registering as employer", async function () {
       await expect(
         empRegistry.connect(university).registerEmployer("UniCorp", "VAT-UNI-001")
-      ).to.be.revertedWith("University cannot register as employer");
+      ).to.be.revertedWithCustomError(empRegistry, "UniversityCannotRegister");
     });
 
     it("Should prevent a student (with certificate) from registering as employer", async function () {
@@ -199,13 +199,13 @@ describe("Integration - EmployerRegistry with full system", function () {
 
       await expect(
         empRegistry.connect(studentAlice).registerEmployer("Student Startup", "VAT-STU-001")
-      ).to.be.revertedWith("Student cannot register as employer");
+      ).to.be.revertedWithCustomError(empRegistry, "StudentCannotRegister");
     });
 
     it("Should prevent admin from registering as employer", async function () {
       await expect(
         empRegistry.connect(admin).registerEmployer("Admin Corp", "VAT-ADM-001")
-      ).to.be.revertedWith("Admin cannot register as employer");
+      ).to.be.revertedWithCustomError(empRegistry, "AdminCannotRegister");
     });
 
     it("Should allow a user with no other roles to register as employer", async function () {

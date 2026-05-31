@@ -1,6 +1,7 @@
 pragma circom 2.1.0;
 
 include "node_modules/circomlib/circuits/poseidon.circom";
+include "node_modules/circomlib/circuits/bitify.circom";
 
 /*
  * AuthLogin circuit for zkCredentials
@@ -10,7 +11,7 @@ include "node_modules/circomlib/circuits/poseidon.circom";
  *
  * Private inputs:
  *   privateKey    - user's secret authentication key
- *   walletAddress - user's blockchain wallet address
+ *   walletAddress - user's blockchain wallet address (constrained to 160 bits)
  *   salt          - random salt chosen at registration
  *
  * Public inputs:
@@ -28,6 +29,10 @@ template AuthLogin() {
     signal input commitment;
     signal input nullifierNonce;
     signal input nullifier;
+
+    // Step 0: Range check — walletAddress must fit in 160 bits (valid Ethereum address)
+    component addrBits = Num2Bits(160);
+    addrBits.in <== walletAddress;
 
     // Step 1: publicKey = Poseidon(privateKey)
     component pubKeyHash = Poseidon(1);

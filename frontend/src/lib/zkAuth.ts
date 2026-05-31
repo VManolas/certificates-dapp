@@ -96,17 +96,49 @@ export async function computeCommitment(
 }
 
 /**
- * Derive an AES-GCM CryptoKey from the wallet address.
+ * Derive an AES-GCM CryptoKey from a deterministic wallet signature via HKDF-SHA-256.
+ *
+ * The signature is produced by signing a fixed domain string with the user's wallet
+ * (personal_sign with RFC 6979 produces deterministic signatures for the same key+message).
+ * HKDF extracts 256 bits of keying material from the 65-byte ECDSA signature, binding
+ * credential encryption to wallet ownership rather than to the public address string.
  */
-async function deriveAesKey(walletAddress: string): Promise<CryptoKey> {
-  const keyMaterial = new TextEncoder().encode(
-    `zkcredentials:zkauth:v3:${walletAddress.toLowerCase()}`
+async function deriveAesKey(signature: string): Promise<CryptoKey> {
+  const signatureBytes = base64ToUint8(btoa(
+    signature.startsWith('0x')
+      ? String.fromCharCode(...Array.from(hexToUint8(signature.slice(2))))
+      : signature
+  ));
+
+  const baseKey = await crypto.subtle.importKey(
+    'raw',
+    signatureBytes,
+    'HKDF',
+    false,
+    ['deriveBits']
   );
-  const rawKey = await crypto.subtle.digest('SHA-256', keyMaterial);
-  return crypto.subtle.importKey('raw', rawKey, { name: 'AES-GCM' }, false, [
+
+  const info = new TextEncoder().encode('zkcredentials:zkauth:v4:aes-gcm-key');
+  const salt = new TextEncoder().encode('zkcredentials:zkauth:v4:salt');
+
+  const derivedBits = await crypto.subtle.deriveBits(
+    { name: 'HKDF', hash: 'SHA-256', salt, info },
+    baseKey,
+    256
+  );
+
+  return crypto.subtle.importKey('raw', derivedBits, { name: 'AES-GCM' }, false, [
     'encrypt',
     'decrypt',
   ]);
+}
+
+function hexToUint8(hex: string): Uint8Array {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2) {
+    bytes[i / 2] = parseInt(hex.slice(i, i + 2), 16);
+  }
+  return bytes;
 }
 
 function uint8ToBase64(bytes: Uint8Array): string {
@@ -123,15 +155,19 @@ function base64ToUint8(b64: string): Uint8Array {
 }
 
 /**
- * Encrypt credentials with AES-GCM (256-bit key, 96-bit IV).
- * Stored format: "v3:<base64(12-byte IV || ciphertext+tag)>"
+ * Encrypt credentials with AES-GCM (256-bit key derived from wallet signature, 96-bit IV).
+ * Stored format: "v4:<base64(12-byte IV || ciphertext+tag)>"
+ *
+ * The AES key is derived from the wallet signature via HKDF-SHA-256, ensuring only the
+ * wallet holder can decrypt. This replaces the v3 scheme that derived the key from the
+ * public wallet address (which provided no real security).
  */
 export async function encryptCredentials(
   credentials: ZKCredentials,
-  _signature: string,
-  walletAddress: string
+  signature: string,
+  _walletAddress: string
 ): Promise<string> {
-  const key = await deriveAesKey(walletAddress);
+  const key = await deriveAesKey(signature);
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const plaintext = new TextEncoder().encode(JSON.stringify(credentials));
   const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, plaintext);
@@ -139,20 +175,21 @@ export async function encryptCredentials(
   const combined = new Uint8Array(12 + ciphertext.byteLength);
   combined.set(iv, 0);
   combined.set(new Uint8Array(ciphertext), 12);
-  return 'v3:' + uint8ToBase64(combined);
+  return 'v4:' + uint8ToBase64(combined);
 }
 
 /**
  * Decrypt credentials encrypted by encryptCredentials.
- * Legacy values without the "v3:" prefix are cleared and treated as outdated.
+ * Only the "v4:" format (signature-derived key) is supported. Legacy v3 and older
+ * values are cleared, requiring the user to re-register (one-time migration cost).
  */
 export async function decryptCredentials(
   encrypted: string,
-  _signature: string,
+  signature: string,
   walletAddress: string
 ): Promise<ZKCredentials> {
   try {
-    if (!encrypted.startsWith('v3:')) {
+    if (!encrypted.startsWith('v4:')) {
       clearStoredCredentials(walletAddress);
       throw new Error('CREDENTIALS_OUTDATED');
     }
@@ -161,7 +198,7 @@ export async function decryptCredentials(
     const iv = combined.slice(0, 12);
     const ciphertext = combined.slice(12);
 
-    const key = await deriveAesKey(walletAddress);
+    const key = await deriveAesKey(signature);
     const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ciphertext);
     return JSON.parse(new TextDecoder().decode(plaintext));
   } catch (error) {

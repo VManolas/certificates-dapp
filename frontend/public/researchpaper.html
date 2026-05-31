@@ -727,9 +727,23 @@ Ethereum L1 settlement</div>
         <tr><td>Poseidon(1) &mdash; inner hash (t=2 state)</td><td>&sim;474</td></tr>
         <tr><td>Poseidon(3) &mdash; commitment (t=4 state)</td><td>&sim;589</td></tr>
         <tr><td>Poseidon(2) &mdash; nullifier (t=3 state)</td><td>&sim;474</td></tr>
-        <tr><td><strong>Total</strong></td><td><strong>1,537</strong></td></tr>
+        <tr><td>Num2Bits(160) &mdash; address range check (v1.2.0)</td><td>160</td></tr>
+        <tr><td><strong>Total</strong></td><td><strong>&sim;1,697</strong></td></tr>
       </tbody>
     </table>
+
+    <p>
+      For comparison, Semaphore&nbsp;v4&nbsp;[9] uses a 4-input Poseidon hash
+      and an incremental Merkle tree of depth&nbsp;20, yielding approximately
+      7,500&ndash;8,500&nbsp;R1CS constraints depending on tree depth.
+      The higher constraint count results from the 20-level Merkle inclusion proof
+      (each level requiring a Poseidon hash). Our circuit achieves a significantly
+      lower constraint count because it does not require anonymity-set membership
+      proofs&mdash;the privacy model is pseudonymity (commitment-bound) rather than
+      anonymity (set-membership). This design trade-off yields faster proving times
+      (~2&ndash;8&nbsp;s vs. Semaphore&rsquo;s ~10&ndash;15&nbsp;s on comparable hardware)
+      at the cost of reduced unlinkability.
+    </p>
 
     <h2 class="subsection">F. Trusted Setup</h2>
     <p>
@@ -1045,6 +1059,27 @@ Ethereum L1 settlement</div>
       Groth16 with BN254 avoids this incompatibility entirely, leveraging the
       native EIP-197 precompile, which confirms it as the correct choice for this
       deployment target.
+    </p>
+
+    <table>
+      <caption>TABLE VI. Comparative Benchmarks (Groth16 systems)</caption>
+      <thead>
+        <tr><th>System</th><th>Circuit Constraints</th><th>Verification Gas (L1 equiv.)</th><th>Proof Size</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Semaphore v4&nbsp;[9] (depth 20)</td><td>&sim;8,200</td><td>&sim;280,000</td><td>256&nbsp;bytes</td></tr>
+        <tr><td>Tornado Cash&nbsp;[11] (depth 20)</td><td>&sim;28,000</td><td>&sim;300,000</td><td>256&nbsp;bytes</td></tr>
+        <tr><td>Polygon ID (auth)</td><td>&sim;15,000</td><td>&sim;250,000</td><td>256&nbsp;bytes</td></tr>
+        <tr><td><strong>This work (v1.2.0)</strong></td><td><strong>&sim;1,697</strong></td><td><strong>&sim;210,000</strong></td><td><strong>256&nbsp;bytes</strong></td></tr>
+      </tbody>
+    </table>
+    <p>
+      The significantly lower constraint count in this work results from the simpler
+      circuit design: only three Poseidon hashes and one Num2Bits range check,
+      without Merkle inclusion proofs. All Groth16 systems share the same constant
+      256-byte proof size and similar verification cost (dominated by the ecPairing
+      precompile). The reduced constraint count translates directly to faster
+      client-side proving (see Section&nbsp;VI-A).
     </p>
 
     <h2 class="subsection">C. Security Analysis</h2>

@@ -75,7 +75,7 @@ describe("EmployerRegistry - VAT Uniqueness Enforcement", function () {
       // Second registration with same VAT should fail
       await expect(
         employerRegistry.connect(employer2).registerEmployer("Company B", "VAT123456")
-      ).to.be.revertedWith("VAT already registered");
+      ).to.be.revertedWithCustomError(employerRegistry, "VatAlreadyRegistered");
     });
 
     it("should allow different VAT numbers for different employers", async function () {
@@ -97,7 +97,7 @@ describe("EmployerRegistry - VAT Uniqueness Enforcement", function () {
     it("should prevent registration with empty VAT", async function () {
       await expect(
         employerRegistry.connect(employer1).registerEmployer("Company A", "")
-      ).to.be.revertedWith("VAT number required");
+      ).to.be.revertedWithCustomError(employerRegistry, "VatNumberRequired");
     });
   });
 
@@ -190,12 +190,12 @@ describe("EmployerRegistry - VAT Uniqueness Enforcement", function () {
       // Try to register admin with same VAT (should fail on admin check first)
       await expect(
         employerRegistry.connect(admin).registerEmployer("Admin Corp", "VAT111")
-      ).to.be.revertedWith("Admin cannot register as employer");
+      ).to.be.revertedWithCustomError(employerRegistry, "AdminCannotRegister");
 
       // Try to register another employer with same VAT (should fail on VAT check)
       await expect(
         employerRegistry.connect(employer2).registerEmployer("Company B", "VAT111")
-      ).to.be.revertedWith("VAT already registered");
+      ).to.be.revertedWithCustomError(employerRegistry, "VatAlreadyRegistered");
     });
 
     it("should allow deactivated employer's VAT to remain reserved", async function () {
@@ -211,7 +211,7 @@ describe("EmployerRegistry - VAT Uniqueness Enforcement", function () {
       // Different wallet cannot register with same VAT
       await expect(
         employerRegistry.connect(employer2).registerEmployer("Company B", "VAT222")
-      ).to.be.revertedWith("VAT already registered");
+      ).to.be.revertedWithCustomError(employerRegistry, "VatAlreadyRegistered");
     });
   });
 

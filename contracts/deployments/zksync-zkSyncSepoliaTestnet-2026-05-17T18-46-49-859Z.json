@@ -1,0 +1,19 @@
+{
+  "institutionRegistry": "0xfA02152F867F3452e54307CEE139cD42e24aF140",
+  "certificateRegistry": "0x7797900105614d1B199e70618d88151a77444fA6",
+  "employerRegistry": "0xe7516e7629d7519d97d1C1d6dfB04e022fE61d58",
+  "zkAuthRegistry": "0xA3bbdf1316da9B3452788b83E8cDB74e24C66FC1",
+  "verifier": "0x19535bc6aFbD0b4ca93e43e03B0c2CA4252FbC91",
+  "verifierAdapter": "0x4d9A8f2aA26fFd4C75FDD1B655eBF5968D4439BE",
+  "admin": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+  "network": "zkSyncSepoliaTestnet",
+  "timestamp": "2026-05-17T18:46:49.857Z",
+  "config": {
+    "environment": "staging",
+    "network": "zkSyncSepoliaTestnet",
+    "verifier": "ultraplonk",
+    "gasLimit": 50000000,
+    "skipVerification": false,
+    "description": "zkSync Sepolia testnet with production verifier"
+  }
+}

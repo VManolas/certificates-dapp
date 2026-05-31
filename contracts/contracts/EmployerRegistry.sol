@@ -77,6 +77,20 @@ contract EmployerRegistry is
         string vatNumber,
         uint256 timestamp
     );
+
+    // Custom Errors (v1.1.0: migrated from string require for gas savings)
+    error CompanyNameRequired();
+    error VatNumberRequired();
+    error AlreadyRegistered();
+    error AdminCannotRegister();
+    error UniversityCannotRegister();
+    error StudentCannotRegister();
+    error VatAlreadyRegistered();
+    error NotRegistered();
+    error AccountDeactivated();
+    error AlreadyDeactivated();
+    error AlreadyActive();
+    error InvalidRegistryAddress();
     
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -106,8 +120,8 @@ contract EmployerRegistry is
         address _institutionRegistry,
         address _certificateRegistry
     ) external onlyRole(ADMIN_ROLE) {
-        require(_institutionRegistry != address(0), "Invalid institution registry");
-        require(_certificateRegistry != address(0), "Invalid certificate registry");
+        if (_institutionRegistry == address(0)) revert InvalidRegistryAddress();
+        if (_certificateRegistry == address(0)) revert InvalidRegistryAddress();
         institutionRegistry = IInstitutionRegistry(_institutionRegistry);
         certificateRegistry = ICertificateRegistry(_certificateRegistry);
     }
@@ -121,32 +135,23 @@ contract EmployerRegistry is
         string memory _companyName,
         string memory _vatNumber
     ) external nonReentrant {
-        require(bytes(_companyName).length > 0, "Company name required");
-        require(bytes(_vatNumber).length > 0, "VAT number required");
-        require(employers[msg.sender].walletAddress == address(0), "Already registered");
+        if (bytes(_companyName).length == 0) revert CompanyNameRequired();
+        if (bytes(_vatNumber).length == 0) revert VatNumberRequired();
+        if (employers[msg.sender].walletAddress != address(0)) revert AlreadyRegistered();
         
-        // Role conflict validations (check these BEFORE VAT to fail fast on role issues)
-        require(!hasRole(ADMIN_ROLE, msg.sender), "Admin cannot register as employer");
+        if (hasRole(ADMIN_ROLE, msg.sender)) revert AdminCannotRegister();
         
-        // Check not university (only if registry is set)
-        // Check both: approved universities AND pending universities
         if (address(institutionRegistry) != address(0)) {
-            // Get institution data - if walletAddress is not zero, they're registered (pending or approved)
             IInstitutionRegistry.Institution memory institution = institutionRegistry.getInstitution(msg.sender);
-            require(
-                institution.walletAddress == address(0),
-                "University cannot register as employer"
-            );
+            if (institution.walletAddress != address(0)) revert UniversityCannotRegister();
         }
         
-        // Check not student (only if registry is set)
         if (address(certificateRegistry) != address(0)) {
             uint256[] memory certs = certificateRegistry.getCertificatesByStudent(msg.sender);
-            require(certs.length == 0, "Student cannot register as employer");
+            if (certs.length != 0) revert StudentCannotRegister();
         }
         
-        // VAT uniqueness check (after role validations)
-        require(vatToWallet[_vatNumber] == address(0), "VAT already registered");
+        if (vatToWallet[_vatNumber] != address(0)) revert VatAlreadyRegistered();
         
         employers[msg.sender] = Employer({
             walletAddress: msg.sender,
@@ -156,7 +161,6 @@ contract EmployerRegistry is
             isActive: true
         });
         
-        // Register VAT number
         vatToWallet[_vatNumber] = msg.sender;
         
         employerAddresses.push(msg.sender);
@@ -174,16 +178,15 @@ contract EmployerRegistry is
         string memory _companyName,
         string memory _vatNumber
     ) external nonReentrant {
-        require(employers[msg.sender].walletAddress != address(0), "Not registered");
-        require(employers[msg.sender].isActive, "Account deactivated");
-        require(bytes(_companyName).length > 0, "Company name required");
-        require(bytes(_vatNumber).length > 0, "VAT number required");
+        if (employers[msg.sender].walletAddress == address(0)) revert NotRegistered();
+        if (!employers[msg.sender].isActive) revert AccountDeactivated();
+        if (bytes(_companyName).length == 0) revert CompanyNameRequired();
+        if (bytes(_vatNumber).length == 0) revert VatNumberRequired();
 
         string memory oldVat = employers[msg.sender].vatNumber;
 
-        // If VAT is changing, validate uniqueness then update the mapping
         if (keccak256(bytes(oldVat)) != keccak256(bytes(_vatNumber))) {
-            require(vatToWallet[_vatNumber] == address(0), "VAT already registered");
+            if (vatToWallet[_vatNumber] != address(0)) revert VatAlreadyRegistered();
             delete vatToWallet[oldVat];
             vatToWallet[_vatNumber] = msg.sender;
         }
@@ -199,8 +202,8 @@ contract EmployerRegistry is
      * @param employerAddress Address of the employer to deactivate
      */
     function deactivateEmployer(address employerAddress) external onlyRole(ADMIN_ROLE) nonReentrant {
-        require(employers[employerAddress].walletAddress != address(0), "Not registered");
-        require(employers[employerAddress].isActive, "Already deactivated");
+        if (employers[employerAddress].walletAddress == address(0)) revert NotRegistered();
+        if (!employers[employerAddress].isActive) revert AlreadyDeactivated();
         
         employers[employerAddress].isActive = false;
         
@@ -212,8 +215,8 @@ contract EmployerRegistry is
      * @param employerAddress Address of the employer to reactivate
      */
     function reactivateEmployer(address employerAddress) external onlyRole(ADMIN_ROLE) nonReentrant {
-        require(employers[employerAddress].walletAddress != address(0), "Not registered");
-        require(!employers[employerAddress].isActive, "Already active");
+        if (employers[employerAddress].walletAddress == address(0)) revert NotRegistered();
+        if (employers[employerAddress].isActive) revert AlreadyActive();
         
         employers[employerAddress].isActive = true;
         
@@ -236,7 +239,7 @@ contract EmployerRegistry is
      * @return Employer struct with employer details
      */
     function getEmployer(address employerAddress) external view returns (Employer memory) {
-        require(employers[employerAddress].walletAddress != address(0), "Not registered");
+        if (employers[employerAddress].walletAddress == address(0)) revert NotRegistered();
         return employers[employerAddress];
     }
     
@@ -258,9 +261,7 @@ contract EmployerRegistry is
         uint256 offset,
         uint256 limit
     ) external view returns (address[] memory) {
-        if (offset >= employerAddresses.length) {
-            return new address[](0);
-        }
+        require(offset < employerAddresses.length, "Offset out of bounds");
         
         uint256 end = offset + limit;
         if (end > employerAddresses.length) {
@@ -297,12 +298,5 @@ contract EmployerRegistry is
      * @notice Required by UUPSUpgradeable
      */
     function _authorizeUpgrade(address newImplementation) internal override onlyRole(ADMIN_ROLE) {}
-
-    /**
-     * @dev Storage gap for future upgrades.
-     * Reserves 44 slots (50 - 6 used: employers, vatToWallet, employerAddresses,
-     * totalEmployers, institutionRegistry, certificateRegistry).
-     */
-    uint256[44] private __gap;
 }
 

@@ -43,6 +43,11 @@ const WALLET_LOWER = WALLET.toLowerCase();
 const STORAGE_KEY = `zkauth_encrypted_credentials_v2_${WALLET_LOWER}`;
 const LEGACY_KEY = 'zkauth_encrypted_credentials';
 
+// A deterministic 65-byte ECDSA signature (hex-encoded) for testing.
+// In production this comes from personal_sign which is deterministic (RFC 6979).
+const MOCK_SIGNATURE = '0x' + 'ab'.repeat(32) + 'cd'.repeat(32) + '1b';
+const OTHER_SIGNATURE = '0x' + 'ef'.repeat(32) + '01'.repeat(32) + '1c';
+
 const SAMPLE_CREDENTIALS: ZKCredentials = {
   privateKey: '0x' + 'a1'.repeat(32),
   salt: '0x' + 'b2'.repeat(32),
@@ -97,11 +102,11 @@ describe('zkAuth', () => {
 
   describe('encryptCredentials + decryptCredentials', () => {
     it('roundtrips credentials correctly', async () => {
-      const encrypted = await encryptCredentials(SAMPLE_CREDENTIALS, 'sig', WALLET);
+      const encrypted = await encryptCredentials(SAMPLE_CREDENTIALS, MOCK_SIGNATURE, WALLET);
       expect(typeof encrypted).toBe('string');
-      expect(encrypted.startsWith('v3:')).toBe(true);
+      expect(encrypted.startsWith('v4:')).toBe(true);
 
-      const decrypted = await decryptCredentials(encrypted, 'sig', WALLET);
+      const decrypted = await decryptCredentials(encrypted, MOCK_SIGNATURE, WALLET);
       expect(decrypted.privateKey).toBe(SAMPLE_CREDENTIALS.privateKey);
       expect(decrypted.salt).toBe(SAMPLE_CREDENTIALS.salt);
       expect(decrypted.commitment).toBe(SAMPLE_CREDENTIALS.commitment);
@@ -109,31 +114,35 @@ describe('zkAuth', () => {
     });
 
     it('produces different ciphertext on every call (non-deterministic IV)', async () => {
-      const enc1 = await encryptCredentials(SAMPLE_CREDENTIALS, 'sig', WALLET);
-      const enc2 = await encryptCredentials(SAMPLE_CREDENTIALS, 'sig', WALLET);
+      const enc1 = await encryptCredentials(SAMPLE_CREDENTIALS, MOCK_SIGNATURE, WALLET);
+      const enc2 = await encryptCredentials(SAMPLE_CREDENTIALS, MOCK_SIGNATURE, WALLET);
       expect(enc1).not.toBe(enc2);
     });
 
     it('rejects legacy 0x XOR ciphertext with CREDENTIALS_OUTDATED', async () => {
       await expect(
-        decryptCredentials('0xdeadbeef', 'sig', WALLET),
+        decryptCredentials('0xdeadbeef', MOCK_SIGNATURE, WALLET),
+      ).rejects.toThrow('CREDENTIALS_OUTDATED');
+    });
+
+    it('rejects legacy v3 format with CREDENTIALS_OUTDATED', async () => {
+      await expect(
+        decryptCredentials('v3:someolddata', MOCK_SIGNATURE, WALLET),
       ).rejects.toThrow('CREDENTIALS_OUTDATED');
     });
 
     it('rejects tampered AES-GCM ciphertext with CREDENTIALS_OUTDATED', async () => {
-      const encrypted = await encryptCredentials(SAMPLE_CREDENTIALS, 'sig', WALLET);
-      // Flip a byte near the end of the base64 payload to corrupt the auth tag
+      const encrypted = await encryptCredentials(SAMPLE_CREDENTIALS, MOCK_SIGNATURE, WALLET);
       const tampered = encrypted.slice(0, -4) + 'AAAA';
       await expect(
-        decryptCredentials(tampered, 'sig', WALLET),
+        decryptCredentials(tampered, MOCK_SIGNATURE, WALLET),
       ).rejects.toThrow('CREDENTIALS_OUTDATED');
     });
 
-    it('rejects ciphertext encrypted for a different wallet', async () => {
-      const OTHER_WALLET = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8';
-      const encrypted = await encryptCredentials(SAMPLE_CREDENTIALS, 'sig', WALLET);
+    it('rejects ciphertext encrypted with a different signature', async () => {
+      const encrypted = await encryptCredentials(SAMPLE_CREDENTIALS, MOCK_SIGNATURE, WALLET);
       await expect(
-        decryptCredentials(encrypted, 'sig', OTHER_WALLET),
+        decryptCredentials(encrypted, OTHER_SIGNATURE, WALLET),
       ).rejects.toThrow('CREDENTIALS_OUTDATED');
     });
   });
