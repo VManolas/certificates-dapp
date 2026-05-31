@@ -163,19 +163,14 @@ describe("EmployerRegistry - getAllEmployers & getEmployersPaginated", function 
       expect(result).to.include(emp2.address);
     });
 
-    it("Should revert when offset equals total length (unlike InstitutionRegistry)", async function () {
-      // NOTE: EmployerRegistry.getEmployersPaginated reverts on offset >= length,
-      // whereas InstitutionRegistry.getInstitutionsPaginated returns an empty array.
-      // This asymmetry is worth noting for callers.
-      await expect(
-        registry.getEmployersPaginated(5, 2)
-      ).to.be.revertedWith("Offset out of bounds");
+    it("Should return empty array when offset equals total length", async function () {
+      const result = await registry.getEmployersPaginated(5, 2);
+      expect(result.length).to.equal(0);
     });
 
-    it("Should revert when offset exceeds total length", async function () {
-      await expect(
-        registry.getEmployersPaginated(10, 2)
-      ).to.be.revertedWith("Offset out of bounds");
+    it("Should return empty array when offset exceeds total length", async function () {
+      const result = await registry.getEmployersPaginated(10, 2);
+      expect(result.length).to.equal(0);
     });
 
     it("Should return empty array for limit 0", async function () {
@@ -194,12 +189,9 @@ describe("EmployerRegistry - getAllEmployers & getEmployersPaginated", function 
   // ─────────────────────────────────────────────────────────────
 
   describe("getEmployersPaginated on empty registry", function () {
-    it("Should revert on empty registry (offset 0 >= length 0)", async function () {
-      // Unlike InstitutionRegistry, EmployerRegistry reverts even on offset=0
-      // when no employers are registered.
-      await expect(
-        registry.getEmployersPaginated(0, 5)
-      ).to.be.revertedWith("Offset out of bounds");
+    it("Should return empty array on empty registry", async function () {
+      const result = await registry.getEmployersPaginated(0, 5);
+      expect(result.length).to.equal(0);
     });
   });
 });

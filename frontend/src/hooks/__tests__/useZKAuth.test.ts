@@ -46,8 +46,13 @@ vi.mock('ethers', () => ({
           signMessage: vi.fn(() => Promise.resolve('mock_signature')),
         })),
         getCode: vi.fn(() => Promise.resolve('0x1234')),
-        waitForTransaction: vi.fn(() => Promise.resolve({ status: 1 })),
+        waitForTransaction: vi.fn(() => Promise.resolve({ status: 1, logs: [] })),
       };
+      }),
+    },
+    utils: {
+      Interface: vi.fn(function () {
+        return { parseLog: vi.fn() };
       }),
     },
     Contract: vi.fn(function () {

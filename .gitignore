@@ -48,5 +48,20 @@ yarn-error.log*
 dist/
 build/
 
+# zkSync compilation artifacts and caches
+contracts/.cache/
+contracts/.upgradable/
+contracts/artifacts-zk/
+contracts/cache-zk/
+contracts/deployments-zk/
+
+# Hardhat build artifacts and caches
+contracts/artifacts/
+contracts/cache/
+contracts/typechain-types/
+
+# Test results
+frontend/test-results/
+
 # Deprecated files and directories
 **/deprecated/

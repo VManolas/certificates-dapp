@@ -91,7 +91,7 @@ describe("ZKAuthRegistry", function () {
     });
 
     it("Should have correct version", async function () {
-      expect(await zkAuthRegistry.VERSION()).to.equal("1.0.0");
+      expect(await zkAuthRegistry.VERSION()).to.equal("1.1.0");
     });
   });
 
@@ -549,7 +549,7 @@ describe("ZKAuthRegistry", function () {
       );
 
       expect(await upgraded.getAddress()).to.equal(await zkAuthRegistry.getAddress());
-      expect(await upgraded.VERSION()).to.equal("1.0.0");
+      expect(await upgraded.VERSION()).to.equal("1.1.0");
     });
   });
 

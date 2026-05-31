@@ -4,7 +4,7 @@
  * =========================================
  * 
  * Provides privacy-preserving authentication functionality:
- * - Register with commitment (wallet address hidden)
+ * - Register with commitment (pseudonymous at wallet level; msg.sender visible on-chain)
  * - Login with ZK proof (proves knowledge without revealing secrets)
  * - Session management
  * - Role assignment
@@ -367,10 +367,27 @@ export function useZKAuth() {
       }
       emitProgress('login_transaction_confirmed');
 
+      // Extract the real sessionId from the SessionStarted event log.
+      // The contract returns sessionId and emits SessionStarted(sessionId, commitment, expiry).
+      // We parse the event to get the on-chain sessionId (not the tx hash).
+      const iface = new ethers.utils.Interface(ZKAuthRegistryABI.abi);
+      let realSessionId: string = loginTxHash; // fallback to tx hash if parsing fails
+      for (const log of loginReceipt.logs) {
+        try {
+          const parsed = iface.parseLog(log);
+          if (parsed.name === 'SessionStarted') {
+            realSessionId = parsed.args.sessionId;
+            break;
+          }
+        } catch {
+          // Not our event, skip
+        }
+      }
+
       updateStateIfCurrent(s => ({
         ...s,
         commitment: credentials.commitment,
-        sessionId: loginTxHash,
+        sessionId: realSessionId,
         role: credentials.role,
         isAuthenticated: true,
         isLoading: false,
@@ -378,13 +395,11 @@ export function useZKAuth() {
       if (isCurrentFlowAttempt(attemptId)) {
         setZKAuthEnabled(true);
         setZKAuthenticated(true);
-        setZKSessionId(loginTxHash);
+        setZKSessionId(realSessionId);
         setAuthMethod('zk');
       }
       
-      // NOTE: Transaction submitted, but not confirmed yet
-      // The transaction confirmation will be handled by the useEffect below
-      logger.info('Session creation transaction submitted, waiting for confirmation...');
+      logger.info('Session started successfully', { sessionId: realSessionId });
     } catch (error) {
       const err = error as Error;
 

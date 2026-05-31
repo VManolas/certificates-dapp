@@ -34,6 +34,7 @@ import { useAuthStore } from '@/store/authStore';
 import { useZKAuth, type ZKAuthProgressEvent } from './useZKAuth';
 import { useUserRoles } from './useUserRoles';
 import { useInstitutionStatus } from './useInstitutionStatus';
+import { useZKSessionRevalidation } from './useZKSessionRevalidation';
 import { logger } from '@/lib/logger';
 
 export interface UnifiedAuthState {
@@ -163,6 +164,10 @@ export function useUnifiedAuth(): UnifiedAuthState {
   
   // ZK Auth hook
   const zkAuth = useZKAuth();
+
+  // Revalidate persisted ZK session against on-chain state on app load.
+  // Clears stale auth flags before RouteGuard makes access decisions.
+  useZKSessionRevalidation();
   
   // Web3 role detection
   const userRoles = useUserRoles();

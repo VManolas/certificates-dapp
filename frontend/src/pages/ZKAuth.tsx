@@ -327,14 +327,14 @@ export default function ZKAuthPage() {
                       </div>
                     </div>
                     <p className="text-sm text-surface-300 mb-4">
-                      Your wallet address is hidden. You're using privacy-preserving authentication.
+                      You&rsquo;re using privacy-preserving authentication. Your secret key stays hidden; your wallet address is pseudonymous on-chain (see Privacy Model).
                     </p>
                     <div className="mb-4 rounded-lg border border-primary-500/20 bg-surface-900/50 p-4">
                       <h5 className="text-sm font-semibold text-white mb-2">Why Private Login helps</h5>
                       <div className="space-y-2 text-xs text-surface-300">
                         <p className="flex items-start gap-2">
                           <span className="text-green-400">•</span>
-                          <span><strong className="text-white">Protects identity:</strong> routine logins do not publicly expose your wallet address.</span>
+                          <span><strong className="text-white">Protects identity:</strong> routine logins authenticate via ZK proof without revealing your secret key.</span>
                         </p>
                         <p className="flex items-start gap-2">
                           <span className="text-green-400">•</span>
@@ -586,7 +586,7 @@ function EducationalContent() {
               </span>
               <div className="flex-1">
                 <strong className="text-white text-xs">Private Login</strong>
-                <p className="text-xs leading-relaxed">Generate ZK proofs without revealing wallet</p>
+                <p className="text-xs leading-relaxed">Generate ZK proofs without revealing secret key</p>
               </div>
             </li>
           </ol>
@@ -630,7 +630,7 @@ function EducationalContent() {
                 <span>Auth Phase</span>
               </h4>
               <p className="text-xs text-green-300 leading-relaxed">
-                Login privately using ZK proofs. No wallet exposure.
+                Login using ZK proofs. Your secret key stays private; wallet address is pseudonymous on-chain.
               </p>
             </div>
 

@@ -375,7 +375,7 @@ export function Home() {
                       </div>
                     </div>
                     <p className="text-sm text-surface-300">
-                      Your wallet address is hidden. You're using privacy-preserving authentication.
+                      You&rsquo;re using privacy-preserving authentication. Your secret key stays hidden; your wallet address is pseudonymous on-chain.
                     </p>
                     <div className="mt-3 mb-3">
                       <SwitchTxStatusPanel
