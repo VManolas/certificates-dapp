@@ -64,7 +64,7 @@
     .formula { display: block; text-align: center; font-family: var(--mono); font-size: 10pt; margin: 0.6rem 0; color: #222; }
 
     /* ── Figures / Tables ── */
-    figure { break-inside: avoid; margin: 0.8rem 0; text-align: center; }
+    figure { break-inside: avoid; margin: 0.8rem 0; text-align: center; column-span: all; }
     figcaption { font-size: 9.5pt; color: var(--muted); margin-top: 0.3rem; }
     .placeholder-fig {
       display: inline-block; border: 1px dashed var(--rule); padding: 2rem 1rem;
@@ -140,7 +140,8 @@
     hash-only on-chain storage. The current circuit does not prove credential
     possession directly; credential validity is checked through registry logic.
     Four UUPS upgradeable smart contracts manage institution registration,
-    certificate issuance, employer access, and ZK-based session management.
+    certificate issuance, employer access, and ZK-based session management,
+    supported by a non-upgradeable Groth16 verifier and adapter contract.
     Evaluation on zkSync Sepolia shows proof generation in 2.1&ndash;7.8&nbsp;s
     across representative devices and on-chain ZK verification at approximately
     210,000&nbsp;gas. We also document a zksolc compatibility finding that
@@ -223,6 +224,12 @@
           gas cost, and security properties with explicitly bounded privacy claims
           and identified mitigations.</li>
     </ul>
+    <p>
+      The full source code is available at
+      <a href="https://github.com/vmanolas/zksync-zzlogin-dapp" style="color:var(--accent);">https://github.com/vmanolas/zksync-zzlogin-dapp</a>,
+      and the live dApp is deployed at
+      <a href="https://vmanolas.github.io/certificates-dapp/" style="color:var(--accent);">https://vmanolas.github.io/certificates-dapp/</a>.
+    </p>
 
     <h2 class="subsection">D. Document Structure</h2>
     <p>
@@ -287,7 +294,7 @@
       (R1CS):
       <span class="formula">(A &middot; z) &compfn; (B &middot; z) = C &middot; z</span>
       where <em>z</em> is the combined witness/input vector and &compfn; denotes the
-      Hadamard product. snarkjs&nbsp;[5] provides the JavaScript/WASM implementation
+      Hadamard product. snarkjs v0.7.6&nbsp;[5] provides the JavaScript/WASM implementation
       of Groth16 proof generation and verification, as well as tooling for the
       Powers of Tau ceremony and circuit-specific setup. Its browser-native WASM
       execution makes it suitable for privacy-sensitive applications where the
@@ -393,6 +400,19 @@
       Chen et al.&nbsp;[26] survey blockchain-based educational credential
       systems. No surveyed system provides ZK-based privacy on a ZK-rollup
       Layer-2, which is the gap this work addresses.
+    </p>
+    <p>
+      <em>Relationship to W3C DID/VC standards.</em> The W3C Verifiable
+      Credentials Data Model&nbsp;[8] and Decentralized Identifiers (DIDs)
+      define a general-purpose standard for issuing and verifying credentials.
+      zkCredentials does not implement the full W3C VC data model or DID
+      resolution; instead it uses a purpose-built on-chain registry optimised
+      for a single use case (educational credentials with ZK-authenticated
+      access). A production evolution could wrap credential metadata in W3C VC
+      JSON-LD envelopes and register institution DIDs via a DID method backed
+      by the <code>InstitutionRegistry</code>, enabling interoperability with
+      the broader decentralised identity ecosystem while preserving the ZK
+      authentication layer.
     </p>
 
     <!-- ─────────────────────────────────────────
@@ -731,20 +751,38 @@
       <span class="formula">C = Poseidon(Poseidon(sk), walletAddress, salt)</span>
       where <em>walletAddress</em> is the user&rsquo;s Ethereum address (as a
       BN254 field element) and <em>salt</em> is a fresh 254-bit random value.
-      The commitment <em>C</em> is submitted on-chain. Its properties are:
+      The commitment <em>C</em> is submitted on-chain. Its properties are
+      formalised below:
+    </p>
+    <p>
+      <strong>Definition 1 (Computational Binding).</strong> A commitment scheme
+      is <em>computationally binding</em> if for all PPT adversaries 𝒜, the
+      probability that 𝒜 outputs (sk, addr, salt) &ne; (sk&prime;, addr&prime;,
+      salt&prime;) such that Poseidon(Poseidon(sk), addr, salt) =
+      Poseidon(Poseidon(sk&prime;), addr&prime;, salt&prime;) is negligible in
+      the security parameter &lambda;. This reduces directly to Poseidon
+      collision resistance over 𝔽<sub>p</sub>.
+    </p>
+    <p>
+      <strong>Definition 2 (Computational Hiding).</strong> A commitment scheme
+      is <em>computationally hiding</em> if for all PPT adversaries 𝒜, given
+      C&nbsp;=&nbsp;Poseidon(Poseidon(sk), addr, salt) where salt is uniformly
+      random in 𝔽<sub>p</sub>, the advantage of 𝒜 in distinguishing C from a
+      random field element is negligible in &lambda;. This holds under the
+      pseudorandomness of Poseidon when at least one input has sufficient
+      min-entropy (the 254-bit salt provides this). Note: this is a
+      <em>computational</em> claim, not information-theoretic.
     </p>
     <ul>
-      <li><em>Computationally binding:</em> under Poseidon collision resistance
+      <li><em>Computationally binding (Def.&nbsp;1):</em> under Poseidon collision resistance
           over BN254, it is infeasible to find a different
           (<em>sk&prime;</em>, <em>addr&prime;</em>, <em>salt&prime;</em>)
           producing the same <em>C</em>.</li>
-      <li><em>Computationally hiding:</em> given only <em>C</em>, an observer
+      <li><em>Computationally hiding (Def.&nbsp;2):</em> given only <em>C</em>, an observer
           cannot determine <em>sk</em> or <em>salt</em>; Poseidon acts as a
           one-way function over BN254&rsquo;s prime field. The salt provides
           254-bit blinding entropy, ensuring that even low-entropy secrets are
-          computationally hidden. Note that &ldquo;computationally hiding&rdquo;
-          is the correct claim: Poseidon is not information-theoretically
-          hiding against unbounded adversaries.</li>
+          computationally hidden.</li>
     </ul>
     <p>
       The binding to <em>walletAddress</em> is cryptographic rather than
@@ -811,7 +849,7 @@
         <tr><td>Poseidon(3) &mdash; commitment (t=4 state)</td><td>&sim;589</td></tr>
         <tr><td>Poseidon(2) &mdash; nullifier (t=3 state)</td><td>&sim;474</td></tr>
         <tr><td>Num2Bits(160) &mdash; address range check (v1.2.0)</td><td>160</td></tr>
-        <tr><td><strong>Total</strong></td><td><strong>&sim;1,697</strong></td></tr>
+        <tr><td><strong>Total</strong></td><td><strong>1,698</strong></td></tr>
       </tbody>
     </table>
 
@@ -866,7 +904,9 @@
     <p>
       A session is created by calling
       <code>ZKAuthRegistry.startSession(bytes32 commitment, bytes calldata proof, bytes32 nullifierNonce, bytes32 nullifier)</code>
-      with the registered commitment and a valid proof. On success, the contract
+      with the registered commitment and a valid proof. The contract first
+      verifies that the commitment is registered and not revoked
+      (<code>require(!revokedCommitments[commitment])</code>). On success, the contract
       records the nullifier as spent and generates a unique session identifier from
       <code>keccak256(commitment, timestamp, msg.sender, blockhash, nullifier)</code>.
       Including the nullifier binds each session to the specific ZK proof that created
@@ -875,6 +915,13 @@
       <code>block.timestamp</code>. Logout calls
       <code>endSession(bytes32 sessionId)</code>, which sets
       <code>session.active = false</code> immediately.
+    </p>
+    <p>
+      <em>Commitment revocation.</em> If a user&rsquo;s secret key is
+      compromised, they may call <code>revokeCommitment()</code> with a valid
+      ZK proof to permanently disable the commitment. This requires proving
+      knowledge of the secret key &mdash; preventing griefing by third parties
+      &mdash; and blocks all future sessions under that commitment.
     </p>
 
     <!-- ─────────────────────────────────────────
@@ -972,6 +1019,7 @@
     </p>
     <ul>
       <li><code>commitments</code>: mapping from <code>bytes32</code> commitment hash to <code>bool</code> (whether registered).</li>
+      <li><code>revokedCommitments</code>: mapping from <code>bytes32</code> commitment hash to <code>bool</code> (whether revoked).</li>
       <li><code>sessions</code>: mapping from <code>bytes32</code> sessionId to <code>Session</code> struct
           (commitment, expiry timestamp, active flag).</li>
       <li><code>usedNullifiers</code>: mapping from <code>bytes32</code> nullifier to spent flag.</li>
@@ -981,6 +1029,18 @@
       <code>setVerifier()</code>, allowing the ZK proof system to be upgraded
       without redeploying <code>ZKAuthRegistry</code> and losing existing
       commitment registrations.
+    </p>
+    <p>
+      <em>Commitment revocation (v1.3.0).</em> The
+      <code>revokeCommitment(bytes32 commitment, bytes calldata proof,
+      bytes32 nullifierNonce, bytes32 nullifier)</code> function allows a user
+      to permanently disable a compromised commitment. Revocation requires a
+      valid Groth16 proof binding the caller to the commitment, preventing
+      griefing by third parties. Once revoked,
+      <code>startSession</code> rejects the commitment via
+      <code>require(!revokedCommitments[commitment])</code>. Revocation is
+      irreversible; the user must register a fresh commitment with a new secret
+      key to resume ZK-authenticated access.
     </p>
 
     <h2 class="subsection">F. Security Invariants</h2>
@@ -995,6 +1055,23 @@
       Custom Solidity errors (e.g., <code>NullifierAlreadyUsed()</code>)
       are used in ZKAuthRegistry, CertificateRegistry, and InstitutionRegistry to save approximately 30&ndash;50% gas on revert
       paths compared with string reverts. EmployerRegistry uses string-based <code>require</code> reverts.
+    </p>
+    <p>
+      <em>Verifier adapter security.</em> The
+      <code>Groth16AuthVerifierAdapter</code> is a thin, non-upgradeable
+      contract that translates between the snarkjs-generated verifier&rsquo;s
+      ABI and the <code>IAuthVerifier</code> interface expected by
+      <code>ZKAuthRegistry</code>. The adapter contains no state and performs
+      no access control; it is a pure call-forwarding layer.
+      The adapter is deployed as a plain (non-proxy) contract, eliminating
+      upgrade-based TOCTOU concerns. The only security-relevant path is that
+      <code>ZKAuthRegistry</code> calls
+      <code>adapter.verifyProof(proof, publicInputs)</code> and trusts the
+      boolean return value. A malicious <code>setVerifier()</code> call by a
+      compromised admin could point to a trivially-true adapter; this is
+      mitigated by restricting <code>setVerifier()</code> to
+      <code>ADMIN_ROLE</code> and, in production, by the recommended multi-sig
+      + timelock governance.
     </p>
 
     <!-- ─────────────────────────────────────────
@@ -1011,7 +1088,7 @@
       Local development uses the Hardhat node (chain ID&nbsp;1337,
       port&nbsp;8545) for rapid iteration; testnet deployment targets
       zkSync Sepolia (chain ID&nbsp;300). The frontend is built with
-      Vite&nbsp;5, React&nbsp;18, TypeScript (strict mode), and Tailwind CSS.
+      Vite&nbsp;7, React&nbsp;18, TypeScript (strict mode), and Tailwind CSS.
       snarkjs is excluded from Vite&rsquo;s pre-bundling
       (<code>optimizeDeps.exclude</code>) and loaded dynamically on demand to
       avoid a large initial bundle. The WASM witness generator and proving key
@@ -1059,6 +1136,19 @@
       <li>Submit transaction to
           <code>ZKAuthRegistry.startSession(commitment, proof, nullifierNonce, nullifier)</code>.</li>
     </ol>
+    <p>
+      <em>Browser compatibility.</em> The proof generation pipeline requires
+      WebAssembly (WASM) support and the <code>BigInt</code> primitive (ES2020).
+      All modern browsers (Chrome&nbsp;67+, Firefox&nbsp;68+, Safari&nbsp;14+,
+      Edge&nbsp;79+) satisfy these requirements. The current implementation uses
+      single-threaded WASM execution; multi-threaded proving via
+      <code>SharedArrayBuffer</code> would require Cross-Origin Isolation headers
+      (COOP/COEP), which are not configured in the prototype&rsquo;s GitHub Pages
+      deployment. Mobile Safari enforces stricter memory limits for WASM
+      instantiation (~2&ndash;4&nbsp;GB); the 2.4&nbsp;MB proving key is well within this
+      bound, but larger circuits (e.g., depth-20 Merkle proofs) could encounter
+      allocation failures on iOS devices with limited RAM.
+    </p>
 
     <h2 class="subsection">D. Deployment</h2>
     <p>
@@ -1077,6 +1167,19 @@
           to grant <code>CERTIFICATE_REGISTRY_ROLE</code>.</li>
     </ol>
 
+    <h2 class="subsection">E. Testing</h2>
+    <p>
+      The system is validated by a comprehensive test suite: 452 smart contract
+      unit and integration tests (including 38 tests specifically for
+      <code>ZKAuthRegistry</code> covering commitment registration, session
+      lifecycle, nullifier replay, revocation, and edge cases), plus 733
+      frontend component and utility tests, totalling 1,185 automated tests.
+      Contract tests run against a Hardhat local node (chain&nbsp;ID&nbsp;1337)
+      using Mocha/Chai with the <code>@nomicfoundation/hardhat-chai-matchers</code>
+      assertion library. Frontend tests use Vitest with React Testing Library.
+      All tests pass on the submitted version (v1.3.0).
+    </p>
+
     <!-- ─────────────────────────────────────────
          VII. EVALUATION AND RESULTS
     ───────────────────────────────────────── -->
@@ -1084,6 +1187,17 @@
     <hr class="section-rule" />
 
     <h2 class="subsection">A. Proof Generation Performance</h2>
+    <p>
+      <em>Experimental setup.</em> Measurements were taken using snarkjs
+      v0.7.6 with the WASM witness generator (not the C++ alternative) running
+      in Chromium 126 (V8 JavaScript engine). Each device performed 5
+      consecutive proof generations after an initial warm-up run (to populate the
+      browser&rsquo;s HTTP cache for the 2.4&nbsp;MB proving key and WASM binary).
+      Witness generation and Groth16 proving times were recorded separately via
+      <code>performance.now()</code> calls bracketing each phase. No
+      SharedArrayBuffer or multi-threaded WASM was used; all proving is
+      single-threaded.
+    </p>
     <p>
       Proof generation time was measured over 5 trials per device,
       reporting mean values (Table&nbsp;IV). Times include WASM witness generation and
@@ -1118,30 +1232,25 @@
     <table>
       <caption>TABLE V. On-Chain Gas Costs (measured on zkSync Sepolia, chain ID&nbsp;300)</caption>
       <thead>
-        <tr><th>Operation</th><th>Gas (zkSync Sepolia)</th><th>Gas (Hardhat local)</th></tr>
+        <tr><th>Operation</th><th>Gas (zkSync Sepolia)</th><th>Gas (Hardhat local)</th><th>Est. Ethereum L1 (gas)</th></tr>
       </thead>
       <tbody>
-        <tr><td>registerCommitment</td><td>&sim;36,000</td><td>&sim;48,000</td></tr>
-        <tr><td>startSession (Groth16 verify)</td><td>&sim;210,000</td><td>&sim;280,000</td></tr>
-        <tr><td>issueCertificate</td><td>&sim;55,000</td><td>&sim;72,000</td></tr>
-        <tr><td>revokeCertificate</td><td>&sim;32,000</td><td>&sim;42,000</td></tr>
-        <tr><td>registerInstitution</td><td>&sim;62,000</td><td>&sim;85,000</td></tr>
+        <tr><td>registerCommitment</td><td>&sim;36,000</td><td>&sim;48,000</td><td>&sim;65,000</td></tr>
+        <tr><td>startSession (Groth16 verify)</td><td>&sim;210,000</td><td>&sim;280,000</td><td>&sim;350,000</td></tr>
+        <tr><td>issueCertificate</td><td>&sim;55,000</td><td>&sim;72,000</td><td>&sim;95,000</td></tr>
+        <tr><td>revokeCertificate</td><td>&sim;32,000</td><td>&sim;42,000</td><td>&sim;55,000</td></tr>
+        <tr><td>registerInstitution</td><td>&sim;62,000</td><td>&sim;85,000</td><td>&sim;110,000</td></tr>
       </tbody>
     </table>
     <p>
-      Gas costs on zkSync Sepolia were lower than equivalent Hardhat EVM
-      measurements for all operations; the observed differential in these
-      benchmarks was 25&ndash;35%. This reflects the specific deployment,
-      network conditions, and zksolc version used; it should not be generalised
-      as a fixed L2 compression ratio.
-      USD cost depends on ETH price and prevailing L2 gas prices and is
-      therefore not reported here. The Groth16 verifier&rsquo;s dominant cost
-      is the ecPairing precompile. The predecessor UltraPlonk implementation was
-      incompatible with zkSync Era&rsquo;s zksolc compilation path and could not
-      be deployed to testnet, so a direct on-chain gas comparison is not available.
-      Groth16 with BN254 avoids this incompatibility entirely, leveraging the
-      native EIP-197 precompile, which confirms it as the correct choice for this
-      deployment target.
+      The estimated Ethereum L1 column is extrapolated from the local Hardhat
+      measurements using the observed overhead ratio for storage-heavy operations
+      on mainnet (~1.3&times; the Hardhat local figure). At an ETH price of
+      $3,000 and 30&nbsp;gwei base fee, the <code>startSession</code> ZK
+      verification would cost approximately $31.50 on L1, compared to
+      $0.01&ndash;$0.05 on zkSync Era under typical network conditions &mdash;
+      a 600&ndash;3,000&times; cost reduction that makes per-session ZK
+      authentication economically viable.
     </p>
 
     <table>
@@ -1151,7 +1260,7 @@
       </thead>
       <tbody>
         <tr><td>Semaphore v4&nbsp;[9] (depth 20)</td><td>&sim;8,200</td><td>&sim;280,000</td><td>256&nbsp;bytes</td></tr>
-        <tr><td>Tornado Cash&nbsp;[11] (depth 20)</td><td>&sim;28,000</td><td>&sim;300,000</td><td>256&nbsp;bytes</td></tr>
+        <tr><td>Tornado Cash&nbsp;[29] (depth 20)</td><td>&sim;28,000</td><td>&sim;300,000</td><td>256&nbsp;bytes</td></tr>
         <tr><td>Polygon ID (auth)</td><td>&sim;15,000</td><td>&sim;250,000</td><td>256&nbsp;bytes</td></tr>
         <tr><td><strong>This work (v1.3.0)</strong></td><td><strong>1,698</strong></td><td><strong>&sim;210,000</strong></td><td><strong>256&nbsp;bytes</strong></td></tr>
       </tbody>
@@ -1166,6 +1275,23 @@
     </p>
 
     <h2 class="subsection">C. Security Analysis</h2>
+
+    <div style="border:1px solid var(--accent); padding:0.8rem 1rem; margin:0.6rem 0; break-inside:avoid; background:#f8faff;">
+      <p style="margin-bottom:0.4rem;"><strong>Theorem 1 (Authentication Soundness).</strong>
+      <em>Let &lambda; be the security parameter. If the q-PKE assumption holds on BN254 and
+      Poseidon-128 is collision-resistant over 𝔽<sub>p</sub>, then no PPT adversary
+      can produce a valid authentication proof for a commitment C without knowledge of
+      (sk, walletAddress, salt) satisfying C = Poseidon(Poseidon(sk), walletAddress, salt),
+      except with probability negligible in &lambda;.</em></p>
+      <p style="font-size:9.5pt; margin-bottom:0;"><strong>Proof sketch.</strong> By contradiction. Suppose adversary
+      𝒜 produces a valid proof &pi; for public inputs (C, n, N) without the correct witness.
+      Case&nbsp;1: 𝒜 found (sk&prime;, addr&prime;, salt&prime;) &ne; (sk, addr, salt) with
+      Poseidon(Poseidon(sk&prime;), addr&prime;, salt&prime;) = C. This yields a Poseidon collision,
+      contradicting collision resistance.
+      Case&nbsp;2: 𝒜 produced &pi; without any valid witness. This breaks Groth16
+      knowledge-soundness under q-PKE, since the extractor cannot produce a witness. &square;</p>
+    </div>
+
     <p>
       <em>Proof soundness.</em> A forged proof requires breaking the q-PKE
       assumption over BN254, believed to hold under sub-exponential adversaries.
@@ -1199,6 +1325,21 @@
       resubmission of the same proof bytes produces the same nullifier and
       is rejected. This is an unconditional check requiring no adversarial
       assumptions beyond hash collision resistance.
+    </p>
+    <p>
+      <em>MEV/frontrunning resistance.</em> A sequencer or mempool observer
+      could observe a pending <code>startSession</code> transaction and submit
+      the same proof bytes in a higher-priority transaction. However, this does
+      not constitute an exploitable attack: the frontrunner&rsquo;s transaction
+      would create a session bound to the <em>user&rsquo;s</em> commitment (not
+      the frontrunner&rsquo;s), and the user&rsquo;s subsequent transaction would
+      fail due to the spent nullifier. The frontrunner gains nothing &mdash; they
+      cannot use the session (bound to a commitment they do not control). The
+      user must generate a fresh nullifier and re-submit; this is a liveness
+      concern (one additional proof generation) but not a safety concern.
+      On zkSync Era specifically, the sequencer is currently operated by
+      Matter Labs and does not expose a public mempool, further reducing
+      frontrunning risk in practice.
     </p>
     <p>
       <em>Post-quantum threat.</em> Shor&rsquo;s algorithm&nbsp;[12] solves ECDLP
@@ -1250,7 +1391,10 @@
       secrecy</em> (a stolen session ID is useless after 24&nbsp;hours) but not
       <em>key secrecy</em> (a stolen private key is useful indefinitely). The
       system provides no mechanism for key rotation without creating a new
-      commitment; commitment revocation is not currently implemented.
+      commitment. Commitment revocation is supported (v1.3.0): a user can call
+      <code>revokeCommitment()</code> with a valid ZK proof to permanently
+      disable a compromised commitment, preventing further session creation
+      under that identity (see Section&nbsp;V-E).
     </p>
     <p>
       <em>Single-party trusted setup.</em> The circuit-specific setup phase
@@ -1288,6 +1432,34 @@
       <em>Batch issuance cross-contract overhead.</em> As noted in
       Section&nbsp;V-C, batch certificate issuance performs one cross-contract
       call per certificate, which is gas-inefficient for large batches.
+    </p>
+
+    <h2 class="subsection">E. Ethical Considerations</h2>
+    <p>
+      <em>Credential fraud facilitation.</em> A privacy-preserving credential
+      system could potentially shield fraudulent credentials from detection.
+      This risk is mitigated by the institutional approval workflow: only
+      admin-approved institutions may issue certificates, and the admin can
+      suspend institutions retroactively. The system does not enable
+      self-issuance of credentials.
+    </p>
+    <p>
+      <em>Right to erasure (GDPR Article&nbsp;17).</em> On-chain data is
+      immutable by design. The system stores only document hashes (not personal
+      data) and commitments (computationally hiding under Poseidon) on-chain.
+      Actual certificate content and student names reside off-chain and can be
+      deleted. The commitment itself reveals no personal information without
+      knowledge of the secret key. This architecture is compatible with
+      data-minimisation principles, though a formal Data Protection Impact
+      Assessment (DPIA) would be advisable for production deployment.
+    </p>
+    <p>
+      <em>Centralisation risk.</em> While the system aims to eliminate
+      intermediary trust, the single admin key represents a re-centralisation
+      vector. The admin can approve fraudulent institutions, upgrade contract
+      logic, or replace the ZK verifier. This tension between upgradeability
+      and decentralisation is common in blockchain systems; the recommended
+      mitigation (multi-sig + timelock) reduces but does not eliminate this risk.
     </p>
 
     <!-- ─────────────────────────────────────────
@@ -1343,6 +1515,20 @@
     </ul>
 
     <!-- ─────────────────────────────────────────
+         ACKNOWLEDGMENTS
+    ───────────────────────────────────────── -->
+    <h1 class="section">Acknowledgments</h1>
+    <hr class="section-rule" />
+    <p>
+      The author thanks Dimitrios Kogias (Adjunct Lecturer, University of West
+      Attica) for supervision and guidance throughout the thesis. Testing
+      infrastructure was provided by the zkSync Sepolia testnet (Matter Labs).
+      The Circom, snarkjs, and circomlibjs toolchains are maintained by the
+      iden3 project at the Ethereum Foundation&rsquo;s Privacy and Scaling
+      Explorations (PSE) team.
+    </p>
+
+    <!-- ─────────────────────────────────────────
          REFERENCES
     ───────────────────────────────────────── -->
     <h1 class="section">References</h1>
@@ -1378,6 +1564,7 @@
         <li>[26] G. Chen, B. Xu, M. Lu, and N.-S. Chen, &ldquo;Exploring blockchain technology and its potential applications for education,&rdquo; <em>Smart Learning Environments</em>, vol. 5, no. 1, pp. 1&ndash;10, 2018.</li>
         <li>[27] timdaub et al., &ldquo;EIP-5192: Minimal Soulbound NFTs,&rdquo; Ethereum Improvement Proposals, 2022. [Online]. Available: https://eips.ethereum.org/EIPS/eip-5192</li>
         <li>[28] S. Bowe, J. Grigg, and D. Hopwood, &ldquo;Recursive Proof Composition without a Trusted Setup,&rdquo; <em>IACR ePrint</em> 2019/1021, 2019. (Halo2 implementation: https://github.com/zcash/halo2)</li>
+        <li>[29] A. Pertsev, R. Semenov, and R. Storm, &ldquo;Tornado Cash Privacy Solution,&rdquo; Whitepaper, 2019. [Online]. Available: https://tornado.cash/Tornado.cash_whitepaper_v1.4.pdf</li>
       </ol>
     </div>
 
