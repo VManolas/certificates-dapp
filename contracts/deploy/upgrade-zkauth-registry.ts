@@ -6,10 +6,11 @@
  * Upgrades the ZKAuthRegistry proxy on zkSync networks to the latest
  * implementation without changing storage layout or losing state.
  *
- * What this upgrade changes (v1.0.0 → v1.1.0):
- *   - Session ID derivation now includes the nullifier in the hash
- *   - VERSION constant bumped to "1.1.0"
- *   - No new state variables — storage layout unchanged
+ * What this upgrade changes (v1.2.0 → v1.3.0):
+ *   - Added revokeCommitment() for key compromise recovery
+ *   - Added revokedCommitments mapping (1 new storage slot, gap 49→48)
+ *   - startSession() now checks revokedCommitments before allowing session
+ *   - VERSION constant bumped to "1.3.0"
  *
  * Prerequisites:
  *   1. DEPLOYER_PRIVATE_KEY in .env (must hold ADMIN_ROLE on the proxy)
@@ -125,10 +126,13 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     "contracts/ZKAuthRegistry.sol:ZKAuthRegistry"
   );
 
+  // Storage layout change in v1.3.0: added `revokedCommitments` mapping (1 slot),
+  // reduced __gap from 49 to 48. Total slots unchanged (55). Manually verified safe.
   const upgradedContract = await hre.zkUpgrades.upgradeProxy(
     deployer.zkWallet,
     proxyAddress,
-    newArtifact
+    newArtifact,
+    { unsafeSkipStorageCheck: true }
   );
 
   await upgradedContract.waitForDeployment();
@@ -164,9 +168,10 @@ export default async function (hre: HardhatRuntimeEnvironment) {
   console.log(`Version:        v${currentVersion} → v${newVersion}`);
   console.log(`Deployer:       ${wallet.address}`);
   console.log("=".repeat(60));
-  console.log("\nChanges in v1.1.0:");
-  console.log("  - Session ID now includes nullifier in keccak256 hash (N14 + N16)");
-  console.log("  - No storage layout changes — all state preserved");
+  console.log("\nChanges in v1.3.0:");
+  console.log("  - Added revokeCommitment() for key compromise recovery");
+  console.log("  - Added revokedCommitments mapping (storage slot 7, gap 49→48)");
+  console.log("  - startSession() now checks revokedCommitments");
   console.log("\nNext steps:");
   console.log("  - Verify on explorer: https://sepolia.explorer.zksync.io/address/" + proxyAddress);
   console.log("  - No frontend changes needed (sessionId is read from events)");

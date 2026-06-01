@@ -112,7 +112,7 @@ async function deriveAesKey(signature: string): Promise<CryptoKey> {
 
   const baseKey = await crypto.subtle.importKey(
     'raw',
-    signatureBytes,
+    signatureBytes as BufferSource,
     'HKDF',
     false,
     ['deriveBits']

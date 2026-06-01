@@ -261,7 +261,9 @@ contract EmployerRegistry is
         uint256 offset,
         uint256 limit
     ) external view returns (address[] memory) {
-        require(offset < employerAddresses.length, "Offset out of bounds");
+        if (offset >= employerAddresses.length) {
+            return new address[](0);
+        }
         
         uint256 end = offset + limit;
         if (end > employerAddresses.length) {

@@ -91,7 +91,7 @@ describe("ZKAuthRegistry", function () {
     });
 
     it("Should have correct version", async function () {
-      expect(await zkAuthRegistry.VERSION()).to.equal("1.2.0");
+      expect(await zkAuthRegistry.VERSION()).to.equal("1.3.0");
     });
   });
 
@@ -539,6 +539,108 @@ describe("ZKAuthRegistry", function () {
     });
   });
 
+  describe("Commitment Revocation", function () {
+    beforeEach(async function () {
+      await zkAuthRegistry.connect(user1).registerCommitment(
+        studentCommitment,
+        1, // Student
+        mockProof,
+        DUMMY_NONCE,
+        DUMMY_NULLIFIER
+      );
+    });
+
+    it("Should revoke a commitment with valid proof", async function () {
+      const revokeNonce = ethers.id("revoke_nonce");
+      const revokeNullifier = ethers.id("revoke_nullifier");
+      
+      await expect(
+        zkAuthRegistry.connect(user1).revokeCommitment(
+          studentCommitment,
+          mockProof,
+          revokeNonce,
+          revokeNullifier
+        )
+      ).to.emit(zkAuthRegistry, "CommitmentRevoked");
+      
+      expect(await zkAuthRegistry.revokedCommitments(studentCommitment)).to.be.true;
+    });
+
+    it("Should prevent session creation after revocation", async function () {
+      const revokeNonce = ethers.id("revoke_nonce");
+      const revokeNullifier = ethers.id("revoke_nullifier");
+      
+      await zkAuthRegistry.connect(user1).revokeCommitment(
+        studentCommitment,
+        mockProof,
+        revokeNonce,
+        revokeNullifier
+      );
+
+      const sessionNonce = ethers.id("session_nonce");
+      const sessionNullifier = ethers.id("session_nullifier");
+      
+      await expect(
+        zkAuthRegistry.connect(user1).startSession(
+          studentCommitment,
+          mockProof,
+          sessionNonce,
+          sessionNullifier
+        )
+      ).to.be.revertedWithCustomError(zkAuthRegistry, "CommitmentAlreadyRevoked");
+    });
+
+    it("Should reject revocation of unregistered commitment", async function () {
+      const fakeCommitment = ethers.id("fake");
+      const revokeNonce = ethers.id("revoke_nonce2");
+      const revokeNullifier = ethers.id("revoke_nullifier2");
+      
+      await expect(
+        zkAuthRegistry.connect(user1).revokeCommitment(
+          fakeCommitment,
+          mockProof,
+          revokeNonce,
+          revokeNullifier
+        )
+      ).to.be.revertedWithCustomError(zkAuthRegistry, "CommitmentNotFound");
+    });
+
+    it("Should reject double revocation", async function () {
+      const revokeNonce = ethers.id("revoke_nonce3");
+      const revokeNullifier = ethers.id("revoke_nullifier3");
+      
+      await zkAuthRegistry.connect(user1).revokeCommitment(
+        studentCommitment,
+        mockProof,
+        revokeNonce,
+        revokeNullifier
+      );
+
+      const revokeNonce2 = ethers.id("revoke_nonce4");
+      const revokeNullifier2 = ethers.id("revoke_nullifier4");
+      
+      await expect(
+        zkAuthRegistry.connect(user1).revokeCommitment(
+          studentCommitment,
+          mockProof,
+          revokeNonce2,
+          revokeNullifier2
+        )
+      ).to.be.revertedWithCustomError(zkAuthRegistry, "CommitmentAlreadyRevoked");
+    });
+
+    it("Should reject revocation with already-used nullifier", async function () {
+      await expect(
+        zkAuthRegistry.connect(user1).revokeCommitment(
+          studentCommitment,
+          mockProof,
+          DUMMY_NONCE,
+          DUMMY_NULLIFIER
+        )
+      ).to.be.revertedWithCustomError(zkAuthRegistry, "NullifierAlreadyUsed");
+    });
+  });
+
   describe("Upgradeability", function () {
     it("Should be upgradeable by admin", async function () {
       const ZKAuthRegistryV2Factory = await ethers.getContractFactory("ZKAuthRegistry");
@@ -549,7 +651,7 @@ describe("ZKAuthRegistry", function () {
       );
 
       expect(await upgraded.getAddress()).to.equal(await zkAuthRegistry.getAddress());
-      expect(await upgraded.VERSION()).to.equal("1.2.0");
+      expect(await upgraded.VERSION()).to.equal("1.3.0");
     });
   });
 
