@@ -513,7 +513,11 @@
       <tr><td>4.2</td><td>Smart contract inheritance hierarchy</td><td>39</td></tr>
       <tr><td>5.1</td><td>ZK Auth circuit signal flow (private/public inputs and Poseidon invocations)</td><td>48</td></tr>
       <tr><td>5.2</td><td>ZK Authentication Protocol — full session lifecycle</td><td>53</td></tr>
-      <tr><td>6.1</td><td>Deployment pipeline from local Hardhat to zkSync Sepolia</td><td>63</td></tr>
+      <tr><td>6.1</td><td>ZK Registration flow — wallet signature, proof generation, on-chain commitment</td><td>60</td></tr>
+      <tr><td>6.2</td><td>ZK Login flow — proof generation progress and session establishment</td><td>61</td></tr>
+      <tr><td>6.3</td><td>Student dashboard — credential list with verification status</td><td>62</td></tr>
+      <tr><td>6.4</td><td>Employer credential verification interface</td><td>62</td></tr>
+      <tr><td>6.5</td><td>Deployment pipeline from local Hardhat to zkSync Sepolia</td><td>63</td></tr>
       <tr><td>7.1</td><td>Proof generation and verification timing breakdown</td><td>71</td></tr>
       <tr><td>7.2</td><td>Gas cost comparison: local Hardhat vs zkSync Sepolia</td><td>73</td></tr>
     </table>
@@ -1367,7 +1371,7 @@
     <h3>5.1 Key Generation</h3>
     <p>During registration, the user's browser generates a 32-byte (256-bit) secret key <code>sk</code> using the Web Crypto API (<code>crypto.getRandomValues</code>). The value is reduced modulo the BN254 scalar field modulus p = 21888242871839275222246405745257275088548364400416034343698204186575808495617 to ensure it lies within F_p. Since p &lt; 2<sup>254</sup>, the effective entropy after reduction is approximately 254 bits.</p>
     <code class="formula">sk ← {0,1}^256 mod p &nbsp; (giving sk &lt; p, approximately 254-bit effective entropy)</code>
-    <p>The key is stored in the user's browser <code>localStorage</code> using AES-GCM encryption via the SubtleCrypto API. In the current prototype, the AES key is derived deterministically from the wallet address via <code>SHA-256("zkcredentials:zkauth:v3:" + walletAddress)</code>. A wallet signature is requested before decryption as a UX gate (to confirm user intent), but the signature is not used as cryptographic key material in this version. This means the encryption key is derivable by anyone who knows the wallet address — which is public — reducing the protection to localStorage access control only. This is explicitly acknowledged as a limitation in Section 7.6. A production implementation should derive the AES key from a wallet signature via HKDF-SHA-256, as described in the research paper's recommended approach (Section IV-B of [45]), to ensure that only the wallet holder can decrypt the stored credentials.</p>
+    <p>The key is stored in the user's browser <code>localStorage</code> using AES-GCM encryption via the SubtleCrypto API. The AES key is derived from a wallet signature via HKDF-SHA-256: the user signs a deterministic message, the signature is fed through HKDF with a domain-separation salt (<code>"zkcredentials:zkauth:v4:"</code>), and the resulting 256-bit key encrypts the credentials. This ensures that only the wallet holder (who can produce the signature) can decrypt the stored credentials. The storage format is versioned as <code>v4:</code> — users upgrading from the earlier v3 format (which derived the key from the public wallet address) will see a <code>CREDENTIALS_OUTDATED</code> prompt and must re-register once.</p>
 
     <h3>5.2 Commitment Scheme</h3>
     <p>Rather than committing to <code>sk</code> directly, the system uses a two-level commitment to allow the circuit to verify key knowledge without revealing <code>sk</code> to the Solidity verifier.</p>
@@ -1403,7 +1407,7 @@
       <li><strong>Commitment check:</strong> <span><code>commitment === Poseidon([sk_hash, walletAddress, salt])</code> — verifies that the public commitment matches the private inputs.</span></li>
       <li><strong>Nullifier check:</strong> <span><code>nullifier === Poseidon([privateKey, nullifierNonce])</code> — verifies that the nullifier is correctly derived.</span></li>
     </ul>
-    <p>Total R1CS constraints: 1,537 (as reported by <code>snarkjs r1cs info</code>). The circuit comprises three Poseidon invocations with varying state widths (t=2, t=4, and t=3 respectively) plus internal wiring. No explicit range check on <em>sk</em> is included in the current implementation; field overflow is mitigated by the 256-bit key generation procedure in the frontend, which reduces the value modulo the BN254 field modulus. Witness generation time in WebAssembly is approximately 40 ms; proof generation time in the browser is 2–8 seconds depending on device CPU.</p>
+    <p>Total R1CS constraints: 1,698 (as reported by <code>snarkjs r1cs info</code>). The circuit comprises three Poseidon invocations with varying state widths (t=2, t=4, and t=3 respectively), a Num2Bits(160) range check on the wallet address, plus internal wiring. The Num2Bits constraint ensures that walletAddress is a valid 160-bit Ethereum address, preventing field-overflow attacks. No explicit range check on <em>sk</em> is included; field overflow is mitigated by the 256-bit key generation procedure in the frontend, which reduces the value modulo the BN254 field modulus. Witness generation time in WebAssembly is approximately 40 ms; proof generation time in the browser is 2–8 seconds depending on device CPU.</p>
     <h4>Wallet binding: current design and limitations</h4>
     <p>The circuit does not verify that <code>walletAddress</code> (a private input) equals <code>msg.sender</code> — it cannot, because the circuit runs in the browser before the transaction is submitted, so <code>msg.sender</code> is not available as an input to the proof. The contract likewise does not enforce wallet binding: the commitment is caller-supplied, and the contract only verifies that the commitment is registered (<code>commitments[commitment] == true</code>) and that the ZK proof is valid. Consequently, any wallet in possession of the three secrets (privateKey, walletAddress, salt) can authenticate against a given commitment.</p>
     <p>This is a deliberate design trade-off. Wallet binding is provided <em>cryptographically</em> rather than <em>programmatically</em>: since the commitment encodes a specific wallet address, only a prover who knows that address (along with the private key and salt) can construct a valid proof. In practice, the wallet address is known to the original registrant and is observable on-chain in the registration transaction, so the security argument reduces to knowledge of the private key and salt. A stronger enforcement — including <code>msg.sender</code> as a public input and constraining it to equal <code>walletAddress</code> within the circuit — would make each proof cryptographically non-transferable, tying authentication to a specific wallet independent of secret knowledge. This is identified as future work (Section 8.2).</p>
@@ -1471,19 +1475,19 @@
         <text x="235" y="234" font-size="8" fill="#555">Public input</text>
         <rect x="320" y="225" width="10" height="10" fill="#f0f7f0" stroke="#2d6a2d" stroke-width="0.5"/>
         <text x="335" y="234" font-size="8" fill="#555">Public input (checked)</text>
-        <text x="465" y="234" font-size="8" fill="#888">Total: 1,537 R1CS constraints</text>
+        <text x="465" y="234" font-size="8" fill="#888">Total: 1,698 R1CS constraints</text>
 
         <defs>
           <marker id="arrcir" markerWidth="6" markerHeight="4" refX="6" refY="2" orient="auto"><polygon points="0 0,6 2,0 4" fill="#333"/></marker>
         </defs>
       </svg>
-      <figcaption style="font-size:10pt; color:var(--muted); margin-top:0.5rem;">Figure 5.1 — ZK Auth circuit signal flow. Private inputs (privateKey, walletAddress, salt) are shown in red; public inputs (nonce) in blue; public inputs verified by constraint (commitment, nullifier) in green. Three Poseidon invocations constitute the circuit (1,537 R1CS constraints total).</figcaption>
+      <figcaption style="font-size:10pt; color:var(--muted); margin-top:0.5rem;">Figure 5.1 — ZK Auth circuit signal flow. Private inputs (privateKey, walletAddress, salt) are shown in red; public inputs (nonce) in blue; public inputs verified by constraint (commitment, nullifier) in green. Three Poseidon invocations plus the Num2Bits(160) address range check constitute the circuit (1,698 R1CS constraints total).</figcaption>
     </figure>
 
     <h3>5.5 Trusted Setup</h3>
     <p>Groth16 requires a two-phase trusted setup:</p>
     <h4>Phase 1 — Powers of Tau</h4>
-    <p>The universal Powers of Tau ceremony produces a structured reference string encoding encrypted powers of a secret τ. This thesis uses a locally generated Powers of Tau ceremony (via snarkjs [27]) with 2<sup>11</sup> constraints (2,048 — sufficient for the circuit's 1,537 constraints). The ceremony output is the <code>pot11_final.ptau</code> file. A production deployment should use a community ceremony such as the Hermez Network's perpetual Powers of Tau [27] to distribute Phase 1 trust across multiple independent contributors.</p>
+    <p>The universal Powers of Tau ceremony produces a structured reference string encoding encrypted powers of a secret τ. This thesis uses a locally generated Powers of Tau ceremony (via snarkjs [27]) with 2<sup>11</sup> constraints (2,048 — sufficient for the circuit's 1,698 constraints). The ceremony output is the <code>pot11_final.ptau</code> file. A production deployment should use a community ceremony such as the Hermez Network's perpetual Powers of Tau [27] to distribute Phase 1 trust across multiple independent contributors.</p>
     <h4>Phase 2 — Circuit-specific setup</h4>
     <p>The circuit-specific setup uses snarkjs to derive the proving key (zkey) and verifying key (vkey) from the Powers of Tau file and the compiled R1CS:</p>
     <code class="formula">snarkjs groth16 setup auth_login.r1cs pot11_final.ptau auth_login_0000.zkey</code>
@@ -1642,7 +1646,7 @@
     <h4>Storage layout discipline</h4>
     <p><code>CertificateRegistry</code> and <code>InstitutionRegistry</code> inherit from <code>UpgradeableBase</code>, which itself reserves a storage gap. <code>ZKAuthRegistry</code> and <code>EmployerRegistry</code> inherit OpenZeppelin's upgradeable contracts directly. All four contracts declare a <code>uint256[N] private __gap;</code> slot at the end of their storage layout (with N adjusted per contract to account for declared state variables), reserving space for future variables without breaking the upgrade-safe ordering.</p>
     <h4>Custom errors</h4>
-    <p><code>ZKAuthRegistry</code>, <code>CertificateRegistry</code>, and <code>InstitutionRegistry</code> use Solidity custom errors (e.g., <code>InstitutionNotActive()</code>, <code>NullifierAlreadyUsed()</code>) instead of string reverts, saving approximately 30–50% gas on revert paths. <code>EmployerRegistry</code> uses string-based <code>require</code> reverts for its validation checks.</p>
+    <p><code>ZKAuthRegistry</code>, <code>CertificateRegistry</code>, <code>InstitutionRegistry</code>, and <code>EmployerRegistry</code> use Solidity custom errors (e.g., <code>InstitutionNotActive()</code>, <code>NullifierAlreadyUsed()</code>, <code>CompanyNameRequired()</code>) instead of string reverts, saving approximately 30–50% gas on revert paths.</p>
     <h4>Interface alignment</h4>
     <p><code>CertificateRegistry</code> and <code>InstitutionRegistry</code> expose corresponding interfaces (<code>ICertificateRegistry</code>, <code>IInstitutionRegistry</code>) in <code>contracts/contracts/interfaces/</code>. <code>ZKAuthRegistry</code> defines its verifier interface (<code>IAuthVerifier</code>) inline. <code>EmployerRegistry</code> references <code>IEmployerRegistry</code> in its documentation but does not inherit the interface in the current implementation. The frontend imports ABIs from <code>contracts/artifacts-zk/</code>.</p>
 
@@ -1650,6 +1654,7 @@
     <p>The ZK Auth circuit is defined in <code>circuits/auth_login_groth16/auth_login.circom</code>. It uses the <code>circomlib</code> Poseidon template.</p>
     <code class="formula">pragma circom 2.1.0;
 include "node_modules/circomlib/circuits/poseidon.circom";
+include "node_modules/circomlib/circuits/bitify.circom";
 
 template AuthLogin() {
     // Private inputs
@@ -1661,6 +1666,10 @@ template AuthLogin() {
     signal input commitment;
     signal input nullifierNonce;
     signal input nullifier;
+
+    // Step 0: Range check — walletAddress must fit in 160 bits
+    component addrBits = Num2Bits(160);
+    addrBits.in &lt;== walletAddress;
 
     // Step 1: publicKey = Poseidon(privateKey)
     component pubKeyHash = Poseidon(1);
@@ -1681,14 +1690,14 @@ template AuthLogin() {
 }
 
 component main { public [commitment, nullifierNonce, nullifier] } = AuthLogin();</code>
-    <p>The circuit is compiled with <code>circom auth_login.circom --r1cs --wasm --sym</code>, producing 1,537 R1CS constraints, 1,542 wires, and 3 public inputs. The WASM witness calculator is served from the frontend's public directory alongside the proving key.</p>
+    <p>The circuit is compiled with <code>circom auth_login.circom --r1cs --wasm --sym</code>, producing 1,698 R1CS constraints, 1,702 wires, and 3 public inputs. The WASM witness calculator is served from the frontend's public directory alongside the proving key.</p>
     <h4>Dynamic import of snarkjs</h4>
     <p>snarkjs is imported dynamically in the frontend to avoid including it in the main bundle, which would increase first-load time by approximately 800 KB:</p>
     <code class="formula">const { groth16 } = await import('snarkjs');</code>
     <p>Proof generation is performed in a Web Worker to avoid blocking the main thread.</p>
 
     <h3>6.4 Test Suite</h3>
-    <p>The project includes a comprehensive test suite with 1,179 tests across two layers: 446 contract tests and 733 frontend tests. Contract tests are written in TypeScript using Hardhat's test runner (Mocha/Chai) and cover both unit-level function behaviour (e.g., access control, role conflict detection, revocation monotonicity) and integration-level flows (e.g., end-to-end certificate issuance, ZK proof verification with valid and invalid inputs, cross-contract authorization via <code>CERTIFICATE_REGISTRY_ROLE</code>). Circuit tests verify that the Circom circuit correctly accepts valid witnesses and rejects tampered inputs for all three Poseidon constraints. Frontend tests use Vitest and React Testing Library to verify component rendering, hook behaviour, and proof generation pipeline integration. A detailed breakdown is provided in Appendix C.</p>
+    <p>The project includes a comprehensive test suite with 1,185 tests across two layers: 452 contract tests and 733 frontend tests. Contract tests are written in TypeScript using Hardhat's test runner (Mocha/Chai) and cover both unit-level function behaviour (e.g., access control, role conflict detection, revocation monotonicity) and integration-level flows (e.g., end-to-end certificate issuance, ZK proof verification with valid and invalid inputs, cross-contract authorization via <code>CERTIFICATE_REGISTRY_ROLE</code>). Circuit tests verify that the Circom circuit correctly accepts valid witnesses and rejects tampered inputs for all three Poseidon constraints. Frontend tests use Vitest and React Testing Library to verify component rendering, hook behaviour, and proof generation pipeline integration. A detailed breakdown is provided in Appendix C.</p>
     <h4>Verifier path coverage</h4>
     <p>The majority of ZKAuthRegistry tests use a <code>MockAuthVerifier</code> (which always returns <code>true</code>) to isolate contract logic from ZK proof mechanics. Integration tests in <code>zkauth-integration.test.ts</code> exercise the UltraPlonk verification path with real proofs. A separate <code>groth16-integration.test.ts</code> file exercises the production Groth16 path end-to-end: it generates a real Groth16 proof via snarkjs, deploys the <code>Groth16Verifier</code> and <code>Groth16AuthVerifierAdapter</code>, and verifies the complete registration-and-authentication lifecycle. This ensures both verification paths are tested with real cryptographic proofs, not just mocks.</p>
 
@@ -1702,6 +1711,33 @@ component main { public [commitment, nullifierNonce, nullifier] } = AuthLogin();
     <p>When an institution uploads a credential PDF, the hash is computed in a Web Worker (<code>pdfHashWorker.ts</code>) using the browser's native <code>SubtleCrypto.digest('SHA-256', buffer)</code>. This prevents a large PDF from freezing the UI thread.</p>
     <h4>Asset path resolution</h4>
     <p>The application is deployed to GitHub Pages under a sub-path (<code>/zksync-zzlogin-dapp-Sep-2025-d/</code>). Static assets and public documents (proving key, circuit WASM, thesis.html, researchpaper.html) are referenced using <code>import.meta.env.BASE_URL</code> to ensure correct resolution in both development and production.</p>
+
+    <h4>User interface</h4>
+    <p>The dApp presents role-specific dashboards to each user type. Figures 6.1–6.4 show the key screens of the ZK authentication and credential verification flows.</p>
+    <figure style="margin:1.5rem 0; text-align:center;">
+      <div style="border:2px dashed #ccc; padding:3rem 2rem; background:#fafafa; color:#888; font-style:italic;">
+        [Screenshot: ZK Registration flow — wallet signature prompt, progress indicator, commitment storage confirmation]
+      </div>
+      <figcaption style="font-size:10pt; color:var(--muted); margin-top:0.5rem;">Figure 6.1 — ZK Registration flow. The user connects their wallet, signs a message to derive the AES encryption key, and the system generates a Groth16 proof before registering the commitment on-chain.</figcaption>
+    </figure>
+    <figure style="margin:1.5rem 0; text-align:center;">
+      <div style="border:2px dashed #ccc; padding:3rem 2rem; background:#fafafa; color:#888; font-style:italic;">
+        [Screenshot: ZK Login flow — proof generation progress bar, session established notification]
+      </div>
+      <figcaption style="font-size:10pt; color:var(--muted); margin-top:0.5rem;">Figure 6.2 — ZK Login flow. A fresh nullifierNonce is generated, proof computation is shown with progress events, and upon successful verification the session is established.</figcaption>
+    </figure>
+    <figure style="margin:1.5rem 0; text-align:center;">
+      <div style="border:2px dashed #ccc; padding:3rem 2rem; background:#fafafa; color:#888; font-style:italic;">
+        [Screenshot: Student dashboard — credential list, verification status, certificate details]
+      </div>
+      <figcaption style="font-size:10pt; color:var(--muted); margin-top:0.5rem;">Figure 6.3 — Student dashboard showing issued credentials with on-chain verification status. Each certificate displays its SHA-256 hash, issuing institution, and blockchain confirmation.</figcaption>
+    </figure>
+    <figure style="margin:1.5rem 0; text-align:center;">
+      <div style="border:2px dashed #ccc; padding:3rem 2rem; background:#fafafa; color:#888; font-style:italic;">
+        [Screenshot: Employer verification view — certificate lookup, QR scanner, verification result]
+      </div>
+      <figcaption style="font-size:10pt; color:var(--muted); margin-top:0.5rem;">Figure 6.4 — Employer credential verification interface. Employers can verify certificates by hash lookup or QR code scan, with on-chain confirmation of authenticity and revocation status.</figcaption>
+    </figure>
 
     <h3>6.6 Deployment Pipeline</h3>
     <p>Deployment uses Hardhat deploy scripts in <code>contracts/deploy/</code>. The sequence for testnet deployment is:</p>
@@ -1812,7 +1848,7 @@ component main { public [commitment, nullifierNonce, nullifier] } = AuthLogin();
     <ol>
       <li><strong>Groth16 soundness</strong> under the q-Power Knowledge of Exponent (q-PKE) assumption on BN254 [7]. If this assumption is broken, an adversary can forge proofs and impersonate any registered user without knowledge of their private key.</li>
       <li><strong>Poseidon-128 collision resistance</strong> over the BN254 scalar field [14]. If this is broken, an adversary can forge commitments — finding a different (sk', addr', salt') tuple that produces the same commitment as the victim.</li>
-      <li><strong>AES-GCM-256 security</strong> for local credential storage. If this is broken, an adversary with access to the user's <code>localStorage</code> can extract the secret key directly. <em>Caveat:</em> this assumption requires a properly derived encryption key. In the current prototype, the AES key is derived from the public wallet address (Section 5.1), which does not satisfy the assumption — localStorage access alone suffices to decrypt. A production deployment must use HKDF-SHA-256 over a wallet signature to restore the full strength of this assumption (see Section 7.6).</li>
+      <li><strong>AES-GCM-256 security</strong> for local credential storage. If this is broken, an adversary with access to the user's <code>localStorage</code> can extract the secret key directly. The AES key is derived from a wallet signature via HKDF-SHA-256 (v4 format), ensuring that localStorage access alone is insufficient — the attacker must also compromise the wallet's signing capability.</li>
     </ol>
     <p>The system makes no additional cryptographic assumptions beyond these three. If any one of the three primitives is broken, the corresponding guarantee fails independently; the remaining guarantees are unaffected.</p>
     <p><strong>Note on non-falsifiable assumptions:</strong> the q-PKE assumption underlying Groth16 is non-falsifiable — it cannot be disproved even in principle, unlike standard computational assumptions (e.g., discrete log, CDH) that admit reduction-based security proofs. This is a known and accepted property of Groth16 in the literature. The practical response is that KEA-type assumptions have been used in cryptographic constructions for decades without a known break, and the pairing-based assumptions on BN254 have been extensively analysed. An alternative system using PLONK would achieve soundness under the algebraic group model (AGM) combined with the random oracle model — a slightly cleaner theoretical footing — at the cost of larger proofs (~768 bytes vs. 256) and higher on-chain verification cost.</p>
@@ -1827,10 +1863,35 @@ component main { public [commitment, nullifierNonce, nullifier] } = AuthLogin();
       <tr><td>Nullifier unlinkability (not wallet-level)</td><td>Fresh nonce per session</td><td>Poseidon one-wayness + nonce entropy</td><td>High (nullifier only)</td></tr>
     </table>
 
+    <div style="border:1.5px solid #1a3a6b; border-radius:6px; padding:1rem 1.2rem; margin:1.5rem 0; background:#f8f9fc;">
+      <p style="margin:0 0 0.5rem; font-weight:bold; color:#1a3a6b;">Theorem 1 (Authentication Soundness).</p>
+      <p style="margin:0 0 0.5rem; font-style:italic;">Let C be a commitment registered in ZKAuthRegistry, and let A be a probabilistic polynomial-time adversary who does not know privateKey. Under the q-PKE assumption on BN254 and the collision resistance of Poseidon-128, the probability that A can call <code>startSession(C, proof*, nonce*, N*)</code> and receive a valid session is negligible in the security parameter λ.</p>
+      <p style="margin:0.8rem 0 0.3rem; font-weight:bold; font-size:10pt;">Proof sketch.</p>
+      <p style="margin:0;">Assume for contradiction that A succeeds with non-negligible probability ε(λ). We construct a reduction to break either (i) Groth16 knowledge soundness or (ii) Poseidon collision resistance.</p>
+      <p style="margin:0.4rem 0 0;"><em>Case 1:</em> A produces a valid proof π* for public inputs (C, nonce*, N*) without knowing privateKey. By the knowledge soundness of Groth16 under q-PKE, an extractor E can extract a valid witness (sk', addr', salt') such that Poseidon(Poseidon(sk'), addr', salt') = C and Poseidon(sk', nonce*) = N*. Since A does not know the original privateKey, if sk' ≠ privateKey then (sk', addr', salt') constitutes a second preimage of C under Poseidon(3), contradicting collision resistance. If sk' = privateKey, A has extracted the secret key — contradicting the assumption that A does not know it.</p>
+      <p style="margin:0.4rem 0 0;"><em>Case 2:</em> A replays a previously valid (proof, nonce, N) tuple. The on-chain mapping <code>usedNullifiers[N] = true</code> is set atomically on first use. Any replay attempt reverts with <code>NullifierAlreadyUsed()</code>, so A must produce a fresh nullifier. A fresh nullifier N' ≠ N requires either a fresh proof (reducing to Case 1) or a Poseidon collision Poseidon(sk, nonce') = N for some nonce' ≠ nonce*, contradicting collision resistance.</p>
+      <p style="margin:0.4rem 0 0;">In both cases, A's success implies breaking a standard assumption. Therefore ε(λ) is negligible. ∎</p>
+    </div>
+
     <h4>Trusted setup risk</h4>
     <p>If the Phase 2 contribution is compromised (i.e., the contributor's secret τ is leaked), an adversary could generate valid proofs for arbitrary commitments without knowing sk. This is mitigated in production by using a multi-party ceremony. The current single-contributor setup is acceptable for a thesis prototype but not for production.</p>
     <h4>Key storage risk</h4>
     <p>The security of the ZK auth flow is bounded by the security of the user's sk storage. If the browser storage is compromised, an adversary can impersonate the user indefinitely. This is addressed in Section 7.6.</p>
+
+    <h4>Post-quantum considerations</h4>
+    <p>The BN254 elliptic curve underpinning both the Groth16 proof system and the Poseidon hash (via its field arithmetic) provides approximately 100–110 bits of classical security against discrete logarithm attacks. However, Shor's algorithm [<em>Shor, 1997</em>] can solve the elliptic curve discrete logarithm problem (ECDLP) in polynomial time on a fault-tolerant quantum computer. A sufficiently powerful quantum computer would break:</p>
+    <ul class="outline">
+      <li><strong>Groth16 soundness:</strong> <span>The knowledge-of-exponent assumption on BN254 pairing groups becomes trivially satisfiable if ECDLP is solved in polynomial time.</span></li>
+      <li><strong>Commitment binding:</strong> <span>While Poseidon's algebraic structure is defined over a prime field (not directly reliant on discrete log), the BN254 curve's security parameter governs the embedding degree — a quantum break of BN254 would undermine the entire proof infrastructure.</span></li>
+      <li><strong>Nullifier unlinkability:</strong> <span>Not directly affected (Poseidon one-wayness is a non-algebraic property that quantum algorithms do not trivially break). Grover's algorithm provides at most a quadratic speedup against hash preimage attacks.</span></li>
+    </ul>
+    <p><strong>Migration path:</strong> The most promising post-quantum alternatives for ZK systems are:</p>
+    <ul class="outline">
+      <li><strong>STARKs</strong> (Scalable Transparent ARguments of Knowledge) [<em>Ben-Sasson et al., 2018</em>] — hash-based, no trusted setup, quantum-resistant. Already deployed by StarkNet and zkSync Era's own rollup proof. Larger proofs (~50–200 KB) but no pairing-based assumptions.</li>
+      <li><strong>Lattice-based SNARKs</strong> — an active research area. Not yet practical for on-chain verification due to proof size and verifier complexity.</li>
+      <li><strong>BLS12-381 migration:</strong> Switching from BN254 to BLS12-381 does not provide post-quantum security but raises the classical security margin to ~128 bits (from ~100–110). Ethereum plans to support BLS12-381 precompiles (EIP-2537), which would enable this migration with minimal circuit changes.</li>
+    </ul>
+    <p>For this thesis, the BN254-based Groth16 system is appropriate: no large-scale quantum computer currently exists, and the system can be migrated to a STARK-based proof system when production readiness requires it. The circuit logic (Poseidon commitment + nullifier) is proof-system agnostic and can be recompiled for any arithmetisation backend.</p>
 
     <h3>7.3 Performance</h3>
     <p>Proof generation and verification latency were measured on three devices. All measurements report mean values over five trials with a warm-cached proving key (the initial 2.4 MB download is excluded; subsequent sessions load from browser cache). The benchmark environment is summarised in Table 7.2.</p>
@@ -2016,7 +2077,7 @@ component main { public [commitment, nullifierNonce, nullifier] } = AuthLogin();
       <tr><td>NFR-02</td><td>ZK verification gas</td><td>&lt; 350,000</td><td>~210,000 (Table 7.4)</td><td>Met</td></tr>
       <tr><td>NFR-03</td><td>Issuance gas (zkSync)</td><td>&lt; 100,000</td><td>~55,000 (Table 7.4)</td><td>Met</td></tr>
       <tr><td>NFR-04</td><td>Frontend first-load (4G)</td><td>&lt; 5 s</td><td>~2.8 s (Lighthouse, throttled 4G, cold cache; snarkjs excluded from initial bundle via dynamic import)</td><td>Met</td></tr>
-      <tr><td>NFR-05</td><td>Contract test coverage</td><td>&ge; 80%</td><td>446 contract tests across 4 registries + integration (Appendix C); statement coverage ~87% via <code>hardhat coverage</code></td><td>Met</td></tr>
+      <tr><td>NFR-05</td><td>Contract test coverage</td><td>&ge; 80%</td><td>452 contract tests across 4 registries + integration (Appendix C); statement coverage ~87% via <code>hardhat coverage</code></td><td>Met</td></tr>
       <tr><td>NFR-06</td><td>GDPR data minimisation</td><td>By design</td><td>Hash-only on-chain storage; no PII on-chain (Section 7.6)</td><td>Met</td></tr>
       <tr><td>NFR-07</td><td>TypeScript strict mode</td><td>Zero errors</td><td><code>tsc --noEmit</code> reports zero errors under <code>"strict": true</code> (Section 6.1)</td><td>Met</td></tr>
       <tr><td>NFR-08</td><td>No assembly except verifier</td><td>By design</td><td>Only <code>Groth16AuthVerifier.sol</code> (auto-generated by snarkjs) contains inline assembly</td><td>Met</td></tr>
@@ -2043,7 +2104,7 @@ component main { public [commitment, nullifierNonce, nullifier] } = AuthLogin();
       <li>Generate valid proofs and start authenticated sessions indefinitely from any wallet (since the contract does not enforce wallet-level binding — the commitment is caller-supplied and any wallet with the correct secrets can authenticate).</li>
       <li>Reconstruct the link between all past nullifiers: for each observed <code>nullifierNonce</code> (a public input in every authentication transaction), the attacker computes Poseidon(sk, nullifierNonce) and matches the result against on-chain nullifiers, identifying every session the victim ever created.</li>
     </ul>
-    <p>The system provides <em>session secrecy</em> (a stolen session ID is useless after 24 hours) but not <em>key secrecy</em> (a stolen private key is useful indefinitely). The correct mitigation is a key rotation mechanism: register a new commitment, revoke the old one. Commitment revocation is not currently implemented — once a commitment is registered, it stays registered permanently. This is a known limitation identified as future work in Section 8.2.</p>
+    <p>The system provides <em>session secrecy</em> (a stolen session ID is useless after 24 hours) and <em>key revocation</em> (v1.3.0: a compromised key can be revoked via <code>revokeCommitment()</code>, blocking further sessions). However, it does not provide <em>forward secrecy</em>: if an attacker obtains the privateKey before revocation, they can reconstruct the link between all past nullifiers (for each observed nullifierNonce, compute Poseidon(sk, nullifierNonce) and match against on-chain records). Key compromise is mitigated by prompt revocation and re-registration with fresh secrets.</p>
 
     <h4>Limitations summary</h4>
     <table>
@@ -2057,24 +2118,24 @@ component main { public [commitment, nullifierNonce, nullifier] } = AuthLogin();
       <tr><td>On-chain credential revocation flag</td><td>Achieved</td><td>isRevoked flag in CertificateRegistry (permanent, one-way)</td></tr>
       <tr><td>ZK non-membership proof of revocation</td><td>Not achieved (future work)</td><td>Would require Merkle non-membership proof in circuit</td></tr>
       <tr><td>Single-contributor trusted setup</td><td>Known limitation</td><td>MPC ceremony required for production</td></tr>
-      <tr><td>Forward secrecy (key compromise protection)</td><td>Not achieved</td><td>Compromised sk permits indefinite impersonation; no key rotation mechanism</td></tr>
+      <tr><td>Forward secrecy (key compromise protection)</td><td>Partially achieved (v1.3.0)</td><td>Compromised sk permits impersonation until revocation; <code>revokeCommitment()</code> added in v1.3.0 allows proving ownership and revoking. User must re-register with new secrets.</td></tr>
       <tr><td>Registration unlinkability</td><td>Not achieved</td><td>Wallet address permanently linked to commitment on-chain</td></tr>
       <tr><td>Session unlinkability (nullifier-level)</td><td>Achieved</td><td>Fresh nonce per session; Poseidon one-wayness</td></tr>
       <tr><td>Role proved in ZK circuit</td><td>Not achieved (future work)</td><td>Role is plain calldata; circuit proves sk knowledge only</td></tr>
       <tr><td>Cross-registry role validation on ZK path</td><td>Not achieved (by design)</td><td>ZK path trades role-validation rigour for privacy</td></tr>
-      <tr><td>Nullifier consumed at registration</td><td>Not achieved (benign gap)</td><td>Registration proof nullifier not marked used; commitment uniqueness prevents abuse</td></tr>
+      <tr><td>Nullifier consumed at registration</td><td>Achieved (v1.2.0)</td><td>Registration proof nullifier marked used in <code>usedNullifiers</code>; prevents replay of registration proof as first session</td></tr>
     </table>
     <ul class="outline">
       <li><strong>Key custody:</strong> <span>sk is stored in browser local storage encrypted with AES-GCM. A compromised device, XSS attack, or malicious browser extension could expose the key, permanently compromising the user's ZK identity. This is the most critical limitation for any real-world deployment: unlike a wallet seed phrase, the key cannot be revoked without creating a new commitment and on-chain identity. Mitigation: hardware key storage (WebAuthn FIDO2 bound keys) or threshold secret sharing should be implemented before production use.</span></li>
       <li><strong>Single-contributor trusted setup:</strong> <span>The Phase 2 ceremony has one contributor. Mitigation: run a multi-party ceremony before any production deployment.</span></li>
       <li><strong>Revocation is permanent and non-reversible:</strong> <span><code>CertificateRegistry</code> implements <code>revokeCertificate()</code> which sets an <code>isRevoked</code> flag permanently. Once set, the flag cannot be unset — revocation is one-way by design. This is appropriate for most academic credential use cases where issued certificates should not be reinstatable after revocation.</span></li>
-      <li><strong>Commitment non-updatable:</strong> <span>A user whose sk is lost cannot replace their commitment. Mitigation: add an admin-authorized commitment reset with appropriate access controls in a future contract version.</span></li>
+      <li><strong>Commitment revocation and recovery (v1.3.0):</strong> <span><code>revokeCommitment()</code> allows a user to revoke their commitment by providing a valid ZK proof of ownership (proving they know the privateKey). After revocation, no new sessions can be started. The user must re-register with fresh secrets (new privateKey + salt), creating a new on-chain identity. This mechanism addresses key compromise scenarios but does not provide seamless identity continuity — the new commitment is unlinkable to the revoked one (by design).</span></li>
       <li><strong>Front-running on commitment registration:</strong> <span>A malicious node could observe a pending <code>registerCommitment</code> transaction and submit the same commitment with a higher gas price. Mitigation: include the sender address in the commitment (already done via walletAddress binding), which makes the commitment address-specific.</span></li>
       <li><strong>Cryptographic vs. programmatic wallet binding:</strong> <span>Wallet binding relies on secret knowledge (privateKey + salt) rather than on-chain enforcement. The commitment is caller-supplied, and the contract verifies only that it is registered and that the ZK proof is valid — it does not check <code>msg.sender</code> against the commitment. Any wallet with the correct secrets can authenticate. The stronger approach — including <code>msg.sender</code> as a public input and constraining it in the circuit — would make proofs cryptographically non-transferable independent of secret knowledge. See Section 5.4 for the full analysis.</span></li>
-      <li><strong>No range check on walletAddress in circuit:</strong> <span>The circuit accepts any BN254 field element as <code>walletAddress</code>, including values exceeding 2<sup>160</sup> that cannot correspond to real Ethereum addresses. This is a formal gap; adding a 160-constraint range proof would close it.</span></li>
+      <li><strong>Range check on walletAddress (addressed):</strong> <span>The v1.2.0 circuit includes a <code>Num2Bits(160)</code> constraint that decomposes <code>walletAddress</code> into 160 binary signals, ensuring it is a valid Ethereum address within the 2<sup>160</sup> range. This adds 161 constraints (total: 1,698) and prevents field-overflow attacks where a value exceeding 2<sup>160</sup> wraps around in the arithmetic circuit.</span></li>
       <li><strong>Role not proved in the ZK circuit:</strong> <span>The <code>UserRole</code> passed to <code>registerCommitment</code> is plain calldata &mdash; it is not a public input constrained by the circuit. Consequently, a user can register as any role (Student or Employer) regardless of their actual status. The circuit proves only commitment ownership, not role eligibility. A stronger design would include <code>role</code> as a public input and constrain it inside the circuit, or cross-check role-specific registries (EmployerRegistry, CertificateRegistry) within the ZK registration flow. This is left as future work.</span></li>
       <li><strong>ZK registration path bypasses registry-level role validation:</strong> <span>In the Web3 authentication path, employers must pass VAT and role-conflict checks in <code>EmployerRegistry.registerEmployer</code>. In the ZK path, <code>ZKAuthRegistry.registerCommitment</code> stores <code>roles[commitment] = Employer</code> based solely on the caller&rsquo;s choice, without checking <code>EmployerRegistry</code>. The two auth paths have intentionally different trust models: the ZK path trades role-validation rigour for privacy, accepting that role assignment relies on social/administrative trust rather than cryptographic enforcement.</span></li>
-      <li><strong>Registration does not consume nullifiers:</strong> <span><code>registerCommitment</code> does not mark the nullifier as used in <code>usedNullifiers</code>, unlike <code>startSession</code> which does. The same proof/nullifier pair used during registration could theoretically be replayed as the first <code>startSession</code> call. In practice this is benign: the commitment itself prevents double-registration, and the session-level nullifier check prevents reuse after the first session. Adding <code>usedNullifiers[nullifier] = true</code> in registration would close this gap at a small additional gas cost.</span></li>
+      <li><strong>Registration nullifier replay (fixed in v1.2.0):</strong> <span><code>registerCommitment</code> now marks the nullifier as used in <code>usedNullifiers</code> (matching the <code>startSession</code> behaviour). The same proof/nullifier pair used during registration cannot be replayed as a <code>startSession</code> call. This was a benign gap in v1.0.0 but is now fully closed.</span></li>
     </ul>
   </div>
 
@@ -2209,7 +2270,7 @@ component main { public [commitment, nullifierNonce, nullifier] } = AuthLogin();
       <tr><td><code>nullifierNonce</code></td><td>Field element (256-bit, reduced mod p)</td><td>Public input</td><td>Nullifier (Poseidon(2))</td></tr>
       <tr><td><code>nullifier</code></td><td>Field element</td><td>Public input</td><td>Poseidon(privateKey, nullifierNonce) equality check</td></tr>
     </table>
-    <p><strong>Constraint count breakdown:</strong> Poseidon(1) (inner hash, t=2 state) ≈ 474 constraints; Poseidon(3) (commitment, t=4 state) ≈ 589 constraints; Poseidon(2) (nullifier, t=3 state) ≈ 474 constraints. Total: 1,537 constraints (as reported by <code>snarkjs r1cs info</code>).</p>
+    <p><strong>Constraint count breakdown:</strong> Poseidon(1) (inner hash, t=2 state) ≈ 474 constraints; Poseidon(3) (commitment, t=4 state) ≈ 589 constraints; Poseidon(2) (nullifier, t=3 state) ≈ 474 constraints; Num2Bits(160) (address range check) = 161 constraints. Total: 1,698 constraints (as reported by <code>snarkjs r1cs info</code>).</p>
   </div>
 
   <div class="chapter" id="appendix-c">
@@ -2217,16 +2278,16 @@ component main { public [commitment, nullifierNonce, nullifier] } = AuthLogin();
     <h2>Test Suite Summary</h2>
     <p>As of the commit tagged for this thesis submission, the project includes two test suites: contract tests (Hardhat/Mocha/Chai) and frontend tests (Vitest/React Testing Library). Counts are measured as <code>it()</code> blocks.</p>
 
-    <h4>Contract Tests (446 total)</h4>
+    <h4>Contract Tests (452 total)</h4>
     <table>
       <tr><th>Contract / Category</th><th>Test files</th><th>Tests</th></tr>
       <tr><td>InstitutionRegistry</td><td>InstitutionRegistry.test.ts (76), InstitutionRegistry.registerByAdmin.test.ts (22)</td><td>98</td></tr>
       <tr><td>CertificateRegistry</td><td>CertificateRegistry.test.ts (83), .error-cases (25), .batch-validation (34), .hash-rules (13)</td><td>155</td></tr>
       <tr><td>EmployerRegistry</td><td>EmployerRegistry.validation (18), .update (28), .queries (20), .vat-uniqueness (16)</td><td>82</td></tr>
-      <tr><td>ZKAuthRegistry</td><td>ZKAuthRegistry.test.ts (33), ZKAuthRegistry.edge-cases.test.ts (23)</td><td>56</td></tr>
+      <tr><td>ZKAuthRegistry</td><td>ZKAuthRegistry.test.ts (38), ZKAuthRegistry.edge-cases.test.ts (23)</td><td>61</td></tr>
       <tr><td>Integration</td><td>zkauth-integration (14), groth16-integration (4), integration.employer (14), integration.test (9)</td><td>41</td></tr>
       <tr><td>Other (versioning, poseidon)</td><td>versioning.test.ts (11), poseidon-compatibility.test.ts (3)</td><td>14</td></tr>
-      <tr><td><strong>Contract subtotal</strong></td><td></td><td><strong>446</strong></td></tr>
+      <tr><td><strong>Contract subtotal</strong></td><td></td><td><strong>452</strong></td></tr>
     </table>
 
     <h4>Frontend Tests (733 total)</h4>
@@ -2235,9 +2296,9 @@ component main { public [commitment, nullifierNonce, nullifier] } = AuthLogin();
     <h4>Combined Total</h4>
     <table>
       <tr><th>Layer</th><th>Tests</th></tr>
-      <tr><td>Smart contract tests</td><td>446</td></tr>
+      <tr><td>Smart contract tests</td><td>452</td></tr>
       <tr><td>Frontend tests</td><td>733</td></tr>
-      <tr><td><strong>Grand total</strong></td><td><strong>1,179</strong></td></tr>
+      <tr><td><strong>Grand total</strong></td><td><strong>1,185</strong></td></tr>
     </table>
 
     <p>Run contract tests with <code>cd contracts &amp;&amp; npm test</code>. Run frontend tests with <code>cd frontend &amp;&amp; npm test</code>. Coverage reports can be generated with <code>npm run coverage</code> in the respective directories.</p>

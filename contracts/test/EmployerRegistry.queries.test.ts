@@ -33,13 +33,13 @@ describe("EmployerRegistry - getAllEmployers & getEmployersPaginated", function 
     it("Should revert with 'Not registered' for unregistered address", async function () {
       await expect(
         registry.getEmployer(emp1.address)
-      ).to.be.revertedWith("Not registered");
+      ).to.be.revertedWithCustomError(registry, "NotRegistered");
     });
 
     it("Should revert for zero address", async function () {
       await expect(
         registry.getEmployer(ethers.ZeroAddress)
-      ).to.be.revertedWith("Not registered");
+      ).to.be.revertedWithCustomError(registry, "NotRegistered");
     });
 
     it("Should return data for a deactivated employer (still registered)", async function () {

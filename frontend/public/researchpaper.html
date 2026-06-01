@@ -209,7 +209,7 @@
     <ul>
       <li>      A Circom circuit implementing a Poseidon-based commitment and nullifier
           scheme for replay-resistant ZK authentication
-          (1,537&nbsp;R1CS constraints).</li>
+          (1,698&nbsp;R1CS constraints).</li>
       <li>A Groth16 on-chain verifier adapted for zkSync Era&rsquo;s zkEVM,
           resolving incompatibility between the snarkjs-generated verifier&rsquo;s
           inline assembly and the zksolc compiler&rsquo;s EVMLA translation path.</li>
@@ -402,14 +402,71 @@
     <hr class="section-rule" />
 
     <figure>
-      <div class="placeholder-fig">Client (Browser)
-  &darr; wallet tx / proof calldata
-zkSync Era L2
-  &darr; ZKAuthRegistry &larr;&rarr; Groth16Verifier
-  &darr; CertificateRegistry &larr;&rarr; InstitutionRegistry
-  &darr; EmployerRegistry
-  &darr; (state diffs + batch proof)
-Ethereum L1 settlement</div>
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 340" style="max-width:100%; height:auto; font-family:'Helvetica Neue',Arial,sans-serif; font-size:9px;">
+        <defs>
+          <marker id="ah" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="none" stroke="#333" stroke-width="1"/></marker>
+        </defs>
+        <!-- Client Layer -->
+        <rect x="20" y="10" width="440" height="70" rx="6" fill="#e8eef7" stroke="#1a3a6b" stroke-width="1.2"/>
+        <text x="240" y="26" text-anchor="middle" font-weight="bold" fill="#1a3a6b" font-size="10">Client Layer (Browser)</text>
+        <rect x="35" y="35" width="100" height="35" rx="4" fill="#fff" stroke="#1a3a6b" stroke-width="0.8"/>
+        <text x="85" y="50" text-anchor="middle" font-size="8" font-weight="bold">React 18 + wagmi</text>
+        <text x="85" y="62" text-anchor="middle" font-size="7" fill="#555">RainbowKit</text>
+        <rect x="150" y="35" width="100" height="35" rx="4" fill="#fff" stroke="#1a3a6b" stroke-width="0.8"/>
+        <text x="200" y="50" text-anchor="middle" font-size="8" font-weight="bold">snarkjs (WASM)</text>
+        <text x="200" y="62" text-anchor="middle" font-size="7" fill="#555">Groth16 Prover</text>
+        <rect x="265" y="35" width="100" height="35" rx="4" fill="#fff" stroke="#1a3a6b" stroke-width="0.8"/>
+        <text x="315" y="50" text-anchor="middle" font-size="8" font-weight="bold">ZK Key Manager</text>
+        <text x="315" y="62" text-anchor="middle" font-size="7" fill="#555">AES-GCM / HKDF</text>
+        <rect x="380" y="35" width="65" height="35" rx="4" fill="#fff" stroke="#1a3a6b" stroke-width="0.8"/>
+        <text x="412" y="50" text-anchor="middle" font-size="8" font-weight="bold">PDF Hash</text>
+        <text x="412" y="62" text-anchor="middle" font-size="7" fill="#555">Worker</text>
+        <!-- Arrow down -->
+        <line x1="240" y1="80" x2="240" y2="110" stroke="#333" stroke-width="1.2" marker-end="url(#ah)"/>
+        <text x="270" y="98" font-size="7" fill="#555">tx / proof calldata</text>
+        <!-- Contract Layer -->
+        <rect x="20" y="110" width="440" height="130" rx="6" fill="#f0f7f0" stroke="#2d6a2d" stroke-width="1.2"/>
+        <text x="240" y="126" text-anchor="middle" font-weight="bold" fill="#2d6a2d" font-size="10">Smart Contract Layer &mdash; zkSync Era (L2)</text>
+        <rect x="35" y="135" width="95" height="40" rx="4" fill="#fff" stroke="#2d6a2d" stroke-width="0.8"/>
+        <text x="82" y="153" text-anchor="middle" font-size="8" font-weight="bold">Institution</text>
+        <text x="82" y="166" text-anchor="middle" font-size="8" font-weight="bold">Registry</text>
+        <rect x="140" y="135" width="95" height="40" rx="4" fill="#fff" stroke="#2d6a2d" stroke-width="0.8"/>
+        <text x="187" y="153" text-anchor="middle" font-size="8" font-weight="bold">Certificate</text>
+        <text x="187" y="166" text-anchor="middle" font-size="8" font-weight="bold">Registry</text>
+        <rect x="245" y="135" width="95" height="40" rx="4" fill="#fff" stroke="#2d6a2d" stroke-width="0.8"/>
+        <text x="292" y="153" text-anchor="middle" font-size="8" font-weight="bold">Employer</text>
+        <text x="292" y="166" text-anchor="middle" font-size="8" font-weight="bold">Registry</text>
+        <rect x="350" y="135" width="95" height="40" rx="4" fill="#fff" stroke="#2d6a2d" stroke-width="0.8"/>
+        <text x="397" y="153" text-anchor="middle" font-size="8" font-weight="bold">ZKAuth</text>
+        <text x="397" y="166" text-anchor="middle" font-size="8" font-weight="bold">Registry</text>
+        <!-- Verifier -->
+        <rect x="350" y="185" width="95" height="30" rx="4" fill="#fff9e6" stroke="#b8860b" stroke-width="0.8"/>
+        <text x="397" y="204" text-anchor="middle" font-size="8" font-weight="bold">Groth16 Verifier</text>
+        <line x1="397" y1="175" x2="397" y2="185" stroke="#b8860b" stroke-width="0.8" stroke-dasharray="3,2"/>
+        <!-- Cross-contract arrows -->
+        <line x1="130" y1="155" x2="140" y2="155" stroke="#2d6a2d" stroke-width="0.8" marker-end="url(#ah)"/>
+        <line x1="235" y1="155" x2="245" y2="155" stroke="#2d6a2d" stroke-width="0.8" marker-end="url(#ah)"/>
+        <!-- Upgradeable base -->
+        <rect x="35" y="222" width="300" height="14" rx="2" fill="#e8f5e8" stroke="#2d6a2d" stroke-width="0.4"/>
+        <text x="185" y="232" text-anchor="middle" font-size="7" fill="#2d6a2d">UUPS Upgradeable + AccessControl + ReentrancyGuard</text>
+        <!-- Arrow to L1 -->
+        <line x1="240" y1="240" x2="240" y2="265" stroke="#333" stroke-width="1.2" marker-end="url(#ah)"/>
+        <text x="275" y="255" font-size="7" fill="#555">state diffs + validity proof</text>
+        <!-- L1 -->
+        <rect x="100" y="265" width="280" height="40" rx="6" fill="#f5f0fa" stroke="#6b3a9b" stroke-width="1.2"/>
+        <text x="240" y="283" text-anchor="middle" font-weight="bold" fill="#6b3a9b" font-size="10">Ethereum L1 Settlement</text>
+        <text x="240" y="298" text-anchor="middle" font-size="7" fill="#555">Rollup batch proof verification</text>
+        <!-- Legend -->
+        <rect x="20" y="315" width="440" height="18" rx="2" fill="#f9f9f9" stroke="#ccc" stroke-width="0.4"/>
+        <rect x="35" y="320" width="8" height="8" fill="#e8eef7" stroke="#1a3a6b" stroke-width="0.4"/>
+        <text x="47" y="327" font-size="7">Client</text>
+        <rect x="85" y="320" width="8" height="8" fill="#f0f7f0" stroke="#2d6a2d" stroke-width="0.4"/>
+        <text x="97" y="327" font-size="7">L2 Contracts</text>
+        <rect x="155" y="320" width="8" height="8" fill="#fff9e6" stroke="#b8860b" stroke-width="0.4"/>
+        <text x="167" y="327" font-size="7">ZK Verifier</text>
+        <rect x="220" y="320" width="8" height="8" fill="#f5f0fa" stroke="#6b3a9b" stroke-width="0.4"/>
+        <text x="232" y="327" font-size="7">L1 Settlement</text>
+      </svg>
       <figcaption>Fig. 1. High-level system architecture. Proof generation occurs
       entirely client-side. Application-level Groth16 proofs are independent
       of the rollup-level STARK proof zkSync Era submits to L1.</figcaption>
@@ -465,7 +522,7 @@ Ethereum L1 settlement</div>
     </p>
     <ol>
       <li>A Circom circuit (<code>auth_login.circom</code>) expressing the
-          commitment and nullifier relations as 1,537 R1CS constraints.</li>
+          commitment and nullifier relations as 1,698 R1CS constraints.</li>
       <li>A Groth16 trusted setup producing a proving key
           (<code>auth_login_final.zkey</code>, &sim;2.4&nbsp;MB) and a verification key
           embedded in the on-chain verifier.</li>
@@ -499,28 +556,54 @@ Ethereum L1 settlement</div>
     <hr class="section-rule" />
 
     <figure>
-      <div class="placeholder-fig">User (Browser)             ZKAuthRegistry (L2)
-     |                              |
-     |  Registration (one-time):    |
-     |  generate sk, salt           |
-     |  C = Poseidon(Poseidon(sk),addr,salt)
-     |  prove(sk,salt,addr,nonce₀)  |
-     | -- registerCommitment(C,role,proof,nonce₀,N₀) -->
-     |                              | verify(proof, publicInputs)
-     |                              | store commitments[C]=true
-     |                              |
-     |  Authentication (per session):|
-     |  generate fresh nullifierNonce|
-     |  prove(sk,salt,addr,nonce)   |
-     |  &darr; [~2.1–7.8 s client-side]  |
-     |                              |
-     | -- startSession(C,proof,nonce,N) -->
-     |                              | require commitments[C]
-     |                              | verify(proof, publicInputs)
-     |                              | check !usedNullifiers[N]
-     |                              | usedNullifiers[N] = true
-     |                              | sessions[id] = active
-     | &lt;-- SessionStarted(id,C,expiry) --|</div>
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 420" style="max-width:100%; height:auto; font-family:'Helvetica Neue',Arial,sans-serif; font-size:9px;">
+        <defs>
+          <marker id="ah2" markerWidth="7" markerHeight="5" refX="7" refY="2.5" orient="auto"><path d="M0,0 L7,2.5 L0,5" fill="none" stroke="#333" stroke-width="0.8"/></marker>
+        </defs>
+        <!-- Lifelines -->
+        <text x="100" y="14" text-anchor="middle" font-weight="bold" font-size="10">User (Browser)</text>
+        <line x1="100" y1="20" x2="100" y2="410" stroke="#999" stroke-width="0.6" stroke-dasharray="4,3"/>
+        <text x="400" y="14" text-anchor="middle" font-weight="bold" font-size="10">ZKAuthRegistry (L2)</text>
+        <line x1="400" y1="20" x2="400" y2="410" stroke="#999" stroke-width="0.6" stroke-dasharray="4,3"/>
+        <!-- Registration phase -->
+        <rect x="20" y="28" width="480" height="160" rx="4" fill="#f8f8ff" stroke="#aaa" stroke-width="0.6"/>
+        <text x="30" y="42" font-weight="bold" font-size="9" fill="#1a3a6b">Registration (one-time)</text>
+        <text x="30" y="62" font-size="8" fill="#555">generate privateKey, salt</text>
+        <text x="30" y="76" font-size="8" fill="#555">pk = Poseidon(privateKey)</text>
+        <text x="30" y="90" font-size="8" fill="#555">C = Poseidon(pk, walletAddress, salt)</text>
+        <text x="30" y="104" font-size="8" fill="#555">N&#x2080; = Poseidon(privateKey, nonce&#x2080;)</text>
+        <text x="30" y="118" font-size="8" fill="#555">proof&#x2080; = Groth16.prove(sk, addr, salt, nonce&#x2080;)</text>
+        <!-- Registration arrow -->
+        <line x1="105" y1="135" x2="395" y2="135" stroke="#333" stroke-width="1" marker-end="url(#ah2)"/>
+        <text x="250" y="131" text-anchor="middle" font-size="8">registerCommitment(C, role, proof&#x2080;, nonce&#x2080;, N&#x2080;)</text>
+        <!-- Verification steps -->
+        <text x="405" y="152" font-size="8" fill="#555">verify(proof&#x2080;, [C, nonce&#x2080;, N&#x2080;])</text>
+        <text x="405" y="165" font-size="8" fill="#555">usedNullifiers[N&#x2080;] = true</text>
+        <text x="405" y="178" font-size="8" fill="#555">commitments[C] = true</text>
+        <!-- Return -->
+        <line x1="395" y1="183" x2="105" y2="183" stroke="#2d6a2d" stroke-width="1" stroke-dasharray="4,2" marker-end="url(#ah2)"/>
+        <text x="250" y="179" text-anchor="middle" font-size="8" fill="#2d6a2d">CommitmentRegistered(C, role)</text>
+        <!-- Session phase -->
+        <rect x="20" y="200" width="480" height="195" rx="4" fill="#fffff8" stroke="#aaa" stroke-width="0.6"/>
+        <text x="30" y="214" font-weight="bold" font-size="9" fill="#1a3a6b">Authentication (per session)</text>
+        <text x="30" y="234" font-size="8" fill="#555">generate fresh nullifierNonce</text>
+        <text x="30" y="248" font-size="8" fill="#555">N = Poseidon(privateKey, nullifierNonce)</text>
+        <text x="30" y="262" font-size="8" fill="#555">proof = Groth16.prove(sk, addr, salt, nonce)</text>
+        <text x="30" y="276" font-size="8" fill="#555">[~2.1&#x2013;7.8 s client-side]</text>
+        <!-- Session arrow -->
+        <line x1="105" y1="292" x2="395" y2="292" stroke="#333" stroke-width="1" marker-end="url(#ah2)"/>
+        <text x="250" y="288" text-anchor="middle" font-size="8">startSession(C, proof, nonce, N)</text>
+        <!-- Verification -->
+        <text x="405" y="308" font-size="8" fill="#555">require commitments[C]</text>
+        <text x="405" y="321" font-size="8" fill="#555">require !usedNullifiers[N]</text>
+        <text x="405" y="334" font-size="8" fill="#555">verify(proof, [C, nonce, N])</text>
+        <text x="405" y="347" font-size="8" fill="#555">usedNullifiers[N] = true</text>
+        <text x="405" y="360" font-size="8" fill="#555">sessions[id] = {C, expiry, active}</text>
+        <!-- Return session -->
+        <line x1="395" y1="370" x2="105" y2="370" stroke="#2d6a2d" stroke-width="1" stroke-dasharray="4,2" marker-end="url(#ah2)"/>
+        <text x="250" y="366" text-anchor="middle" font-size="8" fill="#2d6a2d">SessionStarted(id, C, expiry)</text>
+        <text x="250" y="385" text-anchor="middle" font-size="8" fill="#b8860b">Session valid for 24h; nullifier N is now spent</text>
+      </svg>
       <figcaption>Fig. 2. ZK Authentication Protocol sequence. Both registration
       and session creation require a valid Groth16 proof. Each session uses a
       fresh nullifierNonce, ensuring nullifier unlinkability.</figcaption>
@@ -727,9 +810,23 @@ Ethereum L1 settlement</div>
         <tr><td>Poseidon(1) &mdash; inner hash (t=2 state)</td><td>&sim;474</td></tr>
         <tr><td>Poseidon(3) &mdash; commitment (t=4 state)</td><td>&sim;589</td></tr>
         <tr><td>Poseidon(2) &mdash; nullifier (t=3 state)</td><td>&sim;474</td></tr>
-        <tr><td><strong>Total</strong></td><td><strong>1,537</strong></td></tr>
+        <tr><td>Num2Bits(160) &mdash; address range check (v1.2.0)</td><td>160</td></tr>
+        <tr><td><strong>Total</strong></td><td><strong>&sim;1,697</strong></td></tr>
       </tbody>
     </table>
+
+    <p>
+      For comparison, Semaphore&nbsp;v4&nbsp;[9] uses a 4-input Poseidon hash
+      and an incremental Merkle tree of depth&nbsp;20, yielding approximately
+      7,500&ndash;8,500&nbsp;R1CS constraints depending on tree depth.
+      The higher constraint count results from the 20-level Merkle inclusion proof
+      (each level requiring a Poseidon hash). Our circuit achieves a significantly
+      lower constraint count because it does not require anonymity-set membership
+      proofs&mdash;the privacy model is pseudonymity (commitment-bound) rather than
+      anonymity (set-membership). This design trade-off yields faster proving times
+      (~2&ndash;8&nbsp;s vs. Semaphore&rsquo;s ~10&ndash;15&nbsp;s on comparable hardware)
+      at the cost of reduced unlinkability.
+    </p>
 
     <h2 class="subsection">F. Trusted Setup</h2>
     <p>
@@ -737,7 +834,7 @@ Ethereum L1 settlement</div>
       (Powers of Tau ceremony) uses a locally generated
       <code>pot11_final.ptau</code> file (supporting circuits up to
       2<sup>11</sup>&nbsp;=&nbsp;2,048 constraints, sufficient for the circuit&rsquo;s
-      1,537), generated via snarkjs&nbsp;[12]. A production deployment
+      1,698), generated via snarkjs&nbsp;[5]. A production deployment
       should use a community ceremony such as the Hermez perpetual
       Powers of Tau. The circuit-specific phase was run locally using snarkjs,
       producing <code>auth_login_final.zkey</code>. In a production deployment
@@ -1008,7 +1105,7 @@ Ethereum L1 settlement</div>
     <p>
       End-to-end proof generation ranges from 2.1&nbsp;s (desktop) to
       7.8&nbsp;s (mobile). On-chain verification latency is hardware-independent
-      and determined by block time. The circuit&rsquo;s 1,537 constraints
+      and determined by block time. The circuit&rsquo;s 1,698 constraints
       are the primary determinant of proving time; circuits of this size are
       well within the practical range of consumer hardware.
     </p>
@@ -1047,6 +1144,27 @@ Ethereum L1 settlement</div>
       deployment target.
     </p>
 
+    <table>
+      <caption>TABLE VI. Comparative Benchmarks (Groth16 systems)</caption>
+      <thead>
+        <tr><th>System</th><th>Circuit Constraints</th><th>Verification Gas (L1 equiv.)</th><th>Proof Size</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Semaphore v4&nbsp;[9] (depth 20)</td><td>&sim;8,200</td><td>&sim;280,000</td><td>256&nbsp;bytes</td></tr>
+        <tr><td>Tornado Cash&nbsp;[11] (depth 20)</td><td>&sim;28,000</td><td>&sim;300,000</td><td>256&nbsp;bytes</td></tr>
+        <tr><td>Polygon ID (auth)</td><td>&sim;15,000</td><td>&sim;250,000</td><td>256&nbsp;bytes</td></tr>
+        <tr><td><strong>This work (v1.3.0)</strong></td><td><strong>1,698</strong></td><td><strong>&sim;210,000</strong></td><td><strong>256&nbsp;bytes</strong></td></tr>
+      </tbody>
+    </table>
+    <p>
+      The significantly lower constraint count in this work results from the simpler
+      circuit design: only three Poseidon hashes and one Num2Bits range check,
+      without Merkle inclusion proofs. All Groth16 systems share the same constant
+      256-byte proof size and similar verification cost (dominated by the ecPairing
+      precompile). The reduced constraint count translates directly to faster
+      client-side proving (see Section&nbsp;VI-A).
+    </p>
+
     <h2 class="subsection">C. Security Analysis</h2>
     <p>
       <em>Proof soundness.</em> A forged proof requires breaking the q-PKE
@@ -1081,6 +1199,16 @@ Ethereum L1 settlement</div>
       resubmission of the same proof bytes produces the same nullifier and
       is rejected. This is an unconditional check requiring no adversarial
       assumptions beyond hash collision resistance.
+    </p>
+    <p>
+      <em>Post-quantum threat.</em> Shor&rsquo;s algorithm&nbsp;[12] solves ECDLP
+      in polynomial time on a fault-tolerant quantum computer, which would break
+      both BN254 pairings and Groth16 soundness. Poseidon&rsquo;s hash-algebraic
+      one-wayness is not directly vulnerable (Grover provides at most quadratic
+      speedup). The migration path is to replace Groth16 with STARKs&nbsp;[22],
+      which are hash-based and quantum-resistant. The circuit logic
+      (Poseidon commitment + nullifier) is proof-system agnostic and can be
+      recompiled for any arithmetisation backend.
     </p>
 
     <h2 class="subsection">D. Privacy Analysis and Known Gaps</h2>
@@ -1233,7 +1361,7 @@ Ethereum L1 settlement</div>
         <li>[9] B. Whitehat, M. Gurkan, and K. Choi, &ldquo;Semaphore: Zero-knowledge signaling on Ethereum,&rdquo; 2020. [Online]. Available: https://semaphore.pse.dev</li>
         <li>[10] E. Ben-Sasson et al., &ldquo;Zerocash: Decentralized anonymous payments from Bitcoin,&rdquo; in <em>Proc. IEEE S&amp;P 2014</em>, 2014, pp. 459&ndash;474.</li>
         <li>[11] V. Buterin, &ldquo;Decentralized Society: Finding Web3&rsquo;s Soul,&rdquo; 2022. [Online]. Available: https://papers.ssrn.com/sol3/papers.cfm?abstract_id=4105763</li>
-        <li>[12] iden3/snarkjs, &ldquo;snarkjs: zkSNARK implementation in JavaScript &amp; WASM &mdash; Powers of Tau ceremony tooling,&rdquo; 2021. [Online]. Available: https://github.com/iden3/snarkjs#7-prepare-phase-2 (same repository as&nbsp;[5]; this reference targets the Phase&nbsp;2 ceremony documentation specifically)</li>
+        <li>[12] P. W. Shor, &ldquo;Polynomial-time algorithms for prime factorization and discrete logarithms on a quantum computer,&rdquo; <em>SIAM J. Comput.</em>, vol. 26, no. 5, pp. 1484&ndash;1509, 1997.</li>
         <li>[13] G. Wood, &ldquo;Ethereum: A Secure Decentralised Generalised Transaction Ledger,&rdquo; Ethereum Yellow Paper, 2014.</li>
         <li>[14] C. Reitwiessner, &ldquo;EIP-196: Precompiled contracts for addition and scalar multiplication on the elliptic curve alt_bn128,&rdquo; Ethereum Improvement Proposals, no. 196, Feb. 2017. [Online]. Available: https://eips.ethereum.org/EIPS/eip-196</li>
         <li>[15] V. Buterin and C. Reitwiessner, &ldquo;EIP-197: Precompiled contracts for optimal ate pairing check on the elliptic curve alt_bn128,&rdquo; Ethereum Improvement Proposals, no. 197, Feb. 2017. [Online]. Available: https://eips.ethereum.org/EIPS/eip-197</li>

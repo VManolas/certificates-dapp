@@ -21,15 +21,43 @@ jobs:
       run:
         working-directory: contracts
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: '22'
           cache: npm
           cache-dependency-path: contracts/package-lock.json
       - run: npm ci
       - run: npm run compile
       - run: npm test
+
+  security:
+    name: Security (Slither static analysis)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: contracts
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: contracts/package-lock.json
+      - run: npm ci
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: pip install slither-analyzer
+      - run: npx hardhat compile
+      - name: Run Slither
+        run: slither . --filter-paths "node_modules|contracts/deprecated" --exclude naming-convention,solc-version --sarif slither-results.sarif || true
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: slither-results
+          path: contracts/slither-results.sarif
 
   frontend:
     name: Frontend (type-check + test + build)
@@ -41,10 +69,10 @@ jobs:
     env:
       NODE_OPTIONS: '--max-old-space-size=8192'
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: '22'
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci

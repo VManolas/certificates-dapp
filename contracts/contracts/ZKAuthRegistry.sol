@@ -7,7 +7,8 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
 /**
  * @title IAuthVerifier
- * @notice Interface for the Groth16 ZK verifier contract
+ * @notice Interface for the Noir-generated ZK verifier contract
+ * @dev Will be replaced with actual verifier after circuit compilation
  */
 interface IAuthVerifier {
     function verify(
@@ -31,7 +32,7 @@ interface IAuthVerifier {
  * Security:
  * - Private keys never touch the blockchain
  * - Wallet addresses only revealed when user chooses
- * - Poseidon hash for ZK-friendly commitments
+ * - Poseidon/Pedersen hash for ZK-friendly commitments
  * - Session tokens expire after 24 hours
  */
 contract ZKAuthRegistry is 
@@ -40,7 +41,7 @@ contract ZKAuthRegistry is
     UUPSUpgradeable 
 {
     /// @notice Contract version
-    string public constant VERSION = "1.1.0";
+    string public constant VERSION = "1.3.0";
     
     /// @notice Admin role for contract management
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
@@ -77,6 +78,9 @@ contract ZKAuthRegistry is
     /// @notice Mapping: nullifier => spent flag (prevents proof replay across sessions)
     mapping(bytes32 => bool) public usedNullifiers;
 
+    /// @notice Mapping: commitment => revoked flag (key compromise recovery)
+    mapping(bytes32 => bool) public revokedCommitments;
+
     /// @notice Session duration (24 hours)
     uint256 public constant SESSION_DURATION = 24 hours;
     
@@ -101,6 +105,11 @@ contract ZKAuthRegistry is
         address indexed oldVerifier, 
         address indexed newVerifier
     );
+
+    event CommitmentRevoked(
+        bytes32 indexed commitment,
+        uint256 timestamp
+    );
     
     // Custom Errors
     error CommitmentAlreadyExists();
@@ -112,6 +121,7 @@ contract ZKAuthRegistry is
     error SessionNotFound();
     error UnauthorizedRole();
     error InvalidAddress();
+    error CommitmentAlreadyRevoked();
     
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -141,14 +151,14 @@ contract ZKAuthRegistry is
     
     /**
      * @notice Register a new commitment with role
-     * @param commitment Poseidon(Poseidon(privateKey), walletAddress, salt) — public anchor of identity
+     * @param commitment Hash(publicKey, walletAddress, salt) — public anchor of identity
      * @param role User role (Student or Employer only)
      * @param proof ZK proof of commitment ownership
      * @param nullifierNonce Fresh random nonce chosen by the prover for this proof
      * @param nullifier Poseidon(privateKey, nullifierNonce) — proved inside the circuit
      * @dev The circuit enforces that nullifier = Poseidon(privateKey, nullifierNonce).
-     *      Registration does not enforce nullifier uniqueness; the commitment itself
-     *      already prevents double-registration.
+     *      V1.2.0: nullifier is now consumed at registration, preventing the same
+     *      proof bytes from being replayed as the first startSession call.
      */
     function registerCommitment(
         bytes32 commitment,
@@ -160,6 +170,7 @@ contract ZKAuthRegistry is
         if (commitments[commitment]) revert CommitmentAlreadyExists();
         if (role == UserRole.None) revert InvalidRole();
         if (role != UserRole.Student && role != UserRole.Employer) revert InvalidRole();
+        if (usedNullifiers[nullifier]) revert NullifierAlreadyUsed();
 
         bytes32[] memory publicInputs = new bytes32[](3);
         publicInputs[0] = commitment;
@@ -167,6 +178,7 @@ contract ZKAuthRegistry is
         publicInputs[2] = nullifier;
         if (!authVerifier.verify(proof, publicInputs)) revert InvalidProof();
 
+        usedNullifiers[nullifier] = true;
         commitments[commitment] = true;
         roles[commitment] = role;
         registrationTime[commitment] = block.timestamp;
@@ -184,9 +196,6 @@ contract ZKAuthRegistry is
      * @dev The nullifier is stored after first use, preventing proof replay: the same
      *      proof bytes cannot open a second session even after the first one expires.
      *      Each session requires a fresh nonce, producing a fresh unlinkable nullifier.
-     *      The nullifier is also included in the sessionId hash, binding each session
-     *      to the exact ZK proof that created it and adding proof-specific entropy
-     *      independent of miner-controllable inputs (blockhash).
      */
     function startSession(
         bytes32 commitment,
@@ -195,6 +204,7 @@ contract ZKAuthRegistry is
         bytes32 nullifier
     ) external returns (bytes32 sessionId) {
         if (!commitments[commitment]) revert CommitmentNotFound();
+        if (revokedCommitments[commitment]) revert CommitmentAlreadyRevoked();
         if (usedNullifiers[nullifier]) revert NullifierAlreadyUsed();
 
         bytes32[] memory publicInputs = new bytes32[](3);
@@ -207,7 +217,7 @@ contract ZKAuthRegistry is
         usedNullifiers[nullifier] = true;
 
         sessionId = keccak256(
-            abi.encodePacked(commitment, block.timestamp, msg.sender, blockhash(block.number - 1), nullifier)
+            abi.encodePacked(commitment, block.timestamp, msg.sender, blockhash(block.number - 1))
         );
 
         uint256 expiry = block.timestamp + SESSION_DURATION;
@@ -221,14 +231,6 @@ contract ZKAuthRegistry is
     /**
      * @notice End an active session (logout)
      * @param sessionId Session to terminate
-     * @dev Access control is implicit: sessionId is derived from keccak256(commitment,
-     *      block.timestamp, msg.sender, blockhash, nullifier), giving 256-bit preimage
-     *      resistance. The nullifier binds the session to the specific ZK proof that
-     *      created it and adds proof-specific entropy independent of miner-controllable
-     *      inputs. Only the session creator (who received the ID from startSession's
-     *      return value) and on-chain event observers can know a valid sessionId.
-     *      Sessions expire in 24h regardless, so early termination by an observer is
-     *      a low-impact griefing vector.
      */
     function endSession(bytes32 sessionId) external {
         Session storage session = sessions[sessionId];
@@ -237,6 +239,39 @@ contract ZKAuthRegistry is
         session.active = false;
         
         emit SessionEnded(sessionId);
+    }
+    
+    /**
+     * @notice Revoke a commitment (key compromise recovery)
+     * @param commitment The commitment to revoke
+     * @param proof ZK proof demonstrating ownership of the commitment
+     * @param nullifierNonce Fresh nonce for this revocation proof
+     * @param nullifier Poseidon(privateKey, nullifierNonce) — proved inside the circuit
+     * @dev Requires a valid ZK proof to prevent unauthorized revocation.
+     *      After revocation, no new sessions can be started with this commitment.
+     *      The user must re-register with a new privateKey and salt.
+     *      V1.3.0: Added for key compromise scenarios.
+     */
+    function revokeCommitment(
+        bytes32 commitment,
+        bytes calldata proof,
+        bytes32 nullifierNonce,
+        bytes32 nullifier
+    ) external {
+        if (!commitments[commitment]) revert CommitmentNotFound();
+        if (revokedCommitments[commitment]) revert CommitmentAlreadyRevoked();
+        if (usedNullifiers[nullifier]) revert NullifierAlreadyUsed();
+
+        bytes32[] memory publicInputs = new bytes32[](3);
+        publicInputs[0] = commitment;
+        publicInputs[1] = nullifierNonce;
+        publicInputs[2] = nullifier;
+        if (!authVerifier.verify(proof, publicInputs)) revert InvalidProof();
+
+        usedNullifiers[nullifier] = true;
+        revokedCommitments[commitment] = true;
+
+        emit CommitmentRevoked(commitment, block.timestamp);
     }
     
     /**
@@ -341,11 +376,12 @@ contract ZKAuthRegistry is
     
     /**
      * @notice Storage gap for future upgrades
-     * @dev 6 state slots used: authVerifier, commitments, roles, sessions,
-     *      registrationTime, usedNullifiers. Original total = 55 slots
-     *      (5 vars + 50 gap); usedNullifiers added → 6 vars + 49 gap = 55.
-     *      V1.1.0: no new state variables — session ID derivation change only.
+     * @dev 7 state slots used: authVerifier, commitments, roles, sessions,
+     *      registrationTime, usedNullifiers, revokedCommitments.
+     *      Original total = 55 slots (5 vars + 50 gap);
+     *      usedNullifiers added → 6 vars + 49 gap = 55.
+     *      V1.3.0: revokedCommitments added → 7 vars + 48 gap = 55.
      */
-    uint256[49] private __gap;
+    uint256[48] private __gap;
 }
 

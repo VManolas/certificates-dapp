@@ -5,8 +5,11 @@ import { ZKAuthRegistry, MockAuthVerifier } from "../typechain-types";
 import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 
 // Dummy values for registerCommitment (mock verifier ignores all inputs)
-const DUMMY_NONCE     = ethers.ZeroHash;
-const DUMMY_NULLIFIER = ethers.id("dummy_nullifier");
+// V1.2.0: nullifiers are now consumed at registration, so each registration needs a unique one
+const DUMMY_NONCE       = ethers.ZeroHash;
+const DUMMY_NULLIFIER   = ethers.id("dummy_nullifier");
+const DUMMY_NONCE_2     = ethers.id("dummy_nonce_2");
+const DUMMY_NULLIFIER_2 = ethers.id("dummy_nullifier_2");
 // Unique nullifiers for startSession calls (nullifier uniqueness IS enforced)
 const SESSION_NONCE_1     = ethers.id("session_nonce_1");
 const SESSION_NULLIFIER_1 = ethers.id("session_nullifier_1");
@@ -161,6 +164,33 @@ describe("ZKAuthRegistry - Edge Cases", function () {
 
       expect(await zkAuthRegistry.isRegistered(zeroCommitment)).to.be.true;
     });
+
+    it("Should consume nullifier at registration (v1.2.0), preventing reuse in startSession", async function () {
+      await zkAuthRegistry.connect(user1).registerCommitment(
+        commitment1, 1, mockProof, DUMMY_NONCE, DUMMY_NULLIFIER
+      );
+
+      expect(await zkAuthRegistry.usedNullifiers(DUMMY_NULLIFIER)).to.be.true;
+
+      await expect(
+        zkAuthRegistry.connect(user1).startSession(
+          commitment1, mockProof, DUMMY_NONCE, DUMMY_NULLIFIER
+        )
+      ).to.be.revertedWithCustomError(zkAuthRegistry, "NullifierAlreadyUsed");
+    });
+
+    it("Should reject registration with already-used nullifier", async function () {
+      await zkAuthRegistry.connect(user1).registerCommitment(
+        commitment1, 1, mockProof, DUMMY_NONCE, DUMMY_NULLIFIER
+      );
+
+      const differentCommitment = ethers.id("different_commitment");
+      await expect(
+        zkAuthRegistry.connect(user2).registerCommitment(
+          differentCommitment, 2, mockProof, DUMMY_NONCE, DUMMY_NULLIFIER
+        )
+      ).to.be.revertedWithCustomError(zkAuthRegistry, "NullifierAlreadyUsed");
+    });
   });
 
   // ─────────────────────────────────────────────────────────────
@@ -280,7 +310,7 @@ describe("ZKAuthRegistry - Edge Cases", function () {
 
     it("Should validate each session with its own commitment's role", async function () {
       await zkAuthRegistry.connect(user2).registerCommitment(
-        commitment2, 2, mockProof, DUMMY_NONCE, DUMMY_NULLIFIER
+        commitment2, 2, mockProof, DUMMY_NONCE_2, DUMMY_NULLIFIER_2
       ); // Employer
 
       const tx1 = await zkAuthRegistry.connect(user1).startSession(

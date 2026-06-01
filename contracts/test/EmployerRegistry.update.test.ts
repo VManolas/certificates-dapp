@@ -123,7 +123,7 @@ describe("EmployerRegistry - updateEmployer & deactivate/reactivate lifecycle", 
 
       await expect(
         registry.connect(employer1).updateEmployer("Acme Corp", "VAT-RIVAL-001")
-      ).to.be.revertedWith("VAT already registered");
+      ).to.be.revertedWithCustomError(registry, "VatAlreadyRegistered");
     });
 
     it("Updating to the same VAT (no change) is a no-op on the mapping", async function () {
@@ -143,7 +143,7 @@ describe("EmployerRegistry - updateEmployer & deactivate/reactivate lifecycle", 
     it("Should revert with 'Not registered' for unregistered address", async function () {
       await expect(
         registry.connect(randomUser).updateEmployer("Ghost Corp", "VAT-GHOST")
-      ).to.be.revertedWith("Not registered");
+      ).to.be.revertedWithCustomError(registry, "NotRegistered");
     });
 
     it("Should revert with 'Account deactivated' after admin deactivates the employer", async function () {
@@ -151,19 +151,19 @@ describe("EmployerRegistry - updateEmployer & deactivate/reactivate lifecycle", 
 
       await expect(
         registry.connect(employer1).updateEmployer("Post-Deactivation Name", "VAT-POST")
-      ).to.be.revertedWith("Account deactivated");
+      ).to.be.revertedWithCustomError(registry, "AccountDeactivated");
     });
 
     it("Should revert with 'Company name required' for empty company name", async function () {
       await expect(
         registry.connect(employer1).updateEmployer("", "VAT-ACME-001")
-      ).to.be.revertedWith("Company name required");
+      ).to.be.revertedWithCustomError(registry, "CompanyNameRequired");
     });
 
     it("Should revert with 'VAT number required' for empty VAT", async function () {
       await expect(
         registry.connect(employer1).updateEmployer("Acme Corp", "")
-      ).to.be.revertedWith("VAT number required");
+      ).to.be.revertedWithCustomError(registry, "VatNumberRequired");
     });
   });
 
@@ -198,7 +198,7 @@ describe("EmployerRegistry - updateEmployer & deactivate/reactivate lifecycle", 
     it("Should revert with 'Not registered' for unknown address", async function () {
       await expect(
         registry.connect(admin).deactivateEmployer(randomUser.address)
-      ).to.be.revertedWith("Not registered");
+      ).to.be.revertedWithCustomError(registry, "NotRegistered");
     });
 
     it("Should revert with 'Already deactivated' on double deactivation", async function () {
@@ -206,7 +206,7 @@ describe("EmployerRegistry - updateEmployer & deactivate/reactivate lifecycle", 
 
       await expect(
         registry.connect(admin).deactivateEmployer(employer1.address)
-      ).to.be.revertedWith("Already deactivated");
+      ).to.be.revertedWithCustomError(registry, "AlreadyDeactivated");
     });
 
     it("Should revert when called by non-admin", async function () {
@@ -270,7 +270,7 @@ describe("EmployerRegistry - updateEmployer & deactivate/reactivate lifecycle", 
     it("Should revert with 'Not registered' for unknown address", async function () {
       await expect(
         registry.connect(admin).reactivateEmployer(randomUser.address)
-      ).to.be.revertedWith("Not registered");
+      ).to.be.revertedWithCustomError(registry, "NotRegistered");
     });
 
     it("Should revert with 'Already active' when employer is already active", async function () {
@@ -278,7 +278,7 @@ describe("EmployerRegistry - updateEmployer & deactivate/reactivate lifecycle", 
 
       await expect(
         registry.connect(admin).reactivateEmployer(employer1.address)
-      ).to.be.revertedWith("Already active");
+      ).to.be.revertedWithCustomError(registry, "AlreadyActive");
     });
 
     it("Should revert when called by non-admin", async function () {

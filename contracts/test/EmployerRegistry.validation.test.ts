@@ -97,7 +97,7 @@ describe("EmployerRegistry - Role Conflict Validation", function () {
           ethers.ZeroAddress,
           await certificateRegistry.getAddress()
         )
-      ).to.be.revertedWith("Invalid institution registry");
+      ).to.be.revertedWithCustomError(employerRegistry, "InvalidRegistryAddress");
     });
 
     it("should revert when setting zero address certificate registry", async function () {
@@ -106,7 +106,7 @@ describe("EmployerRegistry - Role Conflict Validation", function () {
           await institutionRegistry.getAddress(),
           ethers.ZeroAddress
         )
-      ).to.be.revertedWith("Invalid certificate registry");
+      ).to.be.revertedWithCustomError(employerRegistry, "InvalidRegistryAddress");
     });
   });
 
@@ -114,7 +114,7 @@ describe("EmployerRegistry - Role Conflict Validation", function () {
     it("should prevent admin from registering as employer", async function () {
       await expect(
         employerRegistry.connect(admin).registerEmployer("Tech Corp", "VAT123456")
-      ).to.be.revertedWith("Admin cannot register as employer");
+      ).to.be.revertedWithCustomError(employerRegistry, "AdminCannotRegister");
     });
 
     it("should allow admin to check status but not register", async function () {
@@ -123,7 +123,7 @@ describe("EmployerRegistry - Role Conflict Validation", function () {
 
       await expect(
         employerRegistry.connect(admin).registerEmployer("Tech Corp", "VAT123456")
-      ).to.be.revertedWith("Admin cannot register as employer");
+      ).to.be.revertedWithCustomError(employerRegistry, "AdminCannotRegister");
     });
   });
 
@@ -134,7 +134,7 @@ describe("EmployerRegistry - Role Conflict Validation", function () {
 
       await expect(
         employerRegistry.connect(university).registerEmployer("University Inc", "VAT789012")
-      ).to.be.revertedWith("University cannot register as employer");
+      ).to.be.revertedWithCustomError(employerRegistry, "UniversityCannotRegister");
     });
 
     it("should prevent pending university from registering as employer", async function () {
@@ -148,7 +148,7 @@ describe("EmployerRegistry - Role Conflict Validation", function () {
       // Should still prevent registration (even if pending)
       await expect(
         employerRegistry.connect(newUniversity).registerEmployer("Harvard Corp", "VAT345678")
-      ).to.be.revertedWith("University cannot register as employer");
+      ).to.be.revertedWithCustomError(employerRegistry, "UniversityCannotRegister");
     });
 
     it("should prevent suspended university from registering as employer", async function () {
@@ -161,7 +161,7 @@ describe("EmployerRegistry - Role Conflict Validation", function () {
       // Suspended university should still NOT be able to register as employer
       await expect(
         employerRegistry.connect(university).registerEmployer("Suspended Uni Corp", "VAT999888")
-      ).to.be.revertedWith("University cannot register as employer");
+      ).to.be.revertedWithCustomError(employerRegistry, "UniversityCannotRegister");
     });
   });
 
@@ -182,7 +182,7 @@ describe("EmployerRegistry - Role Conflict Validation", function () {
 
       await expect(
         employerRegistry.connect(student).registerEmployer("Student Startup", "VAT111222")
-      ).to.be.revertedWith("Student cannot register as employer");
+      ).to.be.revertedWithCustomError(employerRegistry, "StudentCannotRegister");
     });
 
     it("should prevent student with multiple certificates from registering", async function () {
@@ -200,7 +200,7 @@ describe("EmployerRegistry - Role Conflict Validation", function () {
 
       await expect(
         employerRegistry.connect(student).registerEmployer("Student Startup", "VAT111222")
-      ).to.be.revertedWith("Student cannot register as employer");
+      ).to.be.revertedWithCustomError(employerRegistry, "StudentCannotRegister");
     });
 
     it("should prevent student with revoked certificate from registering", async function () {
@@ -214,7 +214,7 @@ describe("EmployerRegistry - Role Conflict Validation", function () {
       // Student still has a certificate (even if revoked)
       await expect(
         employerRegistry.connect(student).registerEmployer("Student Startup", "VAT111222")
-      ).to.be.revertedWith("Student cannot register as employer");
+      ).to.be.revertedWithCustomError(employerRegistry, "StudentCannotRegister");
     });
   });
 
@@ -261,7 +261,7 @@ describe("EmployerRegistry - Role Conflict Validation", function () {
       // Admin check happens first
       await expect(
         employerRegistry.connect(admin).registerEmployer("Test", "VAT")
-      ).to.be.revertedWith("Admin cannot register as employer");
+      ).to.be.revertedWithCustomError(employerRegistry, "AdminCannotRegister");
     });
 
 
@@ -270,7 +270,7 @@ describe("EmployerRegistry - Role Conflict Validation", function () {
       
       await expect(
         employerRegistry.connect(newUser).registerEmployer("Company B", "VAT222")
-      ).to.be.revertedWith("Already registered");
+      ).to.be.revertedWithCustomError(employerRegistry, "AlreadyRegistered");
     });
   });
 
