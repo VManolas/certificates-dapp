@@ -329,12 +329,14 @@
       rollup proof is invisible to the application.
     </p>
     <p>
-      The constraint relevant to this project: zksolc&rsquo;s
-      <code>forceEVMLA</code> flag, which forces EVM legacy assembly translation,
-      causes stack-too-deep errors in the dense assembly of Groth16 verifiers.
-      The fix is to use zksolc&rsquo;s default Yul IR compilation path, which
-      handles deep stacks correctly via the IR lowering pass
-      (Section&nbsp;VI-B).
+      The constraint encountered in this project: in this project&rsquo;s
+      configuration, zksolc&rsquo;s <code>forceEVMLA</code> flag (which forces
+      EVM legacy assembly translation) produced a stack-too-deep error in the
+      dense assembly of the snarkjs-generated Groth16 verifier. Using
+      zksolc&rsquo;s default Yul IR compilation path resolved the issue; the IR
+      lowering pass handles deep stacks correctly. This is an empirical finding
+      specific to this verifier and toolchain version, documented further in
+      Section&nbsp;VI-B.
     </p>
 
     <h2 class="subsection">E. Related Work</h2>
@@ -681,10 +683,8 @@
       soundness under the q-PKE assumption on BN254&nbsp;[2],
       (2)&nbsp;Poseidon-128 collision resistance over the BN254 scalar
       field&nbsp;[6], and (3)&nbsp;AES-GCM-256 security for local credential
-      storage (assuming proper key derivation; the prototype&rsquo;s
-      address-based key derivation does not satisfy this assumption &mdash; see
-      Section&nbsp;IV-B and Section&nbsp;VII-D for the acknowledged limitation
-      and the recommended signature-based HKDF fix).
+      storage with an AES key derived from a wallet signature via
+      HKDF-SHA-256 (Section&nbsp;IV-B).
       The system makes no additional cryptographic assumptions.
     </p>
     <p>
@@ -722,27 +722,18 @@
     </p>
     <p>
       The secret key is encrypted client-side using AES-GCM with a 256-bit
-      key. In the current prototype, the AES key is derived deterministically
-      from the wallet address string via SHA-256; a wallet signature is
-      requested as a UX gate but is not used as key material. This provides
-      localStorage-level protection only. The recommended production approach
-      is to derive the AES key from a deterministic wallet signature: the user
-      signs a fixed domain string (e.g., <code>"zkCredentials key derivation
-      v1"</code>) with their wallet via <code>personal_sign</code>, and the
-      64-byte signature is passed through HKDF-SHA-256 to produce the AES-GCM
-      key. This would tie key persistence to wallet ownership without uploading
-      <em>sk</em> to any server, while ensuring the encryption key has
-      sufficient entropy. The prototype&rsquo;s weaker key derivation is explicitly
-      acknowledged as a known limitation (Section&nbsp;VII-D).
-    </p>
-    <p>
-      <em>Limitation:</em> The current prototype derives the AES key from the
-      wallet address rather than from a wallet signature, meaning any party who
-      knows the address could derive the same key. A production deployment
-      should use the signature-based HKDF derivation described above.
-      Additionally, migrating from <code>personal_sign</code> to EIP-712
-      structured signing would display a human-readable description of what is
-      being signed, improving user clarity and reducing phishing risk.
+      key derived from a deterministic wallet signature via HKDF-SHA-256.
+      The user signs a fixed domain string with their wallet via
+      <code>personal_sign</code>, and the resulting signature is passed through
+      HKDF with a domain-separation salt (<code>"zkcredentials:zkauth:v4:"</code>)
+      to produce the AES-GCM key. This ties key persistence to wallet
+      ownership without uploading <em>sk</em> to any server. A storage-format
+      version tag (<code>v4:</code>) is prepended to stored credentials; users
+      with a prior format (v3, which derived the key from the public wallet
+      address rather than a wallet signature) are prompted to re-register. A
+      future refinement would migrate from <code>personal_sign</code> to
+      EIP-712 structured signing, displaying a human-readable description of
+      what is being signed and further reducing phishing risk.
     </p>
 
     <h2 class="subsection">C. Commitment Scheme</h2>
@@ -848,7 +839,7 @@
         <tr><td>Poseidon(1) &mdash; inner hash (t=2 state)</td><td>&sim;474</td></tr>
         <tr><td>Poseidon(3) &mdash; commitment (t=4 state)</td><td>&sim;589</td></tr>
         <tr><td>Poseidon(2) &mdash; nullifier (t=3 state)</td><td>&sim;474</td></tr>
-        <tr><td>Num2Bits(160) &mdash; address range check (v1.2.0)</td><td>160</td></tr>
+        <tr><td>Num2Bits(160) &mdash; address range check (v1.2.0)</td><td>161</td></tr>
         <tr><td><strong>Total</strong></td><td><strong>1,698</strong></td></tr>
       </tbody>
     </table>
@@ -911,6 +902,10 @@
       <code>keccak256(commitment, timestamp, msg.sender, blockhash, nullifier)</code>.
       Including the nullifier binds each session to the specific ZK proof that created
       it and adds proof-specific entropy independent of miner-controllable inputs.
+      (Note on hash usage: SHA-256 is used off-chain in the frontend to compute the
+      <code>documentHash</code> stored in <code>CertificateRegistry</code>;
+      <code>keccak256</code> is used on-chain in Solidity for session ID derivation and
+      access-control role identifiers. These are separate and complementary uses.)
       Sessions expire after 24&nbsp;hours, checked at query time using
       <code>block.timestamp</code>. Logout calls
       <code>endSession(bytes32 sessionId)</code>, which sets
@@ -1118,10 +1113,9 @@
       The client-side proof generation pipeline proceeds as follows:
     </p>
     <ol>
-      <li>Request a wallet signature (UX gate confirming user intent);
-          derive the AES-GCM decryption key. (In the prototype, the key is
-          derived from the wallet address; in a production deployment, it
-          should be derived from the signature via HKDF-SHA-256.)</li>
+      <li>Request a wallet signature; pass it through HKDF-SHA-256 (domain
+          salt <code>"zkcredentials:zkauth:v4:"</code>) to derive the AES-GCM
+          decryption key.</li>
       <li>Decrypt <em>sk</em> from <code>localStorage</code> using the
           AES-GCM key.</li>
       <li>Compute <em>sk_hash</em>&nbsp;=&nbsp;Poseidon(<em>sk</em>) using
@@ -1270,8 +1264,8 @@
       circuit design: only three Poseidon hashes and one Num2Bits range check,
       without Merkle inclusion proofs. All Groth16 systems share the same constant
       256-byte proof size and similar verification cost (dominated by the ecPairing
-      precompile). The reduced constraint count translates directly to faster
-      client-side proving (see Section&nbsp;VI-A).
+      precompile).       The reduced constraint count translates directly to faster
+      client-side proving (see Section&nbsp;VII-A).
     </p>
 
     <h2 class="subsection">C. Security Analysis</h2>
@@ -1383,11 +1377,12 @@
       for simpler implementation and lower gas cost.
     </p>
     <p>
-      <em>No forward secrecy.</em> If <em>sk</em> is compromised, all past
-      sessions become retroactively linkable &mdash; an attacker can compute
-      Poseidon(<em>sk</em>,&nbsp;<em>n</em>) for each observed public nonce
-      <em>n</em> and match the results against on-chain nullifiers &mdash; and
-      future impersonation is possible. The system provides <em>session
+      <em>No forward secrecy.</em> If <em>sk</em> is compromised, an attacker
+      can recompute Poseidon(<em>sk</em>,&nbsp;<em>n</em>) for each public nonce
+      <em>n</em> visible on-chain and match the results against stored nullifiers,
+      thereby linking past sessions associated with that key. Future
+      impersonation is also possible until the commitment is replaced via
+      <code>revokeCommitment()</code>. The system provides <em>session
       secrecy</em> (a stolen session ID is useless after 24&nbsp;hours) but not
       <em>key secrecy</em> (a stolen private key is useful indefinitely). The
       system provides no mechanism for key rotation without creating a new
@@ -1402,13 +1397,14 @@
       reduce the trust assumption to the weakest honest participant.
     </p>
     <p>
-      <em>Prototype key storage weakness.</em> The current implementation
-      derives the AES encryption key for <em>sk</em> from the public wallet
-      address rather than from a wallet signature. This means any party with
-      access to the user&rsquo;s <code>localStorage</code> and knowledge of
-      their wallet address can decrypt the stored secret key. A production
-      deployment must derive the key from a wallet signature via HKDF-SHA-256,
-      ensuring only the wallet holder can decrypt.
+      <em>Key custody.</em> The secret key <em>sk</em> is stored in browser
+      <code>localStorage</code> encrypted via AES-GCM with a key derived
+      from a wallet signature through HKDF-SHA-256 (Section&nbsp;IV-B,
+      storage format v4). A compromised device, XSS attack, or malicious
+      browser extension could expose the signature and thus the derived key.
+      A production deployment should use hardware-bound key storage
+      (WebAuthn FIDO2 bound keys or threshold secret sharing) to prevent
+      extraction under device compromise.
     </p>
     <p>
       <em>No Sybil resistance.</em> Any address can register a commitment.
