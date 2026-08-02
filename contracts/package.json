@@ -19,7 +19,8 @@
     "deploy:local:docker": "hardhat deploy-zksync --script deploy-unified.ts --network localhost",
     "upgrade:zkauth:staging": "hardhat deploy-zksync --script upgrade-zkauth-registry.ts --network zkSyncSepoliaTestnet",
     "verify": "hardhat verify --network zkSyncSepoliaTestnet",
-    "clean": "hardhat clean"
+    "clean": "hardhat clean",
+    "benchmark:proof-generation": "node scripts/benchmark-proof-generation.mjs"
   },
   "keywords": [
     "zksync",
