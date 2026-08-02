@@ -19,21 +19,28 @@ interface IAuthVerifier {
 
 /**
  * @title ZKAuthRegistry
- * @notice Privacy-preserving authentication registry for zkCredentials
- * @dev Users register commitments and authenticate via zero-knowledge proofs
- * 
+ * @notice Key-secrecy authentication registry for zkCredentials
+ * @dev Users register commitments and authenticate via zero-knowledge proofs.
+ *      See contracts/circuits/THREAT_MODEL.md for the full analysis this summary is based on.
+ *
  * Features:
- * - Commitment-based registration (no wallet address revealed at registration)
- * - ZK-proof authentication (proves knowledge without revealing secrets)
+ * - Commitment-based registration and ZK-proof authentication (proves knowledge of a
+ *   private key without revealing it)
  * - Session management with expiry
  * - Role-based access control
  * - UUPS upgradeable
- * 
- * Security:
+ *
+ * Security properties actually achieved:
  * - Private keys never touch the blockchain
- * - Wallet addresses only revealed when user chooses
- * - Poseidon/Pedersen hash for ZK-friendly commitments
+ * - Poseidon hash for ZK-friendly commitments (see contracts/circuits/auth_login_groth16/)
  * - Session tokens expire after 24 hours
+ *
+ * NOT achieved — wallet-address unlinkability: registerCommitment/startSession are called
+ * directly from the user's own wallet, so msg.sender links commitment <-> wallet on every
+ * transaction regardless of what the proof hides. The circuit keeps walletAddress private,
+ * but nothing in this contract (or the frontend that calls it) decouples the transaction
+ * sender from the prover. See THREAT_MODEL.md for what a real address-unlinkability design
+ * would require (a meta-transaction relayer, not implemented here).
  */
 contract ZKAuthRegistry is 
     Initializable, 
@@ -223,7 +230,10 @@ contract ZKAuthRegistry is
         publicInputs[2] = nullifier;
         if (!authVerifier.verify(proof, publicInputs)) revert InvalidProof();
 
-        // Mark nullifier as spent before creating the session (checks-effects-interactions)
+        // Mark nullifier as spent before creating the session. Note: this write happens
+        // AFTER authVerifier.verify() above, not before it — safe only because authVerifier
+        // is a fixed, admin-set, non-reentrant verifier. See circuits/SECURITY_REVIEW.md
+        // finding 5 for the reentrancy assumption this relies on.
         usedNullifiers[nullifier] = true;
 
         sessionId = keccak256(
