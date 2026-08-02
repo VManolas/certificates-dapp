@@ -29,6 +29,7 @@ import type { ZKAuthProgressEvent } from '@/hooks/useZKAuth';
 import { useAuthStore } from '@/store/authStore';
 import { ProgressSteps } from './ProgressSteps';
 import { getFriendlyError, getErrorAction, logError } from '@/lib/errors/zkAuthErrors';
+import { clearStoredCredentials } from '@/lib/zkAuth';
 import type { UserRole, AuthMethod } from '@/types/auth';
 import { ADMIN_CONTACT_EMAIL } from '@/lib/adminContact';
 import { logger } from '@/lib/logger';
@@ -56,7 +57,7 @@ export function UnifiedAuthFlow({
   preSelectedRole = null,
 }: UnifiedAuthFlowProps) {
   const navigate = useNavigate();
-  const { isConnected } = useAccount();
+  const { isConnected, address } = useAccount();
   const unifiedAuth = useUnifiedAuth();
   const { setAuthMethod, setPreSelectedRole, setShowAuthMethodSelector } = useAuthStore();
   
@@ -290,7 +291,14 @@ export function UnifiedAuthFlow({
   };
 
   const handleZKRegistration = async () => {
-    if (!selectedRole || selectedRole === 'admin') return;
+    logger.info('handleZKRegistration called', { selectedRole, isLoading });
+    
+    if (!selectedRole || selectedRole === 'admin') {
+      logger.warn('handleZKRegistration: Invalid role, returning early', { selectedRole });
+      setError('Please select a valid role (Student or Employer) to continue.');
+      setIsLoading(false);
+      return;
+    }
     
     const runId = beginNewRun();
 
@@ -319,13 +327,17 @@ export function UnifiedAuthFlow({
           const err = fastLoginErr as Error;
           if (err.message === 'CREDENTIALS_OUTDATED' || err.message === 'COMMITMENT_NOT_REGISTERED') {
             // Stored credentials are stale (old encryption format or commitment gone from chain).
-            // decryptCredentials already cleared them — fall through to fresh registration below.
-            logger.info('Stored credentials invalid, falling through to fresh registration', { reason: err.message });
+            // Explicitly clear them and force fresh registration.
+            logger.info('Stored credentials invalid, clearing and forcing fresh registration', { reason: err.message });
+            if (address) {
+              clearStoredCredentials(address);
+            }
             setWalletInteractionMode('setup');
             setWalletInteractionStep(1);
             setWalletInteractionHint('One-time setup requires three wallet confirmations for secure enrollment.');
             setIsOnchainPending(false);
             setContractInteractionStatus('idle');
+            // Do NOT return - fall through to registration below
           } else {
             throw fastLoginErr;
           }
@@ -344,7 +356,9 @@ export function UnifiedAuthFlow({
         throw new Error('Only students and employers can use ZK authentication');
       }
       
+      logger.info('Calling unifiedAuth.zkAuth.register', { selectedRole });
       await unifiedAuth.zkAuth.register(selectedRole, (event) => handleZKSetupProgress(event, runId));
+      logger.info('unifiedAuth.zkAuth.register completed successfully');
       if (!isCurrentRun(runId)) return;
       
       // Auto-login after successful registration
@@ -367,9 +381,11 @@ export function UnifiedAuthFlow({
           message: err.message,
         });
         if (err.message === 'CREDENTIALS_OUTDATED') {
-          // Credentials were cleared by the decrypt path; require a clean re-registration.
-          setCurrentStep('zk-generate-credentials');
-          setError('Your credentials became invalid during setup. Please generate and register once more to complete private login.');
+          // Credentials were cleared by the decrypt path; this shouldn't happen after fresh registration.
+          // Force a page reload to reset all state.
+          logger.error('CREDENTIALS_OUTDATED after fresh registration - forcing reload', { error: err });
+          setError('Setup encountered an unexpected issue. Please try again.');
+          setTimeout(() => window.location.reload(), 2000);
         } else if (err.message === 'COMMITMENT_NOT_REGISTERED') {
           setCurrentStep('zk-connect-wallet');
           setError('Registration state was not found on-chain for this wallet. Please re-run one-time private registration.');
@@ -608,6 +624,36 @@ export function UnifiedAuthFlow({
 
   const hasExistingCredentials = unifiedAuth.zkAuth.hasCredentials;
   const detectedWeb3Role = unifiedAuth.web3Auth.primaryRole;
+
+  // Handle error actions (clear cache, refresh, etc.)
+  const handleErrorAction = (action: string) => {
+    if (action === 'clear-cache') {
+      // Clear ZK credentials from localStorage using the proper function
+      if (address) {
+        logger.info('Clearing stored credentials for address', { address });
+        clearStoredCredentials(address);
+      } else {
+        logger.warn('No wallet address available, clearing all ZK credentials');
+        // Fallback: clear all possible keys
+        localStorage.removeItem('zkauth_encrypted_credentials');
+        Object.keys(localStorage).forEach(key => {
+          if (key.startsWith('zkauth_encrypted_credentials_')) {
+            localStorage.removeItem(key);
+          }
+        });
+      }
+      // Force refresh the auth state
+      window.location.reload();
+    } else if (action === 'refresh') {
+      window.location.reload();
+    } else if (action === 'connect-wallet') {
+      setCurrentStep('zk-connect-wallet');
+      setError(null);
+    } else if (action === 'retry') {
+      setError(null);
+      setCurrentStep('zk-generate-credentials');
+    }
+  };
   const isWeb3RoleMismatch =
     currentStep === 'web3-connect-wallet' &&
     selectedAuthMethod === 'web3' &&
@@ -761,8 +807,17 @@ export function UnifiedAuthFlow({
                       <span>Enhanced privacy after initial setup</span>
                     </li>
                     <li className="flex items-start gap-2">
-                      <span className="text-yellow-400 mt-0.5">⚠</span>
-                      <span>One-time wallet connection required for setup</span>
+                      {hasExistingCredentials ? (
+                        <>
+                          <span className="text-green-400 mt-0.5">✓</span>
+                          <span>Setup complete - ready for private login</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-yellow-400 mt-0.5">⚠</span>
+                          <span>One-time wallet connection required for setup</span>
+                        </>
+                      )}
                     </li>
                   </ul>
                 </button>
@@ -886,7 +941,14 @@ export function UnifiedAuthFlow({
                 : 'Generate your private ZK credentials and register your commitment on the blockchain. Your private key will be encrypted and stored securely in your browser.'}
             </p>
             <button
-              onClick={handleZKRegistration}
+              onClick={() => {
+                logger.info('Generate & Register Credentials button clicked', { 
+                  selectedRole, 
+                  isLoading, 
+                  hasExistingCredentials 
+                });
+                handleZKRegistration();
+              }}
               disabled={isLoading}
               className="w-full py-3 px-4 bg-primary-500 hover:bg-primary-600 disabled:bg-surface-600 
                        text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
@@ -905,8 +967,13 @@ export function UnifiedAuthFlow({
             </button>
             {error && (
               <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
-                <p className="text-red-400 text-sm">{error}</p>
-                <p className="text-surface-400 text-xs mt-1">{getErrorAction(error).label}</p>
+                <p className="text-red-400 text-sm mb-2">{error}</p>
+                <button
+                  onClick={() => handleErrorAction(getErrorAction(error).action)}
+                  className="px-4 py-2 bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 rounded text-red-300 text-sm font-medium transition-colors"
+                >
+                  {getErrorAction(error).label}
+                </button>
               </div>
             )}
             {walletInteractionMode === 'login' && walletTransparencyPanel}
@@ -973,8 +1040,13 @@ export function UnifiedAuthFlow({
             </button>
             {error && (
               <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
-                <p className="text-red-400 text-sm">{error}</p>
-                <p className="text-surface-400 text-xs mt-1">{getErrorAction(error).label}</p>
+                <p className="text-red-400 text-sm mb-2">{error}</p>
+                <button
+                  onClick={() => handleErrorAction(getErrorAction(error).action)}
+                  className="px-4 py-2 bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 rounded text-red-300 text-sm font-medium transition-colors"
+                >
+                  {getErrorAction(error).label}
+                </button>
               </div>
             )}
             {isZkRoleMismatch && (

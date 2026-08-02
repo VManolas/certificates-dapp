@@ -50,6 +50,17 @@ const ZK_AUTH_REGISTRY_ADDRESS = import.meta.env.VITE_ZK_AUTH_REGISTRY_ADDRESS a
 
 // ZK auth only supports student and employer roles (universities and admins use Web3 auth)
 export type ZKAuthRole = 'student' | 'employer';
+
+/**
+ * Domain-separation message signed by the user's wallet to derive the AES-GCM encryption key
+ * for locally-stored ZK credentials.
+ *
+ * IMPORTANT: This message MUST be identical in both the registration (encrypt) path and the
+ * login (decrypt) path. The AES key is derived via HKDF from the wallet signature; any change
+ * to the message string produces a different signature → different key → decryption failure.
+ */
+const ZKAUTH_SIGNING_MESSAGE =
+  'Sign this message to access your zkAuth credentials.\n\nThis signature is used locally and never leaves your device.';
 export type ZKAuthProgressEvent =
   | 'register_signature_required'
   | 'register_signature_complete'
@@ -182,9 +193,8 @@ export function useZKAuth() {
       }
 
       const signer = provider.getSigner();
-      const message = 'Sign this message to encrypt your zkAuth credentials.\n\nThis signature is used locally and never leaves your device.';
       emitProgress('register_signature_required');
-      const signature = await signer.signMessage(message);
+      const signature = await signer.signMessage(ZKAUTH_SIGNING_MESSAGE);
       emitProgress('register_signature_complete');
 
       const encrypted = await encryptCredentials(
@@ -306,12 +316,10 @@ export function useZKAuth() {
       const provider = new ethers.providers.Web3Provider(window.ethereum as any);
       const signer = provider.getSigner();
       
-      const message = 'Sign this message to decrypt your zkAuth credentials.\n\nThis signature is used locally and never leaves your device.';
-      
       let signature: string;
       try {
         emitProgress('login_signature_required');
-        signature = await signer.signMessage(message);
+        signature = await signer.signMessage(ZKAUTH_SIGNING_MESSAGE);
         emitProgress('login_signature_complete');
       } catch (err) {
         throw new Error('Signature required to decrypt credentials. Please approve the signature request.');
