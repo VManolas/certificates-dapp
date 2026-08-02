@@ -318,4 +318,59 @@ describe("InstitutionRegistry - registerInstitutionByAdmin", function () {
       expect(await registry.canIssueCertificates(university1.address)).to.be.true;
     });
   });
+
+  // ─────────────────────────────────────────────────────────────
+  // Domain release (admin recovery)
+  // ─────────────────────────────────────────────────────────────
+
+  describe("Domain release (admin recovery)", function () {
+    it("Should let admin release a squatted domain so another address can register it", async function () {
+      await registry.connect(admin).registerInstitutionByAdmin(
+        university1.address,
+        "Squatter",
+        "mit.edu"
+      );
+
+      // Domain is taken; a second institution cannot register it yet.
+      await expect(
+        registry.connect(admin).registerInstitutionByAdmin(
+          university2.address,
+          "MIT",
+          "mit.edu"
+        )
+      ).to.be.revertedWithCustomError(registry, "EmailDomainAlreadyRegistered");
+
+      await expect(registry.connect(admin).releaseEmailDomain("mit.edu"))
+        .to.emit(registry, "EmailDomainReleased")
+        .withArgs("mit.edu", university1.address);
+
+      expect(await registry.getInstitutionByDomain("mit.edu")).to.equal(ethers.ZeroAddress);
+
+      // Now the legitimate institution can register the freed domain.
+      await registry.connect(admin).registerInstitutionByAdmin(
+        university2.address,
+        "MIT",
+        "mit.edu"
+      );
+      expect(await registry.getInstitutionByDomain("mit.edu")).to.equal(university2.address);
+    });
+
+    it("Should revert if a non-admin attempts to release a domain", async function () {
+      await registry.connect(admin).registerInstitutionByAdmin(
+        university1.address,
+        "MIT",
+        "mit.edu"
+      );
+
+      await expect(
+        registry.connect(randomUser).releaseEmailDomain("mit.edu")
+      ).to.be.reverted;
+    });
+
+    it("Should revert if the domain was never registered", async function () {
+      await expect(
+        registry.connect(admin).releaseEmailDomain("nowhere.edu")
+      ).to.be.revertedWithCustomError(registry, "EmailDomainNotRegistered");
+    });
+  });
 });

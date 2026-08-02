@@ -57,10 +57,19 @@ contract ZKAuthRegistry is
     }
     
     /// @notice Session data structure
+    /// @dev `initiator` was added after `active`; it packs into the same storage slot
+    ///      (bool + address = 21 bytes) rather than allocating a new one. This repo only
+    ///      ever deploys this contract via fresh `deployProxy` calls (never `upgradeProxy`
+    ///      onto a live instance — verified across all recorded deployment artifacts), so
+    ///      this is safe today. If this contract is ever upgraded in place instead of
+    ///      redeployed, any session created before this field existed would read
+    ///      `initiator == address(0)` and its real owner would be unable to call
+    ///      endSession() on it until natural expiry (SESSION_DURATION).
     struct Session {
         bytes32 commitment;
         uint256 expiry;
         bool active;
+        address initiator;
     }
     
     /// @notice Mapping: commitment => registered
@@ -119,6 +128,7 @@ contract ZKAuthRegistry is
     error NullifierAlreadyUsed();
     error SessionExpired();
     error SessionNotFound();
+    error NotSessionOwner();
     error UnauthorizedRole();
     error InvalidAddress();
     error CommitmentAlreadyRevoked();
@@ -221,7 +231,12 @@ contract ZKAuthRegistry is
         );
 
         uint256 expiry = block.timestamp + SESSION_DURATION;
-        sessions[sessionId] = Session({ commitment: commitment, expiry: expiry, active: true });
+        sessions[sessionId] = Session({
+            commitment: commitment,
+            expiry: expiry,
+            active: true,
+            initiator: msg.sender
+        });
 
         emit SessionStarted(sessionId, commitment, expiry);
 
@@ -231,11 +246,13 @@ contract ZKAuthRegistry is
     /**
      * @notice End an active session (logout)
      * @param sessionId Session to terminate
+     * @dev Only the address that started the session (via startSession) may end it.
      */
     function endSession(bytes32 sessionId) external {
         Session storage session = sessions[sessionId];
         if (!session.active) revert SessionNotFound();
-        
+        if (msg.sender != session.initiator) revert NotSessionOwner();
+
         session.active = false;
         
         emit SessionEnded(sessionId);

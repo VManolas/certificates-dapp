@@ -39,6 +39,9 @@ contract InstitutionRegistry is
     /// @notice Mapping from email domain to institution address (for uniqueness)
     mapping(string => address) public emailDomainToAddress;
 
+    /// @notice Emitted when an admin releases a squatted/incorrect email domain
+    event EmailDomainReleased(string emailDomain, address indexed previousOwner);
+
     // Custom Errors
     error InstitutionAlreadyExists();
     error InstitutionNotFound();
@@ -47,6 +50,7 @@ contract InstitutionRegistry is
     error InstitutionNotActive();
     error InstitutionAlreadyActive();
     error EmailDomainAlreadyRegistered();
+    error EmailDomainNotRegistered();
     error InvalidEmailDomain();
     error InvalidName();
     error InvalidAddress();
@@ -203,6 +207,23 @@ contract InstitutionRegistry is
         inst.isActive = true;
 
         emit InstitutionReactivated(wallet, block.timestamp);
+    }
+
+    /**
+     * @notice Release a squatted/incorrect email domain so it can be re-registered
+     * @param emailDomain The email domain to release
+     * @dev Only callable by admin. Recovery tool for domain-squatting: does not alter
+     *      the institution's stored record, only frees the domain→address mapping entry.
+     */
+    function releaseEmailDomain(
+        string calldata emailDomain
+    ) external onlyRole(ADMIN_ROLE) {
+        address previousOwner = emailDomainToAddress[emailDomain];
+        if (previousOwner == address(0)) revert EmailDomainNotRegistered();
+
+        delete emailDomainToAddress[emailDomain];
+
+        emit EmailDomainReleased(emailDomain, previousOwner);
     }
 
     /**

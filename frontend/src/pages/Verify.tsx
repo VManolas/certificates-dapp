@@ -19,7 +19,7 @@ import { logger } from '@/lib/logger';
 import type { UserRole } from '@/types/auth';
 import { verifyVerificationToken } from '@/lib/verificationToken';
 
-type VerificationState = 'idle' | 'hashing' | 'verifying' | 'complete' | 'verifying-id';
+type VerificationState = 'idle' | 'hashing' | 'verifying' | 'complete';
 
 export function Verify() {
   const [searchParams] = useSearchParams();
@@ -79,15 +79,6 @@ export function Verify() {
   const hashFromToken = tokenValidation?.valid ? tokenValidation.payload?.h : undefined;
   const hasLegacyCertParam = !!certIdParam;
   const canUseInternalHashMode = isConnected && isAuthenticated && !!effectiveRole;
-
-  // Legacy cert-id link verification is intentionally disabled (`cert` URLs are rejected in effects).
-  // Keep this explicitly undefined so legacy IDs never activate the certificate-by-id path.
-  const certificateIdFromUrl = undefined as bigint | undefined;
-  const {
-    certificate: certFromId,
-    isLoading: isLoadingCertById,
-    error: certByIdError,
-  } = useCertificateDetails(certificateIdFromUrl, !!certificateIdFromUrl);
 
   // Initialize state from secure token links (`?v=...`).
   // Keep this effect independent from auth/role state so token verification
@@ -237,21 +228,6 @@ export function Verify() {
       }
     }
   }, [effectiveRole, state, isValid, isRevoked, certificateId, hashResult, hasLoggedVerification, addEntry]);
-
-  // Log certificate ID verification to history
-  useEffect(() => {
-    if (effectiveRole === 'employer' && state === 'verifying-id' && !hasLoggedVerification && certFromId && !isLoadingCertById) {
-      addEntry({
-        verificationType: 'link',
-        isValid: true,
-        isRevoked: certFromId.isRevoked || false,
-        certificateId: certificateIdFromUrl,
-        studentAddress: certFromId.studentWallet,
-        institutionAddress: certFromId.issuingInstitution,
-      });
-      setHasLoggedVerification(true);
-    }
-  }, [effectiveRole, state, certFromId, certificateIdFromUrl, isLoadingCertById, hasLoggedVerification, addEntry]);
 
   const handleFile = useCallback(async (selectedFile: File) => {
     // Clear any existing verification data first
@@ -430,223 +406,6 @@ export function Verify() {
       setError('Failed to parse verification link. Please check the format.');
     }
   };
-
-  // Render certificate ID verification result
-  if (state === 'verifying-id') {
-    if (isLoadingCertById) {
-      return (
-        <div className="min-h-[calc(100vh-4rem)] bg-gradient-to-br from-surface-950 via-primary-950/20 to-surface-950">
-          <div className="container mx-auto px-4 py-16">
-            <div className="max-w-2xl mx-auto">
-              <div className="card text-center py-12">
-                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary-500/10 mb-6">
-                  <svg className="w-8 h-8 text-primary-400 animate-spin" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                  </svg>
-                </div>
-                <h3 className="text-xl font-semibold text-white mb-2">Verifying Certificate...</h3>
-                <p className="text-surface-400">
-                  Certificate ID: #{certificateIdFromUrl?.toString()}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    if (certByIdError || !certFromId) {
-      return (
-        <div className="min-h-[calc(100vh-4rem)] bg-gradient-to-br from-surface-950 via-primary-950/20 to-surface-950">
-          <div className="container mx-auto px-4 py-16">
-            <div className="max-w-2xl mx-auto">
-              <div className="card border-red-500/30 bg-red-500/10">
-                <div className="flex items-start gap-4 mb-6">
-                  <div className="flex-shrink-0 w-16 h-16 rounded-full bg-red-500/20 flex items-center justify-center">
-                    <svg className="w-8 h-8 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </div>
-                  <div>
-                    <h2 className="text-2xl font-bold text-white mb-2">Certificate Not Found</h2>
-                    <p className="text-red-400">
-                      Certificate #{certificateIdFromUrl?.toString()} does not exist in the registry
-                    </p>
-                  </div>
-                </div>
-                <button onClick={resetVerification} className="btn-secondary w-full">
-                  Verify Another Certificate
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    // Certificate found - display details
-    const issueDate = new Date(Number(certFromId.issueDate) * 1000);
-    
-    return (
-      <div className="min-h-[calc(100vh-4rem)] bg-gradient-to-br from-surface-950 via-primary-950/20 to-surface-950">
-        <div className="container mx-auto px-4 py-16">
-          <div className="max-w-2xl mx-auto space-y-6">
-            {/* Navigation Buttons */}
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => navigate(-1)}
-                className="btn-secondary flex items-center gap-2"
-                title="Go back to previous page"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
-                Back
-              </button>
-              {effectiveRole === 'university' && (
-                <button
-                  onClick={() => navigate('/university/dashboard')}
-                  className="btn-primary flex items-center gap-2"
-                  title="Go to University Dashboard"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-                  </svg>
-                  Dashboard
-                </button>
-              )}
-            </div>
-
-            {/* Status Card */}
-            <div
-              className={`card ${
-                !certFromId.isRevoked
-                  ? 'border-accent-500/30 bg-accent-500/10 glow-accent'
-                  : 'border-yellow-500/30 bg-yellow-500/10'
-              }`}
-            >
-              <div className="flex items-center gap-4 mb-6">
-                <div
-                  className={`w-16 h-16 rounded-full flex items-center justify-center ${
-                    !certFromId.isRevoked ? 'bg-accent-500/20' : 'bg-yellow-500/20'
-                  }`}
-                >
-                  {!certFromId.isRevoked ? (
-                    <svg className="w-8 h-8 text-accent-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                  ) : (
-                    <svg className="w-8 h-8 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                    </svg>
-                  )}
-                </div>
-                <div>
-                  <h2 className="text-2xl font-bold text-white">
-                    {!certFromId.isRevoked ? 'Valid Certificate' : 'Certificate Revoked'}
-                  </h2>
-                  <p className={!certFromId.isRevoked ? 'text-accent-400' : 'text-yellow-400'}>
-                    {!certFromId.isRevoked
-                      ? 'This certificate is authentic and verified on-chain'
-                      : 'This certificate was revoked by the issuing institution'}
-                  </p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 pt-4 border-t border-surface-700">
-                <div>
-                  <span className="text-sm text-surface-400">Certificate ID</span>
-                  <p className="text-white font-mono">#{certificateIdFromUrl?.toString()}</p>
-                </div>
-                <div>
-                  <span className="text-sm text-surface-400">Status</span>
-                  <p>
-                    {certFromId.isRevoked ? (
-                      <span className="badge badge-warning">Revoked</span>
-                    ) : (
-                      <span className="badge badge-success">Active</span>
-                    )}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Certificate Details Card */}
-            <div className="card">
-              <h3 className="text-lg font-semibold text-white mb-4">Certificate Details</h3>
-              <div className="space-y-3">
-                <div className="flex justify-between">
-                  <span className="text-surface-400">Document Hash</span>
-                  <span className="text-white font-mono text-sm">
-                    {truncateHash(certFromId.documentHash, 10, 8)}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-surface-400">Student Wallet</span>
-                  <span className="text-white font-mono text-sm">
-                    {truncateHash(certFromId.studentWallet, 8, 6)}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-surface-400">Issuing Institution</span>
-                  <span className="text-white font-mono text-sm">
-                    {truncateHash(certFromId.issuingInstitution, 8, 6)}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-surface-400">Issue Date</span>
-                  <span className="text-white">
-                    {issueDate.toLocaleDateString('en-US', {
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric',
-                    })}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="flex gap-4">
-              {certificateIdFromUrl !== undefined && certFromId && (
-                <VerificationReport
-                  certificateId={certificateIdFromUrl}
-                  documentHash={certFromId.documentHash}
-                  studentWallet={certFromId.studentWallet}
-                  institutionAddress={certFromId.issuingInstitution}
-                  issueDate={certFromId.issueDate}
-                  isValid={!certFromId.isRevoked}
-                  isRevoked={certFromId.isRevoked}
-                />
-              )}
-              <button
-                onClick={() => setShowDetailModal(true)}
-                className="btn-primary flex-1 flex items-center justify-center gap-2"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                View Details
-              </button>
-              <button onClick={resetVerification} className="btn-secondary flex-1">
-                Verify Another
-              </button>
-            </div>
-          </div>
-
-          {/* Detail Modal */}
-          {certificateIdFromUrl !== undefined && certFromId && showDetailModal && (
-            <CertificateDetailModal
-              certificateId={certificateIdFromUrl}
-              certificate={certFromId}
-              onClose={() => setShowDetailModal(false)}
-            />
-          )}
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-gradient-to-br from-surface-950 via-primary-950/20 to-surface-950">

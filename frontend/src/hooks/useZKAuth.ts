@@ -29,6 +29,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useAccount, useWriteContract } from 'wagmi';
 import { ethers } from 'ethers';
+import { getBrowserProvider } from '@/lib/web3Provider';
 import type { UserRole } from '@/types/auth';
 import {
   generateRandomKey,
@@ -181,7 +182,7 @@ export function useZKAuth() {
 
       // Step 4: Encrypt and store credentials locally
       // Request signature for encryption
-      const provider = new ethers.providers.Web3Provider(window.ethereum as any);
+      const provider = getBrowserProvider();
 
       // Guard: detect if the Hardhat node was restarted (contract no longer deployed)
       const contractCode = await provider.getCode(ZK_AUTH_REGISTRY_ADDRESS);
@@ -313,7 +314,7 @@ export function useZKAuth() {
 
       // Step 2: Decrypt stored credentials using wallet signature
       const encrypted = getStoredCredentials(accounts[0])!;
-      const provider = new ethers.providers.Web3Provider(window.ethereum as any);
+      const provider = getBrowserProvider();
       const signer = provider.getSigner();
       
       let signature: string;
@@ -488,7 +489,7 @@ export function useZKAuth() {
     try {
       logger.info('Logging out', { sessionId: state.sessionId });
 
-      const provider = new ethers.providers.Web3Provider(window.ethereum as any);
+      const provider = getBrowserProvider();
       const sessionReader = new ethers.Contract(
         ZK_AUTH_REGISTRY_ADDRESS,
         ZKAuthRegistryABI.abi,

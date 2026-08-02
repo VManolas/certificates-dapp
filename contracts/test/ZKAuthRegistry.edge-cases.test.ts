@@ -362,7 +362,7 @@ describe("ZKAuthRegistry - Edge Cases", function () {
       ).to.be.revertedWithCustomError(zkAuthRegistry, "SessionNotFound");
     });
 
-    it("Any address can end any session (no ownership guard)", async function () {
+    it("Should revert when a non-owner attempts to end another user's session", async function () {
       await zkAuthRegistry.connect(user1).registerCommitment(
         commitment1, 1, mockProof, DUMMY_NONCE, DUMMY_NULLIFIER
       );
@@ -372,13 +372,13 @@ describe("ZKAuthRegistry - Edge Cases", function () {
       const receipt = await tx.wait();
       const sessionId = await extractSessionId(zkAuthRegistry, receipt);
 
-      // attacker ends user1's session — contract does not prevent this
+      // attacker cannot end user1's session
       await expect(
         zkAuthRegistry.connect(attacker).endSession(sessionId)
-      ).to.emit(zkAuthRegistry, "SessionEnded").withArgs(sessionId);
+      ).to.be.revertedWithCustomError(zkAuthRegistry, "NotSessionOwner");
 
       const [isValid] = await zkAuthRegistry.validateSession(sessionId);
-      expect(isValid).to.be.false;
+      expect(isValid).to.be.true;
     });
   });
 

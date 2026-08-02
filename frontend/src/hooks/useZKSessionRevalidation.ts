@@ -1,6 +1,7 @@
 // frontend/src/hooks/useZKSessionRevalidation.ts
 import { useEffect, useRef } from 'react';
 import { ethers } from 'ethers';
+import { getBrowserProvider } from '@/lib/web3Provider';
 import { useAuthStore } from '@/store/authStore';
 import ZKAuthRegistryABI from '@/contracts/abis/ZKAuthRegistry.json';
 import { logger } from '@/lib/logger';
@@ -47,7 +48,7 @@ export function useZKSessionRevalidation() {
           return;
         }
 
-        const provider = new ethers.providers.Web3Provider(window.ethereum as any);
+        const provider = getBrowserProvider();
         const registry = new ethers.Contract(
           ZK_AUTH_REGISTRY_ADDRESS!,
           ZKAuthRegistryABI.abi,

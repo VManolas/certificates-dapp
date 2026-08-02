@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.24;
 
-import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
+import "./base/UpgradeableBase.sol";
 import "./interfaces/IInstitutionRegistry.sol";
 import "./interfaces/ICertificateRegistry.sol";
 
@@ -20,15 +18,13 @@ import "./interfaces/ICertificateRegistry.sol";
  * 
  * See IEmployerRegistry interface for full API documentation
  */
-contract EmployerRegistry is 
-    Initializable, 
-    AccessControlUpgradeable, 
-    UUPSUpgradeable,
-    ReentrancyGuardUpgradeable 
+contract EmployerRegistry is
+    UpgradeableBase,
+    ReentrancyGuardUpgradeable
 {
-    
-    bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
-    
+    /// @notice Contract version for tracking upgrades
+    string public constant VERSION = "1.0.0";
+
     struct Employer {
         address walletAddress;
         string companyName;
@@ -91,6 +87,7 @@ contract EmployerRegistry is
     error AlreadyDeactivated();
     error AlreadyActive();
     error InvalidRegistryAddress();
+    error InvalidAddress();
     
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -102,12 +99,22 @@ contract EmployerRegistry is
      * @param admin Address of the admin
      */
     function initialize(address admin) public initializer {
+        if (admin == address(0)) revert InvalidAddress();
+
         __AccessControl_init();
         __UUPSUpgradeable_init();
         __ReentrancyGuard_init();
-        
+
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         _grantRole(ADMIN_ROLE, admin);
+
+        // Record initial version in upgrade history (from base contract)
+        upgradeHistory.push(UpgradeInfo({
+            version: VERSION,
+            timestamp: block.timestamp,
+            upgrader: msg.sender,
+            notes: "Initial deployment"
+        }));
     }
     
     /**
@@ -297,8 +304,28 @@ contract EmployerRegistry is
     }
     
     /**
-     * @notice Required by UUPSUpgradeable
+     * @notice Get current contract version
+     * @return Current version string
      */
-    function _authorizeUpgrade(address newImplementation) internal override onlyRole(ADMIN_ROLE) {}
+    function getVersion() public pure virtual override returns (string memory) {
+        return VERSION;
+    }
+
+    /**
+     * @notice Authorize contract upgrade
+     * @param newImplementation Address of the new implementation
+     * @dev Only callable by admin, inherited from UpgradeableBase
+     */
+    function _authorizeUpgrade(
+        address newImplementation
+    ) internal override(UpgradeableBase) onlyRole(ADMIN_ROLE) {}
+
+    /**
+     * @dev Storage gap for future upgrades (inherited from UpgradeableBase)
+     * Current usage: 6 slots (employers, vatToWallet, employerAddresses,
+     *   totalEmployers, institutionRegistry, certificateRegistry) → 6 + 42 = 48 total child slots
+     * Base provides: 47 additional slots (+ 1 used = 48 in UpgradeableBase)
+     */
+    uint256[42] private __gap;
 }
 

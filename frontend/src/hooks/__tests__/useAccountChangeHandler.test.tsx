@@ -25,6 +25,7 @@ const mockUseAuthStore = useAuthStore as ReturnType<typeof vi.fn>;
 describe('useAccountChangeHandler', () => {
   const mockNavigate = vi.fn();
   const mockReset = vi.fn();
+  const mockBumpAuthEpoch = vi.fn();
   const mockReload = vi.fn();
   let removeStorageItemSpy: ReturnType<typeof vi.spyOn<typeof Storage.prototype, 'removeItem'>>;
 
@@ -34,7 +35,7 @@ describe('useAccountChangeHandler', () => {
     removeStorageItemSpy = vi.spyOn(Storage.prototype, 'removeItem');
 
     mockUseNavigate.mockReturnValue(mockNavigate);
-    mockUseAuthStore.mockReturnValue({ reset: mockReset });
+    mockUseAuthStore.mockReturnValue({ reset: mockReset, bumpAuthEpoch: mockBumpAuthEpoch });
     mockUseAccount.mockReturnValue({
       address: undefined,
       isConnected: false,
@@ -61,6 +62,7 @@ describe('useAccountChangeHandler', () => {
     renderHook(() => useAccountChangeHandler());
 
     expect(mockReset).not.toHaveBeenCalled();
+    expect(mockBumpAuthEpoch).not.toHaveBeenCalled();
     expect(mockNavigate).not.toHaveBeenCalled();
     expect(
       (window as unknown as { queryClient?: { clear: ReturnType<typeof vi.fn> } }).queryClient?.clear
@@ -90,6 +92,7 @@ describe('useAccountChangeHandler', () => {
 
     await waitFor(() => {
       expect(mockReset).toHaveBeenCalledTimes(1);
+      expect(mockBumpAuthEpoch).toHaveBeenCalledTimes(1);
       expect(
         (window as unknown as { queryClient?: { clear: ReturnType<typeof vi.fn> } }).queryClient?.clear
       ).toHaveBeenCalledTimes(1);
@@ -128,6 +131,7 @@ describe('useAccountChangeHandler', () => {
 
     await waitFor(() => {
       expect(mockReset).toHaveBeenCalledTimes(1);
+      expect(mockBumpAuthEpoch).toHaveBeenCalledTimes(1);
       expect(
         (window as unknown as { queryClient?: { clear: ReturnType<typeof vi.fn> } }).queryClient?.clear
       ).toHaveBeenCalledTimes(1);

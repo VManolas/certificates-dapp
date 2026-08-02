@@ -541,52 +541,9 @@ describe('useUnifiedAuth', () => {
     });
   });
 
-  describe('Wallet Scoped State Reset', () => {
-    it('clears wallet-scoped auth state and redirects on disconnect', async () => {
-      mockUseAccount
-        .mockReturnValueOnce({ address: '0x123', isConnected: true })
-        .mockReturnValueOnce({ address: undefined, isConnected: false });
-
-      const { rerender } = renderHook(() => useUnifiedAuth());
-      rerender();
-
-      await waitFor(() => {
-        expect(mockQueryClient.cancelQueries).toHaveBeenCalledWith({ queryKey: ['userRoles'] });
-        expect(mockQueryClient.cancelQueries).toHaveBeenCalledWith({ queryKey: ['readContract'] });
-        expect(mockQueryClient.removeQueries).toHaveBeenCalledWith({ queryKey: ['userRoles'] });
-        expect(mockQueryClient.removeQueries).toHaveBeenCalledWith({ queryKey: ['readContract'] });
-        expect(mockAuthStore.setZKAuthEnabled).toHaveBeenCalledWith(false);
-        expect(mockAuthStore.setZKAuthenticated).toHaveBeenCalledWith(false);
-        expect(mockAuthStore.setZKCommitment).toHaveBeenCalledWith(null);
-        expect(mockAuthStore.setZKSessionId).toHaveBeenCalledWith(null);
-        expect(mockAuthStore.setZKRole).toHaveBeenCalledWith(null);
-        expect(mockAuthStore.setAuthMethod).toHaveBeenCalledWith(null);
-        expect(mockAuthStore.setRole).toHaveBeenCalledWith(null);
-        expect(mockAuthStore.setPreSelectedRole).toHaveBeenCalledWith(null);
-        expect(mockAuthStore.setShowAuthMethodSelector).toHaveBeenCalledWith(false);
-        expect(mockAuthStore.setRequiresManualAuthSelection).toHaveBeenCalledWith(false);
-        expect(mockAuthStore.bumpAuthEpoch).toHaveBeenCalled();
-        expect(mockNavigate).toHaveBeenCalledWith('/', { replace: true });
-      });
-    });
-
-    it('clears wallet-scoped auth state when connected address changes', async () => {
-      mockUseAccount
-        .mockReturnValueOnce({ address: '0x123', isConnected: true })
-        .mockReturnValueOnce({ address: '0x456', isConnected: true });
-
-      const { rerender } = renderHook(() => useUnifiedAuth());
-      rerender();
-
-      await waitFor(() => {
-        expect(mockQueryClient.cancelQueries).toHaveBeenCalledWith({ queryKey: ['userRoles'] });
-        expect(mockQueryClient.removeQueries).toHaveBeenCalledWith({ queryKey: ['readContract'] });
-        expect(mockAuthStore.setAuthMethod).toHaveBeenCalledWith(null);
-        expect(mockAuthStore.setRole).toHaveBeenCalledWith(null);
-        expect(mockAuthStore.bumpAuthEpoch).toHaveBeenCalled();
-      });
-    });
-  });
+  // Passive reactions to disconnect/account-switch now live solely in
+  // useAccountChangeHandler (see useAccountChangeHandler.test.tsx) — useUnifiedAuth
+  // no longer runs its own duplicate detection effect for these events.
 
   describe('Auto-Selection Logic', () => {
     it('should not auto-select auth method when manual selection is required', async () => {
