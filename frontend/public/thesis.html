@@ -501,6 +501,9 @@
       <li>
         <div class="ch-title"><a href="#appendix-d">Appendix D: Trusted Setup Ceremony Protocol</a><span class="pg">89</span></div>
       </li>
+      <li>
+        <div class="ch-title"><a href="#appendix-e">Appendix E: Solidity Import Dependency Graph</a><span class="pg">91</span></div>
+      </li>
     </ol>
   </div>
 
@@ -1667,7 +1670,7 @@
     <h4>Custom errors</h4>
     <p><code>ZKAuthRegistry</code>, <code>CertificateRegistry</code>, <code>InstitutionRegistry</code>, and <code>EmployerRegistry</code> use Solidity custom errors (e.g., <code>InstitutionNotActive()</code>, <code>NullifierAlreadyUsed()</code>, <code>CompanyNameRequired()</code>) instead of string reverts, saving approximately 30–50% gas on revert paths.</p>
     <h4>Interface alignment</h4>
-    <p><code>CertificateRegistry</code> and <code>InstitutionRegistry</code> expose corresponding interfaces (<code>ICertificateRegistry</code>, <code>IInstitutionRegistry</code>) in <code>contracts/contracts/interfaces/</code>. <code>ZKAuthRegistry</code> defines its verifier interface (<code>IAuthVerifier</code>) inline. <code>EmployerRegistry</code> references <code>IEmployerRegistry</code> in its documentation but does not inherit the interface in the current implementation. The frontend imports ABIs from <code>contracts/artifacts-zk/</code>.</p>
+    <p><code>CertificateRegistry</code> and <code>InstitutionRegistry</code> expose corresponding interfaces (<code>ICertificateRegistry</code>, <code>IInstitutionRegistry</code>) in <code>contracts/contracts/interfaces/</code>. <code>ZKAuthRegistry</code> defines its verifier interface (<code>IAuthVerifier</code>) inline. <code>EmployerRegistry</code> references <code>IEmployerRegistry</code> in its documentation but does not inherit the interface in the current implementation. The frontend imports ABIs from <code>contracts/artifacts-zk/</code>. The full <code>import</code> graph reachable from the 16 project contracts — 31 files in total once OpenZeppelin's upgradeable base contracts are included — is reproduced in Appendix E.</p>
 
     <h3 id="s6-3">6.3 Circuit Implementation</h3>
     <p>The ZK Auth circuit is defined in <code>circuits/auth_login_groth16/auth_login.circom</code>. It uses the <code>circomlib</code> Poseidon template.</p>
@@ -2685,6 +2688,424 @@ component main { public [commitment, nullifierNonce, nullifier] } = AuthLogin();
     </ul>
 
     <p><strong>Reproducibility:</strong> The ceremony can be re-executed by running <code>bash contracts/scripts/ceremony.sh</code> from the project root. Each execution produces fresh entropy and new artifacts; the SHA-256 hashes of the resulting files can be compared against the deployment record. For a production deployment, Phase 1 should be replaced with a community Powers of Tau ceremony (e.g., Hermez perpetual ceremony [27]) and Phase 2 should involve multiple independent contributors.</p>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       APPENDIX E — DEPENDENCY GRAPH
+  ═══════════════════════════════════════ -->
+  <div class="chapter" id="appendix-e">
+    <div class="chapter-label">Appendix E</div>
+    <h2>Solidity Import Dependency Graph</h2>
+    <p>Section 6.2 notes that the four project registries pull in OpenZeppelin's upgradeable base contracts through inheritance. The graph below makes that concrete: it is the full <code>import</code> closure reachable from the 16 <code>.sol</code> files under <code>contracts/contracts/</code>, generated directly from the source rather than drawn by hand. It is the same 31-file, 35-edge graph Hardhat itself walks on every <code>hardhat compile</code> invocation.</p>
+    <figure style="margin:1.5rem 0; text-align:center;">
+      <div style="overflow-x:auto; border:1px solid #ddd; border-radius:6px; padding:0.75rem; background:#fff;">
+        <svg width="2800pt" height="771pt"
+ viewBox="0.00 0.00 2800.00 771.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 767)">
+<title>SolidityDependencies</title>
+<polygon fill="white" stroke="none" points="-4,4 -4,-767 2795.59,-767 2795.59,4 -4,4"/>
+<!-- contracts/CertificateRegistry.sol -->
+<g id="node1" class="node">
+<title>contracts/CertificateRegistry.sol</title>
+<polygon fill="#cfe8ff" stroke="black" points="553.28,-331 333.64,-331 333.64,-295 553.28,-295 553.28,-331"/>
+<text xml:space="preserve" text-anchor="middle" x="443.46" y="-310" font-family="Courier,monospace" font-size="10.00">contracts/CertificateRegistry.sol</text>
+</g>
+<!-- contracts/base/UpgradeableBase.sol -->
+<g id="node9" class="node">
+<title>contracts/base/UpgradeableBase.sol</title>
+<polygon fill="#cfe8ff" stroke="black" points="928.93,-331 703.3,-331 703.3,-295 928.93,-295 928.93,-331"/>
+<text xml:space="preserve" text-anchor="middle" x="816.11" y="-310" font-family="Courier,monospace" font-size="10.00">contracts/base/UpgradeableBase.sol</text>
+</g>
+<!-- contracts/CertificateRegistry.sol&#45;&gt;contracts/base/UpgradeableBase.sol -->
+<g id="edge3" class="edge">
+<title>contracts/CertificateRegistry.sol&#45;&gt;contracts/base/UpgradeableBase.sol</title>
+<path fill="none" stroke="black" d="M553.66,-313C596.88,-313 646.78,-313 691.33,-313"/>
+<polygon fill="black" stroke="black" points="691.32,-316.5 701.32,-313 691.32,-309.5 691.32,-316.5"/>
+</g>
+<!-- contracts/interfaces/ICertificateRegistry.sol -->
+<g id="node13" class="node">
+<title>contracts/interfaces/ICertificateRegistry.sol</title>
+<polygon fill="#cfe8ff" stroke="black" points="961.93,-385 670.29,-385 670.29,-349 961.93,-349 961.93,-385"/>
+<text xml:space="preserve" text-anchor="middle" x="816.11" y="-364" font-family="Courier,monospace" font-size="10.00">contracts/interfaces/ICertificateRegistry.sol</text>
+</g>
+<!-- contracts/CertificateRegistry.sol&#45;&gt;contracts/interfaces/ICertificateRegistry.sol -->
+<g id="edge4" class="edge">
+<title>contracts/CertificateRegistry.sol&#45;&gt;contracts/interfaces/ICertificateRegistry.sol</title>
+<path fill="none" stroke="black" d="M538.57,-331.47C555.42,-334.51 572.84,-337.49 589.28,-340 611.67,-343.42 635.36,-346.67 658.65,-349.64"/>
+<polygon fill="black" stroke="black" points="658.19,-353.11 668.55,-350.89 659.06,-346.16 658.19,-353.11"/>
+</g>
+<!-- contracts/interfaces/IInstitutionRegistry.sol -->
+<g id="node15" class="node">
+<title>contracts/interfaces/IInstitutionRegistry.sol</title>
+<polygon fill="#cfe8ff" stroke="black" points="961.93,-277 670.29,-277 670.29,-241 961.93,-241 961.93,-277"/>
+<text xml:space="preserve" text-anchor="middle" x="816.11" y="-256" font-family="Courier,monospace" font-size="10.00">contracts/interfaces/IInstitutionRegistry.sol</text>
+</g>
+<!-- contracts/CertificateRegistry.sol&#45;&gt;contracts/interfaces/IInstitutionRegistry.sol -->
+<g id="edge5" class="edge">
+<title>contracts/CertificateRegistry.sol&#45;&gt;contracts/interfaces/IInstitutionRegistry.sol</title>
+<path fill="none" stroke="black" d="M538.57,-294.53C555.42,-291.49 572.84,-288.51 589.28,-286 611.67,-282.58 635.36,-279.33 658.65,-276.36"/>
+<polygon fill="black" stroke="black" points="659.06,-279.84 668.55,-275.11 658.19,-272.89 659.06,-279.84"/>
+</g>
+<!-- @openzeppelin/contracts&#45;upgradeable/utils/ReentrancyGuardUpgradeable.sol -->
+<g id="node21" class="node">
+<title>@openzeppelin/contracts&#45;upgradeable/utils/ReentrancyGuardUpgradeable.sol</title>
+<polygon fill="#eeeeee" stroke="black" points="1042.95,-169 589.28,-169 589.28,-133 1042.95,-133 1042.95,-169"/>
+<text xml:space="preserve" text-anchor="middle" x="816.11" y="-148" font-family="Courier,monospace" font-size="10.00">@openzeppelin/contracts&#45;upgradeable/utils/ReentrancyGuardUpgradeable.sol</text>
+</g>
+<!-- contracts/CertificateRegistry.sol&#45;&gt;@openzeppelin/contracts&#45;upgradeable/utils/ReentrancyGuardUpgradeable.sol -->
+<g id="edge2" class="edge">
+<title>contracts/CertificateRegistry.sol&#45;&gt;@openzeppelin/contracts&#45;upgradeable/utils/ReentrancyGuardUpgradeable.sol</title>
+<path fill="none" stroke="black" d="M541.64,-294.79C545.79,-292.22 549.7,-289.3 553.28,-286 590.43,-251.66 550.06,-209.97 589.28,-178 590.23,-177.22 591.2,-176.46 592.18,-175.71"/>
+<polygon fill="black" stroke="black" points="593.82,-178.83 599.98,-170.22 589.79,-173.1 593.82,-178.83"/>
+</g>
+<!-- contracts/EmployerRegistry.sol -->
+<g id="node2" class="node">
+<title>contracts/EmployerRegistry.sol</title>
+<polygon fill="#cfe8ff" stroke="black" points="544.28,-277 342.65,-277 342.65,-241 544.28,-241 544.28,-277"/>
+<text xml:space="preserve" text-anchor="middle" x="443.46" y="-256" font-family="Courier,monospace" font-size="10.00">contracts/EmployerRegistry.sol</text>
+</g>
+<!-- contracts/EmployerRegistry.sol&#45;&gt;contracts/base/UpgradeableBase.sol -->
+<g id="edge33" class="edge">
+<title>contracts/EmployerRegistry.sol&#45;&gt;contracts/base/UpgradeableBase.sol</title>
+<path fill="none" stroke="black" d="M538.57,-277.47C555.42,-280.51 572.84,-283.49 589.28,-286 622.42,-291.06 658.42,-295.74 691.73,-299.73"/>
+<polygon fill="black" stroke="black" points="691.07,-303.17 701.42,-300.87 691.9,-296.22 691.07,-303.17"/>
+</g>
+<!-- contracts/EmployerRegistry.sol&#45;&gt;contracts/interfaces/ICertificateRegistry.sol -->
+<g id="edge35" class="edge">
+<title>contracts/EmployerRegistry.sol&#45;&gt;contracts/interfaces/ICertificateRegistry.sol</title>
+<path fill="none" stroke="black" d="M538.51,-277.38C543.69,-279.89 548.66,-282.75 553.28,-286 576.87,-302.59 564.7,-324.9 589.28,-340 610.21,-352.86 634.31,-361.06 658.8,-366.12"/>
+<polygon fill="black" stroke="black" points="658.11,-369.55 668.58,-367.94 659.39,-362.67 658.11,-369.55"/>
+</g>
+<!-- contracts/EmployerRegistry.sol&#45;&gt;contracts/interfaces/IInstitutionRegistry.sol -->
+<g id="edge34" class="edge">
+<title>contracts/EmployerRegistry.sol&#45;&gt;contracts/interfaces/IInstitutionRegistry.sol</title>
+<path fill="none" stroke="black" d="M544.76,-259C579.79,-259 619.99,-259 658.5,-259"/>
+<polygon fill="black" stroke="black" points="658.33,-262.5 668.33,-259 658.33,-255.5 658.33,-262.5"/>
+</g>
+<!-- contracts/EmployerRegistry.sol&#45;&gt;@openzeppelin/contracts&#45;upgradeable/utils/ReentrancyGuardUpgradeable.sol -->
+<g id="edge32" class="edge">
+<title>contracts/EmployerRegistry.sol&#45;&gt;@openzeppelin/contracts&#45;upgradeable/utils/ReentrancyGuardUpgradeable.sol</title>
+<path fill="none" stroke="black" d="M538.51,-240.62C543.69,-238.11 548.66,-235.25 553.28,-232 576.87,-215.41 564.7,-193.1 589.28,-178 591.17,-176.84 593.09,-175.71 595.03,-174.63"/>
+<polygon fill="black" stroke="black" points="596.32,-177.9 603.59,-170.19 593.1,-171.68 596.32,-177.9"/>
+</g>
+<!-- contracts/Groth16AuthVerifier.sol -->
+<g id="node3" class="node">
+<title>contracts/Groth16AuthVerifier.sol</title>
+<polygon fill="#cfe8ff" stroke="black" points="258.64,-385 39.01,-385 39.01,-349 258.64,-349 258.64,-385"/>
+<text xml:space="preserve" text-anchor="middle" x="148.82" y="-364" font-family="Courier,monospace" font-size="10.00">contracts/Groth16AuthVerifier.sol</text>
+</g>
+<!-- contracts/Groth16AuthVerifierAdapter.sol -->
+<g id="node4" class="node">
+<title>contracts/Groth16AuthVerifierAdapter.sol</title>
+<polygon fill="#cfe8ff" stroke="black" points="279.64,-439 18,-439 18,-403 279.64,-403 279.64,-439"/>
+<text xml:space="preserve" text-anchor="middle" x="148.82" y="-418" font-family="Courier,monospace" font-size="10.00">contracts/Groth16AuthVerifierAdapter.sol</text>
+</g>
+<!-- contracts/InstitutionRegistry.sol -->
+<g id="node5" class="node">
+<title>contracts/InstitutionRegistry.sol</title>
+<polygon fill="#cfe8ff" stroke="black" points="553.28,-223 333.64,-223 333.64,-187 553.28,-187 553.28,-223"/>
+<text xml:space="preserve" text-anchor="middle" x="443.46" y="-202" font-family="Courier,monospace" font-size="10.00">contracts/InstitutionRegistry.sol</text>
+</g>
+<!-- contracts/InstitutionRegistry.sol&#45;&gt;contracts/base/UpgradeableBase.sol -->
+<g id="edge30" class="edge">
+<title>contracts/InstitutionRegistry.sol&#45;&gt;contracts/base/UpgradeableBase.sol</title>
+<path fill="none" stroke="black" d="M538.51,-223.38C543.69,-225.89 548.66,-228.75 553.28,-232 576.87,-248.59 564.7,-270.9 589.28,-286 619.56,-304.6 656.47,-313.46 691.59,-317.13"/>
+<polygon fill="black" stroke="black" points="691.15,-320.61 701.42,-318.01 691.77,-313.63 691.15,-320.61"/>
+</g>
+<!-- contracts/InstitutionRegistry.sol&#45;&gt;contracts/interfaces/IInstitutionRegistry.sol -->
+<g id="edge31" class="edge">
+<title>contracts/InstitutionRegistry.sol&#45;&gt;contracts/interfaces/IInstitutionRegistry.sol</title>
+<path fill="none" stroke="black" d="M538.57,-223.47C555.42,-226.51 572.84,-229.49 589.28,-232 611.67,-235.42 635.36,-238.67 658.65,-241.64"/>
+<polygon fill="black" stroke="black" points="658.19,-245.11 668.55,-242.89 659.06,-238.16 658.19,-245.11"/>
+</g>
+<!-- contracts/InstitutionRegistry.sol&#45;&gt;@openzeppelin/contracts&#45;upgradeable/utils/ReentrancyGuardUpgradeable.sol -->
+<g id="edge29" class="edge">
+<title>contracts/InstitutionRegistry.sol&#45;&gt;@openzeppelin/contracts&#45;upgradeable/utils/ReentrancyGuardUpgradeable.sol</title>
+<path fill="none" stroke="black" d="M538.57,-186.53C555.42,-183.49 572.84,-180.51 589.28,-178 605.37,-175.54 622.13,-173.17 638.93,-170.93"/>
+<polygon fill="black" stroke="black" points="639.02,-174.45 648.47,-169.68 638.1,-167.51 639.02,-174.45"/>
+</g>
+<!-- contracts/UltraPlonkAuthVerifier.sol -->
+<g id="node6" class="node">
+<title>contracts/UltraPlonkAuthVerifier.sol</title>
+<polygon fill="#cfe8ff" stroke="black" points="267.64,-493 30,-493 30,-457 267.64,-457 267.64,-493"/>
+<text xml:space="preserve" text-anchor="middle" x="148.82" y="-472" font-family="Courier,monospace" font-size="10.00">contracts/UltraPlonkAuthVerifier.sol</text>
+</g>
+<!-- contracts/UltraPlonkAuthVerifierAdapter.sol -->
+<g id="node7" class="node">
+<title>contracts/UltraPlonkAuthVerifierAdapter.sol</title>
+<polygon fill="#cfe8ff" stroke="black" points="288.64,-547 9,-547 9,-511 288.64,-511 288.64,-547"/>
+<text xml:space="preserve" text-anchor="middle" x="148.82" y="-526" font-family="Courier,monospace" font-size="10.00">contracts/UltraPlonkAuthVerifierAdapter.sol</text>
+</g>
+<!-- contracts/ZKAuthRegistry.sol -->
+<g id="node8" class="node">
+<title>contracts/ZKAuthRegistry.sol</title>
+<polygon fill="#cfe8ff" stroke="black" points="910.93,-223 721.3,-223 721.3,-187 910.93,-187 910.93,-223"/>
+<text xml:space="preserve" text-anchor="middle" x="816.11" y="-202" font-family="Courier,monospace" font-size="10.00">contracts/ZKAuthRegistry.sol</text>
+</g>
+<!-- @openzeppelin/contracts&#45;upgradeable/access/AccessControlUpgradeable.sol -->
+<g id="node17" class="node">
+<title>@openzeppelin/contracts&#45;upgradeable/access/AccessControlUpgradeable.sol</title>
+<polygon fill="#eeeeee" stroke="black" points="1526.62,-415 1078.95,-415 1078.95,-379 1526.62,-379 1526.62,-415"/>
+<text xml:space="preserve" text-anchor="middle" x="1302.78" y="-394" font-family="Courier,monospace" font-size="10.00">@openzeppelin/contracts&#45;upgradeable/access/AccessControlUpgradeable.sol</text>
+</g>
+<!-- contracts/ZKAuthRegistry.sol&#45;&gt;@openzeppelin/contracts&#45;upgradeable/access/AccessControlUpgradeable.sol -->
+<g id="edge26" class="edge">
+<title>contracts/ZKAuthRegistry.sol&#45;&gt;@openzeppelin/contracts&#45;upgradeable/access/AccessControlUpgradeable.sol</title>
+<path fill="none" stroke="black" d="M911.15,-206.44C952.61,-209.55 1001.27,-216.62 1042.95,-232 1060.99,-238.66 1062.82,-245.52 1078.95,-256 1142.84,-297.5 1217.83,-344.63 1262.49,-372.53"/>
+<polygon fill="black" stroke="black" points="1260.46,-375.39 1270.8,-377.72 1264.17,-369.45 1260.46,-375.39"/>
+</g>
+<!-- @openzeppelin/contracts&#45;upgradeable/proxy/utils/Initializable.sol -->
+<g id="node18" class="node">
+<title>@openzeppelin/contracts&#45;upgradeable/proxy/utils/Initializable.sol</title>
+<polygon fill="#eeeeee" stroke="black" points="2493.96,-331 2082.29,-331 2082.29,-295 2493.96,-295 2493.96,-331"/>
+<text xml:space="preserve" text-anchor="middle" x="2288.12" y="-310" font-family="Courier,monospace" font-size="10.00">@openzeppelin/contracts&#45;upgradeable/proxy/utils/Initializable.sol</text>
+</g>
+<!-- contracts/ZKAuthRegistry.sol&#45;&gt;@openzeppelin/contracts&#45;upgradeable/proxy/utils/Initializable.sol -->
+<g id="edge27" class="edge">
+<title>contracts/ZKAuthRegistry.sol&#45;&gt;@openzeppelin/contracts&#45;upgradeable/proxy/utils/Initializable.sol</title>
+<path fill="none" stroke="black" d="M911.26,-199.51C1160.04,-185.84 1830.55,-154.67 2046.29,-202 2121.96,-218.6 2202.21,-261.34 2248.32,-288.68"/>
+<polygon fill="black" stroke="black" points="2246.51,-291.67 2256.88,-293.82 2250.11,-285.67 2246.51,-291.67"/>
+</g>
+<!-- @openzeppelin/contracts&#45;upgradeable/proxy/utils/UUPSUpgradeable.sol -->
+<g id="node19" class="node">
+<title>@openzeppelin/contracts&#45;upgradeable/proxy/utils/UUPSUpgradeable.sol</title>
+<polygon fill="#eeeeee" stroke="black" points="1514.61,-247 1090.95,-247 1090.95,-211 1514.61,-211 1514.61,-247"/>
+<text xml:space="preserve" text-anchor="middle" x="1302.78" y="-226" font-family="Courier,monospace" font-size="10.00">@openzeppelin/contracts&#45;upgradeable/proxy/utils/UUPSUpgradeable.sol</text>
+</g>
+<!-- contracts/ZKAuthRegistry.sol&#45;&gt;@openzeppelin/contracts&#45;upgradeable/proxy/utils/UUPSUpgradeable.sol -->
+<g id="edge28" class="edge">
+<title>contracts/ZKAuthRegistry.sol&#45;&gt;@openzeppelin/contracts&#45;upgradeable/proxy/utils/UUPSUpgradeable.sol</title>
+<path fill="none" stroke="black" d="M911.42,-209.67C959.48,-212.05 1020.12,-215.05 1079.19,-217.98"/>
+<polygon fill="black" stroke="black" points="1078.92,-221.47 1089.08,-218.47 1079.26,-214.48 1078.92,-221.47"/>
+</g>
+<!-- contracts/base/UpgradeableBase.sol&#45;&gt;@openzeppelin/contracts&#45;upgradeable/access/AccessControlUpgradeable.sol -->
+<g id="edge8" class="edge">
+<title>contracts/base/UpgradeableBase.sol&#45;&gt;@openzeppelin/contracts&#45;upgradeable/access/AccessControlUpgradeable.sol</title>
+<path fill="none" stroke="black" d="M929.42,-324.23C965.75,-328.45 1006.16,-333.77 1042.95,-340 1101.05,-349.85 1165.79,-364.11 1215.99,-375.9"/>
+<polygon fill="black" stroke="black" points="1215.11,-379.29 1225.65,-378.18 1216.72,-372.47 1215.11,-379.29"/>
+</g>
+<!-- contracts/base/UpgradeableBase.sol&#45;&gt;@openzeppelin/contracts&#45;upgradeable/proxy/utils/Initializable.sol -->
+<g id="edge6" class="edge">
+<title>contracts/base/UpgradeableBase.sol&#45;&gt;@openzeppelin/contracts&#45;upgradeable/proxy/utils/Initializable.sol</title>
+<path fill="none" stroke="black" d="M929.41,-313C1173.01,-313 1753.51,-313 2070.85,-313"/>
+<polygon fill="black" stroke="black" points="2070.52,-316.5 2080.52,-313 2070.52,-309.5 2070.52,-316.5"/>
+</g>
+<!-- contracts/base/UpgradeableBase.sol&#45;&gt;@openzeppelin/contracts&#45;upgradeable/proxy/utils/UUPSUpgradeable.sol -->
+<g id="edge7" class="edge">
+<title>contracts/base/UpgradeableBase.sol&#45;&gt;@openzeppelin/contracts&#45;upgradeable/proxy/utils/UUPSUpgradeable.sol</title>
+<path fill="none" stroke="black" d="M929.42,-301.77C965.75,-297.55 1006.16,-292.23 1042.95,-286 1101.05,-276.15 1165.79,-261.89 1215.99,-250.1"/>
+<polygon fill="black" stroke="black" points="1216.72,-253.53 1225.65,-247.82 1215.11,-246.71 1216.72,-253.53"/>
+</g>
+<!-- contracts/deprecated/AuthVerifier.sol -->
+<g id="node10" class="node">
+<title>contracts/deprecated/AuthVerifier.sol</title>
+<polygon fill="#cfe8ff" stroke="black" points="270.64,-601 27,-601 27,-565 270.64,-565 270.64,-601"/>
+<text xml:space="preserve" text-anchor="middle" x="148.82" y="-580" font-family="Courier,monospace" font-size="10.00">contracts/deprecated/AuthVerifier.sol</text>
+</g>
+<!-- contracts/deprecated/CertificateRegistryV2.sol -->
+<g id="node11" class="node">
+<title>contracts/deprecated/CertificateRegistryV2.sol</title>
+<polygon fill="#cfe8ff" stroke="black" points="297.64,-331 0,-331 0,-295 297.64,-295 297.64,-331"/>
+<text xml:space="preserve" text-anchor="middle" x="148.82" y="-310" font-family="Courier,monospace" font-size="10.00">contracts/deprecated/CertificateRegistryV2.sol</text>
+</g>
+<!-- contracts/deprecated/CertificateRegistryV2.sol&#45;&gt;contracts/CertificateRegistry.sol -->
+<g id="edge1" class="edge">
+<title>contracts/deprecated/CertificateRegistryV2.sol&#45;&gt;contracts/CertificateRegistry.sol</title>
+<path fill="none" stroke="black" d="M297.86,-313C305.86,-313 313.85,-313 321.74,-313"/>
+<polygon fill="black" stroke="black" points="321.71,-316.5 331.71,-313 321.71,-309.5 321.71,-316.5"/>
+</g>
+<!-- contracts/deprecated/NoirAuthVerifier.sol -->
+<g id="node12" class="node">
+<title>contracts/deprecated/NoirAuthVerifier.sol</title>
+<polygon fill="#cfe8ff" stroke="black" points="282.64,-655 15,-655 15,-619 282.64,-619 282.64,-655"/>
+<text xml:space="preserve" text-anchor="middle" x="148.82" y="-634" font-family="Courier,monospace" font-size="10.00">contracts/deprecated/NoirAuthVerifier.sol</text>
+</g>
+<!-- contracts/interfaces/IEmployerRegistry.sol -->
+<g id="node14" class="node">
+<title>contracts/interfaces/IEmployerRegistry.sol</title>
+<polygon fill="#cfe8ff" stroke="black" points="285.64,-709 12,-709 12,-673 285.64,-673 285.64,-709"/>
+<text xml:space="preserve" text-anchor="middle" x="148.82" y="-688" font-family="Courier,monospace" font-size="10.00">contracts/interfaces/IEmployerRegistry.sol</text>
+</g>
+<!-- contracts/mocks/MockAuthVerifier.sol -->
+<g id="node16" class="node">
+<title>contracts/mocks/MockAuthVerifier.sol</title>
+<polygon fill="#cfe8ff" stroke="black" points="267.64,-763 30,-763 30,-727 267.64,-727 267.64,-763"/>
+<text xml:space="preserve" text-anchor="middle" x="148.82" y="-742" font-family="Courier,monospace" font-size="10.00">contracts/mocks/MockAuthVerifier.sol</text>
+</g>
+<!-- @openzeppelin/contracts&#45;upgradeable/access/AccessControlUpgradeable.sol&#45;&gt;@openzeppelin/contracts&#45;upgradeable/proxy/utils/Initializable.sol -->
+<g id="edge13" class="edge">
+<title>@openzeppelin/contracts&#45;upgradeable/access/AccessControlUpgradeable.sol&#45;&gt;@openzeppelin/contracts&#45;upgradeable/proxy/utils/Initializable.sol</title>
+<path fill="none" stroke="black" d="M1474.97,-378.52C1504.2,-375.54 1534.27,-372.59 1562.62,-370 1733.29,-354.39 1926.82,-339.29 2070.91,-328.57"/>
+<polygon fill="black" stroke="black" points="2070.84,-332.08 2080.56,-327.85 2070.32,-325.1 2070.84,-332.08"/>
+</g>
+<!-- @openzeppelin/contracts&#45;upgradeable/utils/ContextUpgradeable.sol -->
+<g id="node20" class="node">
+<title>@openzeppelin/contracts&#45;upgradeable/utils/ContextUpgradeable.sol</title>
+<polygon fill="#eeeeee" stroke="black" points="2007.29,-469 1601.62,-469 1601.62,-433 2007.29,-433 2007.29,-469"/>
+<text xml:space="preserve" text-anchor="middle" x="1804.45" y="-448" font-family="Courier,monospace" font-size="10.00">@openzeppelin/contracts&#45;upgradeable/utils/ContextUpgradeable.sol</text>
+</g>
+<!-- @openzeppelin/contracts&#45;upgradeable/access/AccessControlUpgradeable.sol&#45;&gt;@openzeppelin/contracts&#45;upgradeable/utils/ContextUpgradeable.sol -->
+<g id="edge10" class="edge">
+<title>@openzeppelin/contracts&#45;upgradeable/access/AccessControlUpgradeable.sol&#45;&gt;@openzeppelin/contracts&#45;upgradeable/utils/ContextUpgradeable.sol</title>
+<path fill="none" stroke="black" d="M1474.69,-415.47C1521.92,-420.57 1573.34,-426.13 1621.18,-431.3"/>
+<polygon fill="black" stroke="black" points="1620.79,-434.78 1631.11,-432.37 1621.55,-427.82 1620.79,-434.78"/>
+</g>
+<!-- @openzeppelin/contracts&#45;upgradeable/utils/introspection/ERC165Upgradeable.sol -->
+<g id="node22" class="node">
+<title>@openzeppelin/contracts&#45;upgradeable/utils/introspection/ERC165Upgradeable.sol</title>
+<polygon fill="#eeeeee" stroke="black" points="2046.29,-523 1562.62,-523 1562.62,-487 2046.29,-487 2046.29,-523"/>
+<text xml:space="preserve" text-anchor="middle" x="1804.45" y="-502" font-family="Courier,monospace" font-size="10.00">@openzeppelin/contracts&#45;upgradeable/utils/introspection/ERC165Upgradeable.sol</text>
+</g>
+<!-- @openzeppelin/contracts&#45;upgradeable/access/AccessControlUpgradeable.sol&#45;&gt;@openzeppelin/contracts&#45;upgradeable/utils/introspection/ERC165Upgradeable.sol -->
+<g id="edge12" class="edge">
+<title>@openzeppelin/contracts&#45;upgradeable/access/AccessControlUpgradeable.sol&#45;&gt;@openzeppelin/contracts&#45;upgradeable/utils/introspection/ERC165Upgradeable.sol</title>
+<path fill="none" stroke="black" d="M1352.66,-415.39C1404.15,-434.03 1487.97,-462.29 1562.62,-478 1574.2,-480.44 1586.15,-482.67 1598.24,-484.7"/>
+<polygon fill="black" stroke="black" points="1597.45,-488.12 1607.88,-486.27 1598.58,-481.21 1597.45,-488.12"/>
+</g>
+<!-- @openzeppelin/contracts/access/IAccessControl.sol -->
+<g id="node23" class="node">
+<title>@openzeppelin/contracts/access/IAccessControl.sol</title>
+<polygon fill="#eeeeee" stroke="black" points="1962.28,-415 1646.63,-415 1646.63,-379 1962.28,-379 1962.28,-415"/>
+<text xml:space="preserve" text-anchor="middle" x="1804.45" y="-394" font-family="Courier,monospace" font-size="10.00">@openzeppelin/contracts/access/IAccessControl.sol</text>
+</g>
+<!-- @openzeppelin/contracts&#45;upgradeable/access/AccessControlUpgradeable.sol&#45;&gt;@openzeppelin/contracts/access/IAccessControl.sol -->
+<g id="edge9" class="edge">
+<title>@openzeppelin/contracts&#45;upgradeable/access/AccessControlUpgradeable.sol&#45;&gt;@openzeppelin/contracts/access/IAccessControl.sol</title>
+<path fill="none" stroke="black" d="M1526.95,-397C1563.32,-397 1600.45,-397 1635.22,-397"/>
+<polygon fill="black" stroke="black" points="1634.9,-400.5 1644.9,-397 1634.9,-393.5 1634.9,-400.5"/>
+</g>
+<!-- @openzeppelin/contracts/utils/introspection/IERC165.sol -->
+<g id="node31" class="node">
+<title>@openzeppelin/contracts/utils/introspection/IERC165.sol</title>
+<polygon fill="#eeeeee" stroke="black" points="2463.95,-546 2112.3,-546 2112.3,-510 2463.95,-510 2463.95,-546"/>
+<text xml:space="preserve" text-anchor="middle" x="2288.12" y="-525" font-family="Courier,monospace" font-size="10.00">@openzeppelin/contracts/utils/introspection/IERC165.sol</text>
+</g>
+<!-- @openzeppelin/contracts&#45;upgradeable/access/AccessControlUpgradeable.sol&#45;&gt;@openzeppelin/contracts/utils/introspection/IERC165.sol -->
+<g id="edge11" class="edge">
+<title>@openzeppelin/contracts&#45;upgradeable/access/AccessControlUpgradeable.sol&#45;&gt;@openzeppelin/contracts/utils/introspection/IERC165.sol</title>
+<path fill="none" stroke="black" d="M1328.92,-415.46C1373.35,-446.81 1469.83,-509.26 1562.62,-532 1764.28,-581.43 2007.12,-565.45 2154.18,-547.86"/>
+<polygon fill="black" stroke="black" points="2154.47,-551.35 2163.97,-546.67 2153.62,-544.41 2154.47,-551.35"/>
+</g>
+<!-- @openzeppelin/contracts&#45;upgradeable/proxy/utils/UUPSUpgradeable.sol&#45;&gt;@openzeppelin/contracts&#45;upgradeable/proxy/utils/Initializable.sol -->
+<g id="edge19" class="edge">
+<title>@openzeppelin/contracts&#45;upgradeable/proxy/utils/UUPSUpgradeable.sol&#45;&gt;@openzeppelin/contracts&#45;upgradeable/proxy/utils/Initializable.sol</title>
+<path fill="none" stroke="black" d="M1474.97,-247.48C1504.2,-250.46 1534.27,-253.41 1562.62,-256 1733.29,-271.61 1926.82,-286.71 2070.91,-297.43"/>
+<polygon fill="black" stroke="black" points="2070.32,-300.9 2080.56,-298.15 2070.84,-293.92 2070.32,-300.9"/>
+</g>
+<!-- @openzeppelin/contracts/interfaces/draft&#45;IERC1822.sol -->
+<g id="node25" class="node">
+<title>@openzeppelin/contracts/interfaces/draft&#45;IERC1822.sol</title>
+<polygon fill="#eeeeee" stroke="black" points="1974.28,-247 1634.63,-247 1634.63,-211 1974.28,-211 1974.28,-247"/>
+<text xml:space="preserve" text-anchor="middle" x="1804.45" y="-226" font-family="Courier,monospace" font-size="10.00">@openzeppelin/contracts/interfaces/draft&#45;IERC1822.sol</text>
+</g>
+<!-- @openzeppelin/contracts&#45;upgradeable/proxy/utils/UUPSUpgradeable.sol&#45;&gt;@openzeppelin/contracts/interfaces/draft&#45;IERC1822.sol -->
+<g id="edge17" class="edge">
+<title>@openzeppelin/contracts&#45;upgradeable/proxy/utils/UUPSUpgradeable.sol&#45;&gt;@openzeppelin/contracts/interfaces/draft&#45;IERC1822.sol</title>
+<path fill="none" stroke="black" d="M1514.96,-229C1550.89,-229 1587.92,-229 1622.97,-229"/>
+<polygon fill="black" stroke="black" points="1622.76,-232.5 1632.76,-229 1622.76,-225.5 1622.76,-232.5"/>
+</g>
+<!-- @openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.sol -->
+<g id="node26" class="node">
+<title>@openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.sol</title>
+<polygon fill="#eeeeee" stroke="black" points="1977.28,-117 1631.63,-117 1631.63,-81 1977.28,-81 1977.28,-117"/>
+<text xml:space="preserve" text-anchor="middle" x="1804.45" y="-96" font-family="Courier,monospace" font-size="10.00">@openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.sol</text>
+</g>
+<!-- @openzeppelin/contracts&#45;upgradeable/proxy/utils/UUPSUpgradeable.sol&#45;&gt;@openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.sol -->
+<g id="edge18" class="edge">
+<title>@openzeppelin/contracts&#45;upgradeable/proxy/utils/UUPSUpgradeable.sol&#45;&gt;@openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.sol</title>
+<path fill="none" stroke="black" d="M1374.84,-210.51C1466.42,-186.69 1625.31,-145.35 1721.77,-120.25"/>
+<polygon fill="black" stroke="black" points="1722.38,-123.71 1731.17,-117.81 1720.62,-116.94 1722.38,-123.71"/>
+</g>
+<!-- @openzeppelin/contracts&#45;upgradeable/utils/ContextUpgradeable.sol&#45;&gt;@openzeppelin/contracts&#45;upgradeable/proxy/utils/Initializable.sol -->
+<g id="edge16" class="edge">
+<title>@openzeppelin/contracts&#45;upgradeable/utils/ContextUpgradeable.sol&#45;&gt;@openzeppelin/contracts&#45;upgradeable/proxy/utils/Initializable.sol</title>
+<path fill="none" stroke="black" d="M2007.76,-433.14C2020.89,-430.5 2033.83,-427.47 2046.29,-424 2119.89,-403.49 2199.27,-362.93 2246.01,-336.93"/>
+<polygon fill="black" stroke="black" points="2247.71,-339.99 2254.72,-332.04 2244.29,-333.88 2247.71,-339.99"/>
+</g>
+<!-- @openzeppelin/contracts&#45;upgradeable/utils/ReentrancyGuardUpgradeable.sol&#45;&gt;@openzeppelin/contracts&#45;upgradeable/proxy/utils/Initializable.sol -->
+<g id="edge25" class="edge">
+<title>@openzeppelin/contracts&#45;upgradeable/utils/ReentrancyGuardUpgradeable.sol&#45;&gt;@openzeppelin/contracts&#45;upgradeable/proxy/utils/Initializable.sol</title>
+<path fill="none" stroke="black" d="M1043.32,-146.26C1373.04,-140.67 1956.38,-136.32 2046.29,-173 2066.67,-181.31 2064.34,-194.26 2082.29,-207 2130,-240.86 2189.98,-270.6 2232.68,-289.89"/>
+<polygon fill="black" stroke="black" points="2231.2,-293.07 2241.76,-293.95 2234.06,-286.68 2231.2,-293.07"/>
+</g>
+<!-- @openzeppelin/contracts&#45;upgradeable/utils/introspection/ERC165Upgradeable.sol&#45;&gt;@openzeppelin/contracts&#45;upgradeable/proxy/utils/Initializable.sol -->
+<g id="edge15" class="edge">
+<title>@openzeppelin/contracts&#45;upgradeable/utils/introspection/ERC165Upgradeable.sol&#45;&gt;@openzeppelin/contracts&#45;upgradeable/proxy/utils/Initializable.sol</title>
+<path fill="none" stroke="black" d="M2019.83,-486.57C2028.86,-484.03 2037.72,-481.19 2046.29,-478 2132.33,-445.99 2217.17,-376.69 2259.44,-338.88"/>
+<polygon fill="black" stroke="black" points="2261.62,-341.63 2266.68,-332.33 2256.92,-336.44 2261.62,-341.63"/>
+</g>
+<!-- @openzeppelin/contracts&#45;upgradeable/utils/introspection/ERC165Upgradeable.sol&#45;&gt;@openzeppelin/contracts/utils/introspection/IERC165.sol -->
+<g id="edge14" class="edge">
+<title>@openzeppelin/contracts&#45;upgradeable/utils/introspection/ERC165Upgradeable.sol&#45;&gt;@openzeppelin/contracts/utils/introspection/IERC165.sol</title>
+<path fill="none" stroke="black" d="M2046.64,-516.52C2064.75,-517.38 2082.85,-518.25 2100.55,-519.09"/>
+<polygon fill="black" stroke="black" points="2100.14,-522.58 2110.29,-519.56 2100.47,-515.58 2100.14,-522.58"/>
+</g>
+<!-- @openzeppelin/contracts/interfaces/IERC1967.sol -->
+<g id="node24" class="node">
+<title>@openzeppelin/contracts/interfaces/IERC1967.sol</title>
+<polygon fill="#eeeeee" stroke="black" points="2439.95,-90 2136.3,-90 2136.3,-54 2439.95,-54 2439.95,-90"/>
+<text xml:space="preserve" text-anchor="middle" x="2288.12" y="-69" font-family="Courier,monospace" font-size="10.00">@openzeppelin/contracts/interfaces/IERC1967.sol</text>
+</g>
+<!-- @openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.sol&#45;&gt;@openzeppelin/contracts/interfaces/IERC1967.sol -->
+<g id="edge21" class="edge">
+<title>@openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.sol&#45;&gt;@openzeppelin/contracts/interfaces/IERC1967.sol</title>
+<path fill="none" stroke="black" d="M1977.65,-89.35C2025.53,-86.66 2077.35,-83.76 2124.65,-81.11"/>
+<polygon fill="black" stroke="black" points="2124.64,-84.61 2134.43,-80.56 2124.25,-77.62 2124.64,-84.61"/>
+</g>
+<!-- @openzeppelin/contracts/proxy/beacon/IBeacon.sol -->
+<g id="node27" class="node">
+<title>@openzeppelin/contracts/proxy/beacon/IBeacon.sol</title>
+<polygon fill="#eeeeee" stroke="black" points="2442.95,-36 2133.3,-36 2133.3,0 2442.95,0 2442.95,-36"/>
+<text xml:space="preserve" text-anchor="middle" x="2288.12" y="-15" font-family="Courier,monospace" font-size="10.00">@openzeppelin/contracts/proxy/beacon/IBeacon.sol</text>
+</g>
+<!-- @openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.sol&#45;&gt;@openzeppelin/contracts/proxy/beacon/IBeacon.sol -->
+<g id="edge20" class="edge">
+<title>@openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.sol&#45;&gt;@openzeppelin/contracts/proxy/beacon/IBeacon.sol</title>
+<path fill="none" stroke="black" d="M1892.8,-80.53C1947.16,-69.39 2018.62,-55.4 2082.29,-45 2096.96,-42.6 2112.25,-40.28 2127.57,-38.06"/>
+<polygon fill="black" stroke="black" points="2127.82,-41.56 2137.23,-36.68 2126.83,-34.63 2127.82,-41.56"/>
+</g>
+<!-- @openzeppelin/contracts/utils/Address.sol -->
+<g id="node28" class="node">
+<title>@openzeppelin/contracts/utils/Address.sol</title>
+<polygon fill="#eeeeee" stroke="black" points="2421.94,-198 2154.3,-198 2154.3,-162 2421.94,-162 2421.94,-198"/>
+<text xml:space="preserve" text-anchor="middle" x="2288.12" y="-177" font-family="Courier,monospace" font-size="10.00">@openzeppelin/contracts/utils/Address.sol</text>
+</g>
+<!-- @openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.sol&#45;&gt;@openzeppelin/contracts/utils/Address.sol -->
+<g id="edge22" class="edge">
+<title>@openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.sol&#45;&gt;@openzeppelin/contracts/utils/Address.sol</title>
+<path fill="none" stroke="black" d="M1977.6,-112.94C2001.05,-117.42 2024.52,-123.29 2046.29,-131 2063.97,-137.26 2064.61,-146.75 2082.29,-153 2101.43,-159.76 2122.11,-164.86 2142.72,-168.69"/>
+<polygon fill="black" stroke="black" points="2141.87,-172.09 2152.33,-170.37 2143.08,-165.2 2141.87,-172.09"/>
+</g>
+<!-- @openzeppelin/contracts/utils/StorageSlot.sol -->
+<g id="node30" class="node">
+<title>@openzeppelin/contracts/utils/StorageSlot.sol</title>
+<polygon fill="#eeeeee" stroke="black" points="2433.95,-144 2142.3,-144 2142.3,-108 2433.95,-108 2433.95,-144"/>
+<text xml:space="preserve" text-anchor="middle" x="2288.12" y="-123" font-family="Courier,monospace" font-size="10.00">@openzeppelin/contracts/utils/StorageSlot.sol</text>
+</g>
+<!-- @openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.sol&#45;&gt;@openzeppelin/contracts/utils/StorageSlot.sol -->
+<g id="edge23" class="edge">
+<title>@openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.sol&#45;&gt;@openzeppelin/contracts/utils/StorageSlot.sol</title>
+<path fill="none" stroke="black" d="M1977.65,-108.65C2027.51,-111.45 2081.65,-114.48 2130.5,-117.22"/>
+<polygon fill="black" stroke="black" points="2130.12,-120.7 2140.3,-117.77 2130.51,-113.72 2130.12,-120.7"/>
+</g>
+<!-- @openzeppelin/contracts/utils/Errors.sol -->
+<g id="node29" class="node">
+<title>@openzeppelin/contracts/utils/Errors.sol</title>
+<polygon fill="#eeeeee" stroke="black" points="2791.59,-198 2529.96,-198 2529.96,-162 2791.59,-162 2791.59,-198"/>
+<text xml:space="preserve" text-anchor="middle" x="2660.77" y="-177" font-family="Courier,monospace" font-size="10.00">@openzeppelin/contracts/utils/Errors.sol</text>
+</g>
+<!-- @openzeppelin/contracts/utils/Address.sol&#45;&gt;@openzeppelin/contracts/utils/Errors.sol -->
+<g id="edge24" class="edge">
+<title>@openzeppelin/contracts/utils/Address.sol&#45;&gt;@openzeppelin/contracts/utils/Errors.sol</title>
+<path fill="none" stroke="black" d="M2422.41,-180C2453.47,-180 2486.64,-180 2518.05,-180"/>
+<polygon fill="black" stroke="black" points="2518.02,-183.5 2528.02,-180 2518.02,-176.5 2518.02,-183.5"/>
+</g>
+</g>
+</svg>
+      </div>
+      <figcaption style="font-size:10pt; color:var(--muted); margin-top:0.5rem;">Solidity import dependency graph for the project's Hardhat compilation target. Blue boxes (16) are files under <code>contracts/contracts/</code>; grey boxes (15) are external files pulled in transitively via <code>node_modules</code> imports, predominantly OpenZeppelin's <code>AccessControlUpgradeable</code> / <code>UUPSUpgradeable</code> inheritance chain. Arrows point from a file to what it imports.</figcaption>
+    </figure>
+    <p>The graph is generated by <code>contracts/scripts/generate-dependency-graph.mjs</code>, which parses each file's <code>import</code> statements and renders the result with <code>@viz-js/viz</code> (a WebAssembly build of Graphviz, so no system Graphviz install is required). It regenerates automatically as part of <code>npm run compile</code> and <code>npm run deploy:local</code>, and can be run standalone via <code>npm run graph:deps</code> from <code>contracts/</code>. Output is written to <code>contracts/reports/dependency-graph.svg</code>, which is excluded from version control as a build artifact rather than source.</p>
   </div>
 
   <!-- ── Footer ── -->
