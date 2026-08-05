@@ -4,8 +4,9 @@
   "description": "Smart contracts for zkSync Educational Credential Verification Platform",
   "main": "index.js",
   "scripts": {
-    "compile": "hardhat compile",
+    "compile": "hardhat compile && node scripts/generate-dependency-graph.mjs",
     "compile:zk": "hardhat compile --network zkSyncSepoliaTestnet",
+    "graph:deps": "node scripts/generate-dependency-graph.mjs",
     "test": "hardhat test",
     "coverage": "hardhat coverage",
     "deploy:dev": "hardhat run scripts/deploy-unified.ts --network hardhat",
@@ -19,7 +20,8 @@
     "deploy:local:docker": "hardhat deploy-zksync --script deploy-unified.ts --network localhost",
     "upgrade:zkauth:staging": "hardhat deploy-zksync --script upgrade-zkauth-registry.ts --network zkSyncSepoliaTestnet",
     "verify": "hardhat verify --network zkSyncSepoliaTestnet",
-    "clean": "hardhat clean"
+    "clean": "hardhat clean",
+    "benchmark:proof-generation": "node scripts/benchmark-proof-generation.mjs"
   },
   "keywords": [
     "zksync",
@@ -45,6 +47,7 @@
     "@types/chai": "^4.3.0",
     "@types/mocha": "^10.0.0",
     "@types/node": "^20.0.0",
+    "@viz-js/viz": "^3.28.0",
     "chai": "^4.3.0",
     "dotenv": "^16.4.0",
     "ethers": "^6.11.0",

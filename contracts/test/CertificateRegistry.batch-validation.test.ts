@@ -129,7 +129,7 @@ describe("CertificateRegistry - Batch Size & Graduation Year Validation", functi
           certificateRegistry.connect(university).issueCertificatesBatch(
             hashes, students, uris, years
           )
-        ).to.be.revertedWith("Batch size must be between 1 and 100");
+        ).to.be.revertedWithCustomError(certificateRegistry, "InvalidBatchSize");
       });
 
       it("should reject batch of size 150", async function () {
@@ -139,7 +139,7 @@ describe("CertificateRegistry - Batch Size & Graduation Year Validation", functi
           certificateRegistry.connect(university).issueCertificatesBatch(
             hashes, students, uris, years
           )
-        ).to.be.revertedWith("Batch size must be between 1 and 100");
+        ).to.be.revertedWithCustomError(certificateRegistry, "InvalidBatchSize");
       });
 
       it("should reject batch of size 1000", async function () {
@@ -149,7 +149,7 @@ describe("CertificateRegistry - Batch Size & Graduation Year Validation", functi
           certificateRegistry.connect(university).issueCertificatesBatch(
             hashes, students, uris, years
           )
-        ).to.be.revertedWith("Batch size must be between 1 and 100");
+        ).to.be.revertedWithCustomError(certificateRegistry, "InvalidBatchSize");
       });
     });
 
@@ -285,7 +285,7 @@ describe("CertificateRegistry - Batch Size & Graduation Year Validation", functi
           certificateRegistry.connect(university).issueCertificate(
             hash, student1.address, metadataURI, 1899
           )
-        ).to.be.revertedWith("Invalid graduation year: must be between 1900 and 2100");
+        ).to.be.revertedWithCustomError(certificateRegistry, "InvalidGraduationYear");
       });
 
       it("should reject year 1800", async function () {
@@ -295,7 +295,7 @@ describe("CertificateRegistry - Batch Size & Graduation Year Validation", functi
           certificateRegistry.connect(university).issueCertificate(
             hash, student1.address, metadataURI, 1800
           )
-        ).to.be.revertedWith("Invalid graduation year: must be between 1900 and 2100");
+        ).to.be.revertedWithCustomError(certificateRegistry, "InvalidGraduationYear");
       });
 
       it("should reject year 2101", async function () {
@@ -305,7 +305,7 @@ describe("CertificateRegistry - Batch Size & Graduation Year Validation", functi
           certificateRegistry.connect(university).issueCertificate(
             hash, student1.address, metadataURI, 2101
           )
-        ).to.be.revertedWith("Invalid graduation year: must be between 1900 and 2100");
+        ).to.be.revertedWithCustomError(certificateRegistry, "InvalidGraduationYear");
       });
 
       it("should reject year 3000", async function () {
@@ -315,7 +315,7 @@ describe("CertificateRegistry - Batch Size & Graduation Year Validation", functi
           certificateRegistry.connect(university).issueCertificate(
             hash, student1.address, metadataURI, 3000
           )
-        ).to.be.revertedWith("Invalid graduation year: must be between 1900 and 2100");
+        ).to.be.revertedWithCustomError(certificateRegistry, "InvalidGraduationYear");
       });
 
       it("should reject year 0", async function () {
@@ -325,7 +325,7 @@ describe("CertificateRegistry - Batch Size & Graduation Year Validation", functi
           certificateRegistry.connect(university).issueCertificate(
             hash, student1.address, metadataURI, 0
           )
-        ).to.be.revertedWith("Invalid graduation year: must be between 1900 and 2100");
+        ).to.be.revertedWithCustomError(certificateRegistry, "InvalidGraduationYear");
       });
     });
 
@@ -355,7 +355,7 @@ describe("CertificateRegistry - Batch Size & Graduation Year Validation", functi
           certificateRegistry.connect(university).issueCertificatesBatch(
             hashes, students, uris, years
           )
-        ).to.be.revertedWith("Invalid graduation year: must be between 1900 and 2100");
+        ).to.be.revertedWithCustomError(certificateRegistry, "InvalidGraduationYear");
 
         // Ensure no certificates were issued
         expect(await certificateRegistry.getTotalCertificates()).to.equal(0);
@@ -369,7 +369,7 @@ describe("CertificateRegistry - Batch Size & Graduation Year Validation", functi
           certificateRegistry.connect(university).issueCertificatesBatch(
             hashes, students, uris, years
           )
-        ).to.be.revertedWith("Invalid graduation year: must be between 1900 and 2100");
+        ).to.be.revertedWithCustomError(certificateRegistry, "InvalidGraduationYear");
 
         // Ensure no certificates were issued
         expect(await certificateRegistry.getTotalCertificates()).to.equal(0);
@@ -383,7 +383,7 @@ describe("CertificateRegistry - Batch Size & Graduation Year Validation", functi
           certificateRegistry.connect(university).issueCertificatesBatch(
             hashes, students, uris, years
           )
-        ).to.be.revertedWith("Invalid graduation year: must be between 1900 and 2100");
+        ).to.be.revertedWithCustomError(certificateRegistry, "InvalidGraduationYear");
 
         // Ensure no certificates were issued
         expect(await certificateRegistry.getTotalCertificates()).to.equal(0);
@@ -397,7 +397,7 @@ describe("CertificateRegistry - Batch Size & Graduation Year Validation", functi
           certificateRegistry.connect(university).issueCertificatesBatch(
             hashes, students, uris, years
           )
-        ).to.be.revertedWith("Invalid graduation year: must be between 1900 and 2100");
+        ).to.be.revertedWithCustomError(certificateRegistry, "InvalidGraduationYear");
       });
     });
 
@@ -474,7 +474,7 @@ describe("CertificateRegistry - Batch Size & Graduation Year Validation", functi
         certificateRegistry.connect(university).issueCertificatesBatch(
           hashes, students, uris, years
         )
-      ).to.be.revertedWith("Invalid graduation year: must be between 1900 and 2100");
+      ).to.be.revertedWithCustomError(certificateRegistry, "InvalidGraduationYear");
     });
 
     it("should fail if year is valid but batch size exceeds limit", async function () {
@@ -485,7 +485,7 @@ describe("CertificateRegistry - Batch Size & Graduation Year Validation", functi
         certificateRegistry.connect(university).issueCertificatesBatch(
           hashes, students, uris, years
         )
-      ).to.be.revertedWith("Batch size must be between 1 and 100");
+      ).to.be.revertedWithCustomError(certificateRegistry, "InvalidBatchSize");
     });
   });
 

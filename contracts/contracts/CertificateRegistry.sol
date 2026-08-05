@@ -55,6 +55,8 @@ contract CertificateRegistry is
     error InvalidStudentAddress();
     error InvalidDocumentHash();
     error InvalidAddress();
+    error InvalidGraduationYear();
+    error InvalidBatchSize();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -112,10 +114,7 @@ contract CertificateRegistry is
         if (documentHash == bytes32(0)) revert InvalidDocumentHash();
         
         // Validate graduation year (1900-2100)
-        require(
-            graduationYear >= 1900 && graduationYear <= 2100,
-            "Invalid graduation year: must be between 1900 and 2100"
-        );
+        if (graduationYear < 1900 || graduationYear > 2100) revert InvalidGraduationYear();
 
         // Check institution authorization
         if (!institutionRegistry.canIssueCertificates(msg.sender))
@@ -341,7 +340,7 @@ contract CertificateRegistry is
         if (length == 0) revert InvalidDocumentHash();
         
         // Batch size limit validation (1-100 certificates per batch)
-        require(length <= 100, "Batch size must be between 1 and 100");
+        if (length > 100) revert InvalidBatchSize();
         
         if (length != studentWallets.length || length != metadataURIs.length || length != graduationYears.length) {
             revert InvalidDocumentHash(); // Reusing error for invalid input
@@ -361,10 +360,7 @@ contract CertificateRegistry is
             if (documentHashes[i] == bytes32(0)) revert InvalidDocumentHash();
             
             // Validate graduation year (1900-2100)
-            require(
-                graduationYears[i] >= 1900 && graduationYears[i] <= 2100,
-                "Invalid graduation year: must be between 1900 and 2100"
-            );
+            if (graduationYears[i] < 1900 || graduationYears[i] > 2100) revert InvalidGraduationYear();
 
             // Check for duplicate hash
             if (hashToCertificateId[documentHashes[i]] != 0)

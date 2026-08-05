@@ -6,6 +6,9 @@ artifacts/
 cache/
 typechain-types/
 
+# Generated dependency graph
+reports/
+
 # Coverage
 coverage/
 coverage.json

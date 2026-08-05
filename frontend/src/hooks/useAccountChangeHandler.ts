@@ -22,7 +22,7 @@ import { useAuthStore } from '@/store/authStore';
 export function useAccountChangeHandler() {
   const { address, isConnected, connector } = useAccount();
   const navigate = useNavigate();
-  const { reset: resetAuthStore } = useAuthStore();
+  const { reset: resetAuthStore, bumpAuthEpoch } = useAuthStore();
   const previousAddressRef = useRef<string | undefined>(undefined);
   const isInitialMountRef = useRef(true);
 
@@ -48,6 +48,7 @@ export function useAccountChangeHandler() {
 
       // Clear auth store
       resetAuthStore();
+      bumpAuthEpoch();
 
       // Clear React Query cache
       if (window.queryClient) {
@@ -72,27 +73,28 @@ export function useAccountChangeHandler() {
     if (isConnected && address) {
       previousAddressRef.current = address;
     }
-  }, [address, isConnected, connector, resetAuthStore, navigate]);
+  }, [address, isConnected, connector, resetAuthStore, bumpAuthEpoch, navigate]);
 
   // Handle disconnection
   useEffect(() => {
     if (!isConnected && previousAddressRef.current) {
-      
+
       localStorage.removeItem(ZKCREDENTIALS_AUTH_STORAGE_KEY);
-      
+
       // Clear auth store (after localStorage to prevent re-persist)
       resetAuthStore();
-      
+      bumpAuthEpoch();
+
       // Clear React Query cache
       if (window.queryClient) {
         window.queryClient.clear();
       }
-      
+
       previousAddressRef.current = undefined;
-      
+
       // Redirect to home page on disconnect
       navigate('/', { replace: true });
     }
-  }, [isConnected, resetAuthStore, navigate]);
+  }, [isConnected, resetAuthStore, bumpAuthEpoch, navigate]);
 }
 

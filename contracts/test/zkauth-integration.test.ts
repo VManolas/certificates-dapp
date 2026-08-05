@@ -1,7 +1,25 @@
 // contracts/test/zkauth-integration.test.ts
 /**
- * ZK Authentication End-to-End Integration Tests
- * ===============================================
+ * ZK Authentication End-to-End Integration Tests — LEGACY (UltraPlonk/Noir path)
+ * ===============================================================================
+ *
+ * ⚠️ DEPRECATED PATH — NOT REPRESENTATIVE OF THE DEPLOYED SYSTEM.
+ *
+ * This suite exercises the UltraPlonk/Noir verification path, which was abandoned for
+ * zkSync Era deployment (zksolc's forceEVMLA causes "stack too deep" in the generated
+ * verifier's inline assembly — see hardhat.config.ts and UltraPlonkAuthVerifierAdapter.sol
+ * for the full rationale). Production deployments use the Groth16/Circom path exclusively;
+ * see contracts/test/groth16-integration.test.ts for the tests that actually reflect what's
+ * deployed, including the real gas/proof-generation-time benchmark and a front-running/
+ * nullifier-griefing regression test (circuits/SECURITY_REVIEW.md, circuits/THREAT_MODEL.md).
+ *
+ * This file is kept only as regression coverage for the UltraPlonkAuthVerifierAdapter
+ * contract, which still exists in the codebase for reference. Do NOT cite any gas figure,
+ * timing number, or "production-ready" language below (including the Suite 5 gas analysis
+ * and the closing summary banner) as representative of the deployed system — they describe
+ * a path that was never shipped.
+ *
+ * Original suite description (retained for context, describes the UltraPlonk path only):
  *
  * This test suite validates the COMPLETE ZK authentication flow with REAL verifier:
  *
@@ -35,7 +53,7 @@ import {
   AuthProofResult
 } from './helpers/zkProofGenerator';
 
-describe('ZK Authentication - Phase 1: Complete Integration', function() {
+describe('ZK Authentication [LEGACY: UltraPlonk/Noir, not deployed] - Phase 1: Complete Integration', function() {
   // Extended timeout for ZK operations (proof generation takes time)
   this.timeout(180000); // 3 minutes
 
@@ -607,12 +625,15 @@ describe('ZK Authentication - Phase 1: Complete Integration', function() {
   });
 
   // ═══════════════════════════════════════════════════════════
-  // Test Suite 5: Gas Cost Analysis
+  // Test Suite 5: Gas Cost Analysis — LEGACY UltraPlonk numbers.
+  // NOT representative of the deployed system. See groth16-integration.test.ts's
+  // "Gas & Performance Analysis" suite for the real, production-path numbers.
   // ═══════════════════════════════════════════════════════════
 
-  describe('Suite 5: Gas Cost Analysis', function() {
-    it('should measure gas costs for production planning', async function() {
-      console.log('\n⛽ Gas Cost Analysis for Production');
+  describe('Suite 5: Gas Cost Analysis (LEGACY — UltraPlonk, not the deployed path)', function() {
+    it('should measure gas costs for the deprecated UltraPlonk path (reference only, not production)', async function() {
+      console.log('\n⛽ [LEGACY/UltraPlonk] Gas Cost Analysis — NOT the deployed production path');
+      console.log('   See groth16-integration.test.ts for real production-path numbers.');
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 
       // Registration gas cost
@@ -669,16 +690,16 @@ describe('ZK Authentication - Phase 1: Complete Integration', function() {
 
   after(function() {
     console.log('\n═══════════════════════════════════════════════════════');
-    console.log('  ✅ Phase 1 Integration Tests Complete!');
+    console.log('  ✅ Legacy UltraPlonk Regression Suite Complete');
     console.log('═══════════════════════════════════════════════════════');
-    console.log('\n📋 Test Summary:');
+    console.log('\n📋 Test Summary (UltraPlonk/Noir path — deprecated, not deployed):');
     console.log('   ✅ Verifier integration working');
     console.log('   ✅ Hash compatibility proven (JS <-> Noir <-> Solidity)');
     console.log('   ✅ Registration with real ZK proofs');
     console.log('   ✅ Session management with real ZK proofs');
     console.log('   ✅ Complete authentication lifecycle');
-    console.log('   ✅ Gas costs are production-ready');
-    console.log('\n🚀 Ready for Phase 2: Browser Testing');
+    console.log('   ⚠️  Gas costs above are for the UltraPlonk path — NOT production numbers');
+    console.log('\nFor the actual deployed system, see groth16-integration.test.ts.');
     console.log('═══════════════════════════════════════════════════════\n');
   });
 });

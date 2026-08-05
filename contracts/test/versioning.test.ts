@@ -1,10 +1,11 @@
 import { expect } from "chai";
 import { ethers, upgrades } from "hardhat";
-import { CertificateRegistry, InstitutionRegistry } from "../typechain-types";
+import { CertificateRegistry, InstitutionRegistry, EmployerRegistry } from "../typechain-types";
 
 describe("Contract Versioning", function () {
   let certificateRegistry: any;
   let institutionRegistry: any;
+  let employerRegistry: any;
   let superAdmin: any;
   let university: any;
 
@@ -28,6 +29,15 @@ describe("Contract Versioning", function () {
       { initializer: "initialize", kind: "uups" }
     );
     await certificateRegistry.waitForDeployment();
+
+    // Deploy EmployerRegistry
+    const EmployerRegistry = await ethers.getContractFactory("EmployerRegistry");
+    employerRegistry = await upgrades.deployProxy(
+      EmployerRegistry,
+      [superAdmin.address],
+      { initializer: "initialize", kind: "uups" }
+    );
+    await employerRegistry.waitForDeployment();
   });
 
   describe("Version Information", function () {
@@ -51,9 +61,59 @@ describe("Contract Versioning", function () {
     it("should have initial version for both contracts", async function () {
       const certVersion = await certificateRegistry.VERSION();
       const instVersion = await institutionRegistry.VERSION();
-      
+
       expect(certVersion).to.equal("1.0.0");
       expect(instVersion).to.equal("1.0.0");
+    });
+  });
+
+  describe("EmployerRegistry versioning", function () {
+    it("should return correct initial version", async function () {
+      const version = await employerRegistry.VERSION();
+      expect(version).to.equal("1.0.0");
+
+      const versionFromGetter = await employerRegistry.getVersion();
+      expect(versionFromGetter).to.equal("1.0.0");
+    });
+
+    it("should record initial deployment in upgrade history", async function () {
+      const history = await employerRegistry.getUpgradeHistory();
+
+      expect(history.length).to.equal(1);
+      expect(history[0].version).to.equal("1.0.0");
+      expect(history[0].notes).to.equal("Initial deployment");
+      expect(history[0].upgrader).to.equal(superAdmin.address);
+    });
+
+    it("should allow super admin to record upgrade", async function () {
+      await employerRegistry.connect(superAdmin).recordUpgrade(
+        "1.0.1",
+        "Bug fix: Optimized gas usage"
+      );
+
+      const history = await employerRegistry.getUpgradeHistory();
+      expect(history.length).to.equal(2);
+      expect(history[1].version).to.equal("1.0.1");
+      expect(history[1].notes).to.equal("Bug fix: Optimized gas usage");
+    });
+
+    it("should reject non-admin from recording upgrade", async function () {
+      await expect(
+        employerRegistry.connect(university).recordUpgrade(
+          "1.0.1",
+          "Unauthorized upgrade attempt"
+        )
+      ).to.be.reverted;
+    });
+
+    it("should allow anyone to query version and upgrade history", async function () {
+      const [_, randomUser] = await ethers.getSigners();
+
+      const version = await employerRegistry.connect(randomUser).getVersion();
+      expect(version).to.equal("1.0.0");
+
+      const history = await employerRegistry.connect(randomUser).getUpgradeHistory();
+      expect(history.length).to.be.gte(1);
     });
   });
 

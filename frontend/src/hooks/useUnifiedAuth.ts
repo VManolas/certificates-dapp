@@ -25,7 +25,7 @@
  * ```
  */
 
-import { useEffect, useCallback, useMemo, useRef } from 'react';
+import { useEffect, useCallback, useMemo } from 'react';
 import { useAccount, useDisconnect } from 'wagmi';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
@@ -171,11 +171,10 @@ export function useUnifiedAuth(): UnifiedAuthState {
   
   // Web3 role detection
   const userRoles = useUserRoles();
-  
-  // Track previous connection state to detect disconnections
-  const prevConnectedRef = useRef(isConnected);
-  const prevAddressRef = useRef(address);
 
+  // Clears wallet-scoped auth/session state. Used by the explicit logout() flow below.
+  // Passive reactions to disconnect/account-switch are handled solely by
+  // useAccountChangeHandler (mounted once in App.tsx) — see that hook for details.
   const clearWalletScopedAuthState = useCallback(async () => {
     await queryClient.cancelQueries({ queryKey: ['userRoles'] });
     await queryClient.cancelQueries({ queryKey: ['readContract'] });
@@ -208,31 +207,6 @@ export function useUnifiedAuth(): UnifiedAuthState {
     setRequiresManualAuthSelection,
     bumpAuthEpoch,
   ]);
-  
-  // CRITICAL: Clear query cache when wallet disconnects and redirect to home
-  // This ensures the next wallet that connects gets fresh data
-  useEffect(() => {
-    // Detect disconnection (was connected, now disconnected)
-    if (prevConnectedRef.current && !isConnected) {
-
-      clearWalletScopedAuthState();
-
-      // Redirect to home page
-      navigate('/', { replace: true });
-      
-    }
-    
-    // Detect address change while still connected (MetaMask account switch)
-    if (prevAddressRef.current && address && prevAddressRef.current !== address) {
-      
-      clearWalletScopedAuthState();
-      
-    }
-    
-    // Update previous state
-    prevConnectedRef.current = isConnected;
-    prevAddressRef.current = address;
-  }, [isConnected, address, queryClient, navigate, clearWalletScopedAuthState]);
   
   // Check institution suspension status (only for universities)
   // IMPORTANT: Only enable this query AFTER we've detected the user is a university

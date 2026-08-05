@@ -4,7 +4,7 @@ import { PDFDownloadLink } from '@react-pdf/renderer';
 import { VerificationReportPDF } from './VerificationReportPDF';
 import { PrivacyControlModal } from './PrivacyControlModal';
 import { useAccount, useChainId } from 'wagmi';
-import { ethers } from 'ethers';
+import { getBrowserProvider } from '@/lib/web3Provider';
 import type { PrivacySettings } from '@/types/certificate';
 import { createSignedVerificationToken } from '@/lib/verificationToken';
 import { logger } from '@/lib/logger';
@@ -57,7 +57,7 @@ export function VerificationReportWithPrivacy({
 
     try {
       if (address && window.ethereum) {
-        const provider = new ethers.providers.Web3Provider(window.ethereum as any);
+        const provider = getBrowserProvider();
         const signer = provider.getSigner();
         const token = await createSignedVerificationToken(
           documentHash as `0x${string}`,
