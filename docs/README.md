@@ -6,11 +6,15 @@ Use this file as the entry point for project documentation.
 
 These are the authoritative guides for active development and local setup:
 
-- [DEPLOYMENT_GUIDE.md](/home/vmanolas/src/zkp/project/zksync-zzlogin-dapp-Sep-2025-d/docs/DEPLOYMENT_GUIDE.md)
-- [ENVIRONMENT_SETUP.md](/home/vmanolas/src/zkp/project/zksync-zzlogin-dapp-Sep-2025-d/docs/ENVIRONMENT_SETUP.md)
-- [LOCAL_TESTING_GUIDE.md](/home/vmanolas/src/zkp/project/zksync-zzlogin-dapp-Sep-2025-d/docs/LOCAL_TESTING_GUIDE.md)
-- [QUICK_DEPLOY.md](/home/vmanolas/src/zkp/project/zksync-zzlogin-dapp-Sep-2025-d/docs/QUICK_DEPLOY.md)
-- [SETUP_CHECKLIST.md](/home/vmanolas/src/zkp/project/zksync-zzlogin-dapp-Sep-2025-d/docs/SETUP_CHECKLIST.md)
+- [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md)
+- [ENVIRONMENT_SETUP.md](./ENVIRONMENT_SETUP.md)
+- [LOCAL_TESTING_GUIDE.md](./LOCAL_TESTING_GUIDE.md)
+- [SETUP_CHECKLIST.md](./SETUP_CHECKLIST.md)
+
+## Thesis Defense
+
+- [DEFENSE_QA_NOTES.md](./DEFENSE_QA_NOTES.md) — Q&A preparation: answered questions and likely committee questions
+- [PRESENTATION_NOTES.md](./PRESENTATION_NOTES.md) — Full presentation narrative, slide talking points, and Q&A handling guide
 
 ## Local Network Reference
 
@@ -26,6 +30,11 @@ These are the authoritative guides for active development and local setup:
 
 Many files in this directory are preserved as implementation snapshots, debugging notes, or milestone reports.
 They are useful for project history, but they are not the source of truth for current commands or environment setup.
+
+Notable historical files:
+
+- [PRD.md](./PRD.md) — Product Requirements Document v1.0 (Dec 2025)
+- [TRD.md](./TRD.md) — Technical Requirements Document v1.0 (Dec 2025)
 
 Treat files matching patterns like these as historical unless they are explicitly linked above:
 

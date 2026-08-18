@@ -1,8 +1,14 @@
 # Git ignore file itself (keep local only)
 .gitignore
 
-# Documentation (internal notes and diagrams)
-docs/
+# Documentation (internal notes and diagrams stay local; current guides are tracked)
+docs/*
+!docs/README.md
+!docs/DEFENSE_QA_NOTES.md
+!docs/SETUP_CHECKLIST.md
+!docs/ENVIRONMENT_SETUP.md
+!docs/DEPLOYMENT_GUIDE.md
+!docs/LOCAL_TESTING_GUIDE.md
 
 # Context and session files
 context/

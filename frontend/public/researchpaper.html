@@ -122,7 +122,7 @@
       Department of Informatics and Computer Engineering<br />
       University of West Attica &mdash; Diploma Thesis
     </div>
-    <div class="date">Submitted: May 2026 &nbsp;&bull;&nbsp; Supervisor: Dimitrios Kogias, Adjunct Lecturer</div>
+    <div class="date">Submitted: July 2026 &nbsp;&bull;&nbsp; Supervisor: Dimitrios Kogias, Adjunct Lecturer</div>
   </div>
 
   <!-- ══════════════════════════════════════════════
@@ -226,7 +226,7 @@
     </ul>
     <p>
       The full source code is available at
-      <a href="https://github.com/vmanolas/zksync-zzlogin-dapp" style="color:var(--accent);">https://github.com/vmanolas/zksync-zzlogin-dapp</a>,
+      <a href="https://github.com/VManolas/certificates-dapp" style="color:var(--accent);">https://github.com/VManolas/certificates-dapp</a>,
       and the live dApp is deployed at
       <a href="https://vmanolas.github.io/certificates-dapp/" style="color:var(--accent);">https://vmanolas.github.io/certificates-dapp/</a>.
     </p>
@@ -542,14 +542,18 @@
           registration, session creation, and nullifier tracking.</li>
     </ul>
     <p>
-      <code>CertificateRegistry</code> and <code>InstitutionRegistry</code> inherit from
+      <code>CertificateRegistry</code>, <code>InstitutionRegistry</code>, and
+      <code>EmployerRegistry</code> all inherit from
       <code>UpgradeableBase</code>, which provides UUPS proxy support
       (EIP-1822&nbsp;[16]) and OpenZeppelin&rsquo;s
       <code>AccessControlUpgradeable</code>&nbsp;[17], plus version-tracking with
-      an upgrade history array. Both child contracts add
+      an upgrade history array. All three add
       <code>ReentrancyGuardUpgradeable</code> directly.
-      <code>ZKAuthRegistry</code> and <code>EmployerRegistry</code> achieve equivalent
-      upgradeability through direct OpenZeppelin inheritance. Cross-contract
+      <code>ZKAuthRegistry</code> is the exception: it achieves upgradeability
+      through direct OpenZeppelin inheritance (<code>Initializable</code>,
+      <code>AccessControlUpgradeable</code>, <code>UUPSUpgradeable</code>) rather
+      than via <code>UpgradeableBase</code>, and does not add
+      <code>ReentrancyGuardUpgradeable</code>. Cross-contract
       authorisation is enforced via dedicated roles (e.g.,
       <code>CERTIFICATE_REGISTRY_ROLE</code> on <code>InstitutionRegistry</code>
       permits only the <code>CertificateRegistry</code> contract to increment
@@ -579,10 +583,17 @@
     <p>
       The frontend is a React&nbsp;18 + TypeScript SPA built with Vite. It uses
       wagmi for Ethereum wallet connection, RainbowKit for the wallet UI, and
-      React Query for blockchain state management. Heavy operations (ZK proof
-      generation, PDF SHA-256 hashing) are kept off the main thread: proof
-      generation via dynamic <code>import('snarkjs')</code>, PDF hashing via a
-      Web Worker (<code>pdfHashWorker.ts</code>).
+      React Query for blockchain state management. PDF SHA-256 hashing is
+      offloaded to a genuine Web Worker (<code>pdfHashWorker.ts</code>), keeping
+      large-file hashing off the main thread. ZK proof generation is handled
+      differently: <code>snarkjs</code> is lazily code-split via dynamic
+      <code>import('snarkjs')</code> to keep it out of the initial bundle, but
+      the resulting <code>groth16.fullProve</code> call still executes
+      synchronously on the main thread &mdash; it is not currently run inside a
+      Web Worker, so the UI is briefly blocked for the duration of proof
+      generation (Table&nbsp;IV: on the order of 1&ndash;8&nbsp;s depending on device).
+      Moving proof generation into a dedicated worker is a straightforward,
+      unimplemented optimisation.
     </p>
     <p>
       Role-based routing exposes distinct dashboards for admin, university, student,
@@ -710,15 +721,23 @@
       <em>sk</em> and credential contents are never revealed on-chain.
       (ii)&nbsp;Two authentication sessions cannot be linked by their ZK proof
       contents or nullifier values alone (<em>session unlinkability</em>).
-      (iii)&nbsp;An observer who does not know <em>sk</em> cannot determine what
-      credential a user holds from their authentication transaction.
+      The authentication transaction itself carries no credential data &mdash;
+      it proves knowledge of <em>sk</em> against a commitment, nothing more.
     </p>
     <p>
       <strong>Privacy properties not achieved:</strong> Because authentication
       transactions are submitted by the user&rsquo;s wallet, <code>msg.sender</code>
       is visible on-chain. An observer who observed the commitment registration
       transaction can therefore permanently link the authenticating wallet to the
-      commitment (<em>registration unlinkability</em> is not achieved).
+      commitment (<em>registration unlinkability</em> is not achieved). This has a
+      direct consequence beyond wallet linkage itself: <code>CertificateRegistry.getCertificatesByStudent(address)</code>
+      is an unrestricted <code>external view</code> function with no access control, so once
+      an observer knows the wallet &mdash; which they do, from the first registration
+      transaction onward &mdash; they can trivially query exactly which credentials
+      that wallet holds. Credential-holding privacy is therefore not achieved either,
+      not because the ZK proof leaks it, but because wallet linkability plus an
+      unrestricted public lookup together defeat it; this system does not claim
+      otherwise.
       Full wallet-level unlinkability would require a relayer or Merkle-based
       anonymity set (Section&nbsp;VIII-A). We do not protect against an adversary
       who learns the user&rsquo;s secret key; such an adversary can forge proofs
@@ -821,9 +840,14 @@
       computing a preimage.
     </p>
     <p>
-      Registration does not enforce nullifier uniqueness; the commitment
-      prevents double-registration. Session creation enforces nullifier
-      uniqueness, preventing a single proof from opening multiple sessions.
+      Registration <em>does</em> enforce nullifier uniqueness: <code>registerCommitment</code>
+      marks its own nullifier spent (<code>usedNullifiers[N] = true</code>) immediately after
+      proof verification, in addition to the commitment check that independently prevents
+      double-registration. This closes a specific replay path (v1.2.0): without it, the
+      registration proof's own <em>(proof, nonce, N)</em> tuple could be resubmitted as the
+      first <code>startSession</code> call, since nothing else would have marked its nullifier
+      used. Session creation enforces the same nullifier-uniqueness check, preventing a single
+      proof from opening multiple sessions.
     </p>
 
     <h2 class="subsection">E. Circuit Design</h2>
@@ -915,9 +939,12 @@
       <code>ZKAuthRegistry.startSession(bytes32 commitment, bytes calldata proof, bytes32 nullifierNonce, bytes32 nullifier)</code>
       with the registered commitment and a valid proof. The contract first
       verifies that the commitment is registered and not revoked
-      (<code>require(!revokedCommitments[commitment])</code>). On success, the contract
+      (custom-error revert <code>CommitmentAlreadyRevoked()</code>, not a string <code>require</code> &mdash; consistent
+      with this contract's custom-error convention noted in Section&nbsp;V-F). On success, the contract
       records the nullifier as spent and generates a unique session identifier from
-      <code>keccak256(commitment, timestamp, msg.sender, blockhash, nullifier)</code>.
+      <code>keccak256(commitment, block.timestamp, msg.sender, blockhash(block.number&nbsp;&minus;&nbsp;1))</code>.
+      Note that <em>nullifier</em> is <em>not</em> one of the hash inputs in the deployed contract,
+      despite binding session consumption to the nullifier conceptually elsewhere in this protocol.
       Including the nullifier binds each session to the specific ZK proof that created
       it and adds proof-specific entropy independent of miner-controllable inputs.
       (Note on hash usage: SHA-256 is used off-chain in the frontend to compute the
@@ -1050,8 +1077,8 @@
       to permanently disable a compromised commitment. Revocation requires a
       valid Groth16 proof binding the caller to the commitment, preventing
       griefing by third parties. Once revoked,
-      <code>startSession</code> rejects the commitment via
-      <code>require(!revokedCommitments[commitment])</code>. Revocation is
+      <code>startSession</code> rejects the commitment via the custom error
+      <code>CommitmentAlreadyRevoked()</code>. Revocation is
       irreversible; the user must register a fresh commitment with a new secret
       key to resume ZK-authenticated access.
     </p>
@@ -1066,8 +1093,9 @@
       <code>_authorizeUpgrade</code> is restricted to
       <code>ADMIN_ROLE</code> (<code>keccak256("ADMIN_ROLE")</code>), preventing unauthorised logic replacement.
       Custom Solidity errors (e.g., <code>NullifierAlreadyUsed()</code>)
-      are used in ZKAuthRegistry, CertificateRegistry, and InstitutionRegistry to save approximately 30&ndash;50% gas on revert
-      paths compared with string reverts. EmployerRegistry uses string-based <code>require</code> reverts.
+      are used across all four registries &mdash; ZKAuthRegistry, CertificateRegistry, InstitutionRegistry, and
+      EmployerRegistry (migrated from string <code>require</code> reverts in v1.1.0) &mdash; to save approximately 30&ndash;50% gas on revert
+      paths compared with string reverts.
     </p>
     <p>
       <em>Verifier adapter security.</em> The
@@ -1169,24 +1197,25 @@
       deploy scripts:
     </p>
     <ol>
-      <li>Deploy <code>Groth16Verifier</code> (plain contract, no proxy).</li>
-      <li>Deploy <code>Groth16AuthVerifierAdapter</code>.</li>
       <li>Deploy <code>InstitutionRegistry</code> proxy.</li>
       <li>Deploy <code>CertificateRegistry</code> proxy.</li>
       <li>Deploy <code>EmployerRegistry</code> proxy; call
           <code>setRegistries(institutionRegistry, certificateRegistry)</code>.</li>
-      <li>Deploy <code>ZKAuthRegistry</code> proxy (depends on adapter address).</li>
-      <li>Call <code>InstitutionRegistry.setCertificateRegistry(addr)</code>
+      <li>Deploy <code>Groth16Verifier</code> (plain contract, no proxy) and
+          <code>Groth16AuthVerifierAdapter</code>.</li>
+      <li>Link contracts, including
+          <code>InstitutionRegistry.setCertificateRegistry(addr)</code>
           to grant <code>CERTIFICATE_REGISTRY_ROLE</code>.</li>
+      <li>Deploy <code>ZKAuthRegistry</code> proxy (depends on adapter address).</li>
     </ol>
 
     <h2 class="subsection">E. Testing</h2>
     <p>
       The system is validated by a comprehensive test suite (measured on the
       submitted commit): 464 smart contract
-      unit and integration tests (including 38 tests specifically for
-      <code>ZKAuthRegistry</code> covering commitment registration, session
-      lifecycle, nullifier replay, revocation, and edge cases), plus 724
+      unit and integration tests (including 63 tests specifically for
+      <code>ZKAuthRegistry</code> across two files &mdash; 38 covering commitment registration, session
+      lifecycle, nullifier replay, and revocation, plus 25 dedicated edge-case tests), plus 724
       frontend component and utility tests, totalling 1,188 automated tests.
       Contract tests run against a Hardhat local node (chain&nbsp;ID&nbsp;1337)
       using Mocha/Chai with the <code>@nomicfoundation/hardhat-chai-matchers</code>
@@ -1217,7 +1246,15 @@
       reporting mean values (Table&nbsp;IV). Times include WASM witness generation and
       Groth16 proof generation but exclude the initial download of the
       proving key and WASM witness generator (a one-time ~3.0&nbsp;MB fetch, cached by the browser
-      on subsequent sessions).
+      on subsequent sessions). Because each of the three device rows reports only
+      five warm-cache trials, they should be read as prototype-level performance
+      evidence rather than statistically robust benchmarking. Table&nbsp;IV
+      therefore also includes a supplementary measurement on a fourth,
+      independently identified environment, reporting median, mean, and standard
+      deviation over <em>n</em>&nbsp;=&nbsp;25 trials of the actual production
+      proof-generation call &mdash; reproducible via
+      <code>contracts/scripts/benchmark-proof-generation.mjs</code>
+      (<code>npm run benchmark:proof-generation</code> from <code>contracts/</code>).
     </p>
     <table>
       <caption>TABLE IV. Proof Generation Latency (Cached WASM &amp; Proving Key)</caption>
@@ -1228,11 +1265,12 @@
         <tr><td>Dev laptop</td><td>Intel Core i7-1185G7</td><td>&sim;45</td><td>&sim;3,200</td></tr>
         <tr><td>Desktop</td><td>AMD Ryzen 5 5600</td><td>&sim;35</td><td>&sim;2,100</td></tr>
         <tr><td>Android mid-range</td><td>Snapdragon 778G</td><td>&sim;120</td><td>&sim;7,800</td></tr>
+        <tr><td>Supplementary (<em>n</em>=25)</td><td>Intel Core i7-6700HQ</td><td colspan="2">not separately timed &mdash; combined witness+proof: median 1,244&nbsp;ms, mean 1,272&nbsp;ms, &sigma;=221&nbsp;ms, min 788&nbsp;ms, max 1,912&nbsp;ms</td></tr>
       </tbody>
     </table>
     <p>
       End-to-end proof generation ranges from 2.1&nbsp;s (desktop) to
-      7.8&nbsp;s (mobile). On-chain verification latency is hardware-independent
+      7.8&nbsp;s (mobile) across the original three devices. On-chain verification latency is hardware-independent
       and determined by block time. The circuit&rsquo;s 1,698 constraints
       are the primary determinant of proving time; circuits of this size are
       well within the practical range of consumer hardware.
@@ -1259,12 +1297,18 @@
     <p>
       The estimated Ethereum L1 column is approximated directly by the local
       Hardhat measurements, since both use the standard EVM gas schedule for
-      opcode-level execution cost. At an ETH price of
+      opcode-level execution cost. At a representative ETH price of
       $3,000 and 30&nbsp;gwei base fee, the <code>startSession</code> ZK
       verification would cost approximately $25.20 on L1, compared to
       $0.01&ndash;$0.05 on zkSync Era under typical network conditions &mdash;
-      a 500&ndash;2,500&times; cost reduction that makes per-session ZK
-      authentication economically viable.
+      a 500&ndash;2,500&times; cost reduction at this specific price point.
+      Across the wider 20&ndash;50&nbsp;gwei / $2,000&ndash;$4,000 price range
+      this thesis's companion evaluation also considers, the same comparison
+      spans roughly 220&times; to 5,600&times; (or &sim;1,100&times; when L1
+      and L2 fees are compared under matched, i.e. equally cheap or equally
+      expensive, market conditions) &mdash; consistently a cost reduction on
+      the order of three orders of magnitude, which is what makes per-session
+      ZK authentication economically viable on Layer-2.
     </p>
 
     <table>
@@ -1536,6 +1580,16 @@
 
     <h2 class="subsection">A. Future Work</h2>
     <ul>
+      <li><em>Bind session consumption to its initiator</em> (near-term
+          priority, not a deep research question): Section&nbsp;IV-H documents
+          that front-running a pending <code>startSession</code> transaction
+          lets the frontrunner obtain a valid session authenticated as the
+          victim's role and commitment, since <code>validateSession</code>
+          performs no caller check. The fix is to require
+          <code>msg.sender == session.initiator</code> wherever a session is
+          consumed, mirroring the ownership check already applied to
+          <code>endSession</code>; a regression test already exists
+          (<code>groth16-integration.test.ts</code>).</li>
       <li><em>Relayer integration or Merkle anonymity set</em> to achieve
           wallet-level unlinkability during authentication.</li>
       <li><em>Selective credential disclosure</em> via an extended circuit

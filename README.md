@@ -1,4 +1,4 @@
-# Web3 Credentials
+# zkCredentials
 
 > Blockchain-verified educational credentials on zkSync Era
 
@@ -27,10 +27,14 @@ zkCredentials is a decentralized platform for issuing, managing, and verifying e
 └─────────────────┘     └─────────────────┘     └─────────────────┘
 ```
 
+> `subgraph/` is reserved for indexing and may be partial or inactive in a given checkout; it is not required for local development.
+
 ### Smart Contracts
 
 - **InstitutionRegistry** - Manages verified educational institutions
 - **CertificateRegistry** - Issues and tracks certificates
+- **EmployerRegistry** - Manages employer registration with company details
+- **ZKAuthRegistry** - Commitment registration and ZK-proof authentication for private student/employer login
 
 ### Tech Stack
 
@@ -84,7 +88,7 @@ cd contracts && npm run deploy:local:docker
 >
 > 📚 **Documentation index:** See [docs/README.md](docs/README.md) for the current authoritative guides and the historical-docs policy.
 
-> ⚠️ **Development Mode**: The app includes a visual "Development Mode" indicator showing that ZK authentication is running with simplified proofs for testing. See [frontend/DEVELOPMENT_MODE.md](frontend/DEVELOPMENT_MODE.md) for details.
+> ⚠️ **Development Mode**: The app includes a visual "Development Mode" indicator (see `frontend/src/components/DevModeBanner.tsx`) showing that ZK authentication is running with simplified proofs for testing.
 
 ### Manual Installation
 
@@ -125,7 +129,7 @@ EOF
 
 cd ../frontend
 cat > .env.local << 'EOF'
-VITE_WALLETCONNECT_PROJECT_ID=39e2e3d2a23e2049152548d5c1e9ad6a
+VITE_WALLETCONNECT_PROJECT_ID=your_walletconnect_project_id
 VITE_CERTIFICATE_REGISTRY_ADDRESS=<deployed_address>
 VITE_INSTITUTION_REGISTRY_ADDRESS=<deployed_address>
 VITE_CHAIN_ID=300
@@ -155,7 +159,7 @@ npm run dev
 ## Project Structure
 
 ```
-zksync-zzlogin-dapp/
+zksync-zzlogin-dapp-Sep-2025-d/
 ├── contracts/               # Smart contracts
 │   ├── contracts/          # Solidity source files
 │   ├── deploy/             # Deployment scripts
@@ -168,9 +172,8 @@ zksync-zzlogin-dapp/
 │   │   ├── pages/          # Page components
 │   │   └── store/          # Zustand stores
 │   └── public/
-├── subgraph/               # The Graph indexer
-├── docs/                   # Documentation
-└── .cursor/rules/          # Cursor AI rules
+├── subgraph/               # Reserved for The Graph indexing (may be partial/inactive)
+└── docs/                   # Documentation
 ```
 
 ## User Flows
@@ -223,8 +226,7 @@ zkCredentials implements **role-based authentication** with guided defaults for 
    - Administrative oversight requires visibility
 3. Access admin dashboard
 
-> 📖 **See [DUAL-AUTH-SYSTEM.md](docs/DUAL-AUTH-SYSTEM.md) for detailed authentication guide**  
-> 📖 **See [AUTH-WORKFLOWS-BY-USER-TYPE.md](docs/AUTH-WORKFLOWS-BY-USER-TYPE.md) for complete workflow definitions**
+> 📖 **See [docs/README.md](docs/README.md) for the current documentation index**
 
 ### For Educational Institutions
 
@@ -261,6 +263,25 @@ zkCredentials implements **role-based authentication** with guided defaults for 
 | `isValidCertificate(hash)` | Verify certificate validity |
 | `getCertificatesByStudent(wallet)` | Get student's certificates |
 
+### EmployerRegistry
+
+| Function | Description |
+|----------|-------------|
+| `registerEmployer(companyName, vatNumber)` | Register as an employer |
+| `updateEmployer(companyName, vatNumber)` | Update employer details |
+| `deactivateEmployer(wallet)` / `reactivateEmployer(wallet)` | Admin activates/deactivates an employer |
+| `isEmployer(wallet)` | Check if an address is a registered, active employer |
+
+### ZKAuthRegistry
+
+| Function | Description |
+|----------|-------------|
+| `registerCommitment(commitment, role, proof, nullifierNonce, nullifier)` | Register a ZK commitment for private login |
+| `startSession(commitment, proof, nullifierNonce, nullifier)` | Authenticate via ZK proof and open a session |
+| `endSession(sessionId)` | End an active session |
+| `revokeCommitment(commitment, proof, nullifierNonce, nullifier)` | Revoke a commitment after key compromise |
+| `validateSession(sessionId)` | Check if a session is active and not expired |
+
 ## Security
 
 - **Role-Based Authentication** - ZK proofs for students, Web3 for institutions/admin
@@ -275,7 +296,7 @@ zkCredentials implements **role-based authentication** with guided defaults for 
 - ReentrancyGuard on state-changing functions
 - Custom errors for gas-efficient reverts
 
-> 📖 **See [DUAL-AUTH-SYSTEM.md](docs/DUAL-AUTH-SYSTEM.md) for security details**
+> 📖 **See [docs/README.md](docs/README.md) for the current documentation index**
 
 ### Privacy Best Practices
 
@@ -354,14 +375,13 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ## Contributing
 
-Contributions are welcome! Please read our contributing guidelines before submitting PRs.
+Contributions are welcome via pull request.
 
 ## Links
 
-- [Role-Based Auth Workflows](docs/AUTH-WORKFLOWS-BY-USER-TYPE.md)
-- [Dual Authentication Guide](docs/DUAL-AUTH-SYSTEM.md)
-- [ZK Auth Phase 1 Report](docs/PHASE-1-COMPLETE.md)
-- [Quick Start Guide](docs/QUICK-START.md)
+- [Documentation Index](docs/README.md)
+- [Setup Checklist](docs/SETUP_CHECKLIST.md)
+- [Environment Setup](docs/ENVIRONMENT_SETUP.md)
 - [zkSync Era Documentation](https://docs.zksync.io/)
 - [OpenZeppelin Contracts](https://docs.openzeppelin.com/contracts/)
 - [wagmi Documentation](https://wagmi.sh/)
